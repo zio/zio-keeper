@@ -27,5 +27,9 @@ addCommandAlias("check", "all scalafmtSbtCheck scalafmtCheck test:scalafmtCheck"
 lazy val root =
   (project in file("."))
     .settings(
-      stdSettings("distributed")
+      stdSettings("distributed"),
+      libraryDependencies ++= Seq(
+        "org.scalaz" %% "scalaz-zio" % "0.6.0"
+      ),
+
     )
