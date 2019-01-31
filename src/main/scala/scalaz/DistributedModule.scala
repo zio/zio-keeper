@@ -32,12 +32,7 @@ trait DistributedModule {
   implicit val longType: Type[Long]
   implicit val intType: Type[Int]
   implicit val booleanType: Type[Boolean]
-  implicit def setType[V: Type]: Type[Set[V]]
   implicit def mapType[K: Type, V: Type]: Type[Map[K, V]]
-
-  implicit class LensSyntax[A, B](self: Lens[A, B]) {
-    final def >>> [C](that: Lens[B, C]): Lens[A, C] = compose(that, self)
-  }
 
   def members(callback: Membership => F[Boolean]): F[Unit]
 
@@ -54,13 +49,6 @@ trait DistributedModule {
   }
 
   def key[K, V](k: K): Lens[Map[K, V], V]
-
-  def values[K, V]: Lens[Map[K, V], Set[V]]
-
-  def elements[V]: Lens[Set[V], V]
-
-  def compose[A, B, C](f: Lens[B, C], g: Lens[A, B]): Lens[A, C]
-  
 }
 
 
