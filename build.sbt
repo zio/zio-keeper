@@ -28,8 +28,5 @@ lazy val root =
   (project in file("."))
     .settings(
       stdSettings("distributed"),
-      libraryDependencies ++= Seq(
-        "org.scalaz" %% "scalaz-zio" % "0.6.0"
-      ),
-
+      libraryDependencies += "org.scalaz" %% "scalaz-zio" % "0.6.0"
     )
