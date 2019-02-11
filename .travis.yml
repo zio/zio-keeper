@@ -24,9 +24,6 @@ jobs:
       name: "Test for 2.12"
       script: sbt ++$TRAVIS_SCALA_VERSION test package packageSrc publishLocal
     - <<: *test
-      scala: 2.11.12
-      name: "Test for 2.11"
-    - <<: *test
       scala: 2.13.0-M5
       name: "Test for 2.13"
 
