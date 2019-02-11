@@ -3,7 +3,7 @@ addCommandAlias("check", "all scalafmtSbtCheck scalafmtCheck test:scalafmtCheck"
 
 inThisBuild(
   List(
-    name := "scalaz-distributed"
+    name := "scalaz-distributed",
     version := "0.1.0-SNAPSHOT"
   )
 )
