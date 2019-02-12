@@ -50,5 +50,3 @@ trait DistributedModule {
 
   def key[K, V](k: K): Lens[Map[K, V], V]
 }
-
-
