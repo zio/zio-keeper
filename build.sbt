@@ -11,5 +11,5 @@ inThisBuild(
 lazy val root = project
   .in(file("."))
   .settings(
-    libraryDependencies += "org.scalaz" %% "scalaz-zio" % "0.6.0"
+    libraryDependencies += "org.scalaz" %% "scalaz-zio" % "1.0-RC1"
   )
