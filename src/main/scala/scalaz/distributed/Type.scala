@@ -1,8 +1,8 @@
 package scalaz.distributed
 
-trait Type[A]
+private[distributed] trait Type[A]
 
-object Type {
+private[distributed] object Type {
   implicit val bool   = new Type[Boolean] {}
   implicit val int    = new Type[Int]     {}
   implicit val long   = new Type[Long]    {}
