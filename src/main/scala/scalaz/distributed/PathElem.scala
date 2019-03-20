@@ -1,8 +1,8 @@
 package scalaz.distributed
 
-sealed trait PathElem[A, B]
+sealed private[distributed] trait PathElem[A, B]
 
-object PathElem {
+private[distributed] object PathElem {
   final case class Key[K: SupportedType, V: SupportedType](v: K) extends PathElem[Map[K, V], V]
 
   final case class Elements[A: SupportedType]() extends PathElem[Set[A], A]

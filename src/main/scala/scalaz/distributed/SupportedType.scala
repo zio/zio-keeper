@@ -2,7 +2,7 @@ package scalaz.distributed
 
 private[distributed] trait SupportedType[A]
 
-object SupportedType {
+private[distributed] object SupportedType {
   implicit val bool   = new SupportedType[Boolean] {}
   implicit val int    = new SupportedType[Int]     {}
   implicit val long   = new SupportedType[Long]    {}
