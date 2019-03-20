@@ -6,7 +6,7 @@ trait Metadata {
 
   final def modify[A: Type, B: Type](where: Path[A, B], f: B => B): F[Unit] =
     for {
-      c <- get[A, B](where)
+      c <- get(where)
       r <- set(where, f(c))
     } yield r
 
