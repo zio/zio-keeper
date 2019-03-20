@@ -1,6 +1,6 @@
 package scalaz.distributed
 
-trait Metadata {
+trait Metadata[Type[_], Path[_, _]] {
   def get[A: Type, B: Type](where: Path[A, B]): F[B]
   def set[A: Type, B: Type](where: Path[A, B], b: B): F[Unit]
 

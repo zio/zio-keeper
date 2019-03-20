@@ -1,5 +1,5 @@
 package scalaz.distributed
 
-trait Protocol {
-  def access[A: Type](id: MetadataID): F[Metadata]
+trait Protocol[Type[_], Path[_, _]] {
+  def access[A: Type](id: MetadataID): F[Metadata[Type, Path]]
 }

@@ -3,11 +3,14 @@ package scalaz.distributed
 import java.net.InetAddress
 
 trait Client {
-  final def key[K: Type, V: Type](k: K): Path[Map[K, V], V] = Path.Key[K, V](k)
+  type Type[A]
+  type Path[A, B]
 
-  final def compose[A: Type, B: Type, C: Type](x: Path[A, B], y: Path[B, C]): Path[A, C] = x >>> y
+  def key[K: Type, V: Type](k: K): Path[Map[K, V], V]
 
-  def connect(member: Member, seed: Set[InetAddress]): F[Protocol]
+  def compose[A: Type, B: Type, C: Type](x: Path[A, B], y: Path[B, C]): Path[A, C]
+
+  def connect(member: Member, seed: Set[InetAddress]): F[Protocol[Type, Path]]
 
   def members(cb: Membership => F[Boolean]): F[Unit]
 }
@@ -16,7 +19,15 @@ object Client {
 
   def default: Client =
     new Client {
-      override def connect(member: Member, seed: Set[InetAddress]): F[Protocol] = ???
+      type Type[A]    = SupportedType[A]
+      type Path[A, B] = PathElem[A, B]
+
+      override def key[K: Type, V: Type](k: K): Path[Map[K, V], V] = PathElem.Key[K, V](k)
+
+      override def compose[A: Type, B: Type, C: Type](x: Path[A, B], y: Path[B, C]): Path[A, C] =
+        x >>> y
+
+      override def connect(member: Member, seed: Set[InetAddress]): F[Protocol[Type, Path]] = ???
 
       override def members(cb: Membership => F[Boolean]): F[Unit] = ???
     }
