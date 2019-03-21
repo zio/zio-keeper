@@ -1,15 +1,12 @@
 addCommandAlias("fmt", "all scalafmtSbt scalafmt test:scalafmt")
 addCommandAlias("check", "all scalafmtSbtCheck scalafmtCheck test:scalafmtCheck")
 
-inThisBuild(
-  List(
-    name := "scalaz-distributed",
-    version := "0.1.0-SNAPSHOT"
-  )
-)
+ThisBuild / scalaVersion := "2.12.8"
+ThisBuild / version := "0.1.0-SNAPSHOT"
 
 lazy val root = project
   .in(file("."))
   .settings(
-    libraryDependencies += "org.scalaz" %% "scalaz-zio" % "0.6.0"
+    name := "scalaz-distributed",
+    libraryDependencies += "org.scalaz" %% "scalaz-zio" % "0.16"
   )
