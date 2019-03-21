@@ -4,7 +4,6 @@ import java.net.InetAddress
 
 trait Client {
   type Type[A]
-  type Path[A, B]
 
   trait Metadata {
     def get[A: Type, B: Type](where: Path[A, B]): Distributed[B]
@@ -28,10 +27,9 @@ object Client {
 
   def default: Client =
     new Client {
-      type Type[A]    = SupportedType[A]
-      type Path[A, B] = PathElem[A, B]
+      type Type[A] = SupportedType[A]
 
-      override def key[K: Type, V: Type](k: K): Path[Map[K, V], V] = PathElem.Key[K, V](k)
+      override def key[K: Type, V: Type](k: K): Path[Map[K, V], V] = Path.Key[K, V](k)
 
       override def compose[A: Type, B: Type, C: Type](x: Path[A, B], y: Path[B, C]): Path[A, C] =
         x >>> y
