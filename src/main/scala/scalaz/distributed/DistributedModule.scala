@@ -2,11 +2,7 @@ package scalaz.distributed
 
 import java.net.InetAddress
 
-import scalaz.zio.IO
-
-trait Client {
-  type Distributed[A] = IO[Error, A]
-
+trait DistributedModule {
   type Type[A]
 
   trait Metadata {

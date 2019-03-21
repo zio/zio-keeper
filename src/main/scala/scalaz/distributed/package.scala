@@ -1,8 +1,13 @@
 package scalaz
 
-package object distributed {
+import java.net.InetAddress
 
-  val client = new Client {
+import scalaz.zio.IO
+
+package object distributed {
+  type Distributed[A] = IO[Error, A]
+
+  val client = new DistributedModule {
     type Type[A] = SupportedType[A]
 
     override def key[K: Type, V: Type](k: K): Path[Map[K, V], V] = Path.Key[K, V](k)
