@@ -11,8 +11,4 @@ private[distributed] object PathElem {
     x: PathElem[A, B],
     y: PathElem[B, C]
   ) extends PathElem[A, C]
-
-  implicit class PathSyntax[A: SupportedType, B: SupportedType](self: PathElem[A, B]) {
-    final def >>> [C: SupportedType](that: PathElem[B, C]): PathElem[A, C] = Composed(self, that)
-  }
 }
