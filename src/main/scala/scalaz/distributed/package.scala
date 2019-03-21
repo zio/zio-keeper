@@ -10,8 +10,7 @@ package object distributed {
   val client = new DistributedModule {
     def key[K: Type, V: Type](k: K): Path[Map[K, V], V] = Path.Key[K, V](k)
 
-    def compose[A: Type, B: Type, C: Type](x: Path[A, B], y: Path[B, C]): Path[A, C] =
-      x >>> y
+    def compose[A: Type, B: Type, C: Type](x: Path[A, B], y: Path[B, C]): Path[A, C] = x >>> y
 
     def connect(member: Member, seed: Set[InetAddress]): Distributed[Protocol] = ???
 
