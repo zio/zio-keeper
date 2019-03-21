@@ -8,5 +8,5 @@ lazy val root = project
   .in(file("."))
   .settings(
     name := "scalaz-distributed",
-    libraryDependencies += "org.scalaz" %% "scalaz-zio" % "1.0-RC1"
+    libraryDependencies += "org.scalaz" %% "scalaz-zio" % "0.16"
   )
