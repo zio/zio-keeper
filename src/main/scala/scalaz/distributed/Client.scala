@@ -2,8 +2,6 @@ package scalaz.distributed
 
 import java.net.InetAddress
 
-import scalaz.zio.IO
-
 trait Client {
   type Type[A]
   type Path[A, B]
