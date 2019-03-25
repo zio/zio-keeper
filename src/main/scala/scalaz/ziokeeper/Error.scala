@@ -1,4 +1,4 @@
-package scalaz.distributed
+package scalaz.ziokeeper
 
 sealed trait Error
 
