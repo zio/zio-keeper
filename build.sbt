@@ -7,7 +7,7 @@ ThisBuild / version := "0.1.0-SNAPSHOT"
 lazy val root = project
   .in(file("."))
   .settings(
-    name := "scalaz-distributed",
+    name := "scalaz-ziokeeper",
     libraryDependencies += "org.scalaz" %% "scalaz-zio" % "0.16",
     unusedCompileDependenciesFilter -= moduleFilter("com.github.ghik", "silencer-lib")
   )
