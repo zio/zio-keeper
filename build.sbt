@@ -8,6 +8,5 @@ lazy val root = project
   .in(file("."))
   .settings(
     name := "scalaz-ziokeeper",
-    libraryDependencies += "org.scalaz" %% "scalaz-zio" % "0.16",
-    unusedCompileDependenciesFilter -= moduleFilter("com.github.ghik", "silencer-lib")
+    libraryDependencies += "org.scalaz" %% "scalaz-zio" % "0.16"
   )
