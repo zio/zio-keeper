@@ -34,7 +34,7 @@ Production experiences:
 - [CRDTs in Production][link-crdts-in-production]
 
 For an in-depth understanding of the topic, make sure to check out the materials listed in
-[this blog post][link-cmeik-blog] by @cmeiklejohn.
+[this blog post][link-cmeik-blog].
 
 ### Gossip
 
