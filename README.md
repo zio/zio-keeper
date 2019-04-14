@@ -7,6 +7,13 @@ Ziokeeper is a purely-functional, type-safe library for managing distributed sta
 eventually consistent manner, backed by [Conflict-free Replicated Data Types][link-crdts-wiki] and
 [ZIO][link-zio].
 
+## Goals
+
+- Dynamic cluster formation and management via Gossip protocol.
+- Support subscribing to cluster events (e.g. node joining or leaving).
+- Access and store values using their key and type. The following types will be supported: `bool`, `long`, `string`, `set`, `map`.
+- Support subscribing to value updates (e.g. modified, removed).
+
 ## Background readings
 
 The following section contains the list of papers and videos that explain the basic building blocks
