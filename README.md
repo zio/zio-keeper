@@ -11,7 +11,7 @@ eventually consistent manner, backed by [Conflict-free Replicated Data Types][li
 
 - Dynamic cluster formation and management via Gossip protocol.
 - Support subscribing to cluster events (e.g. node joining or leaving).
-- Access and store values using their key and type. The following types will be supported: `bool`, `long`, `string`, `set`, `map`.
+- Access and store values using their key and type. Stored data will have one of the following types: `bool`, `long`, `string`, `set`, `map`.
 - Support subscribing to value updates (e.g. modified, removed).
 
 ## Background readings
