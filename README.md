@@ -25,7 +25,7 @@ of the library. For an introduction to distributed systems in general, make sure
 Foundations:
 
 - [Conflict-free Replicated Data Types][link-crdts-paper]
-- [CRDTs illustrated][link-crds-illustrated]
+- [CRDTs illustrated][link-crdts-illustrated]
 - [Strong Eventual Consistency and Conflict-free Replicated Data Types][link-shapiro]
 
 Production experiences:
