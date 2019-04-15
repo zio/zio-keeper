@@ -8,5 +8,10 @@ lazy val root = project
   .in(file("."))
   .settings(
     name := "scalaz-ziokeeper",
-    libraryDependencies += "org.scalaz" %% "scalaz-zio" % "0.16"
+    libraryDependencies += "org.scalaz" %% "scalaz-zio" % "0.16",
+    libraryDependencies ++= Seq(
+      "org.specs2" %% "specs2-core"          % "4.5.1" % Test,
+      "org.specs2" %% "specs2-scalacheck"    % "4.5.1" % Test,
+      "org.specs2" %% "specs2-matcher-extra" % "4.5.1" % Test
+    )
   )
