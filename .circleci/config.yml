@@ -7,7 +7,7 @@ jobs:
       - checkout
       - restore_cache:
           key: sbt-cache
-      - run: sbt ++2.12.8! scalafmtCheck test:scalafmtCheck scalafmtSbtCheck
+      - run: sbt ++2.12.8! check
       - save_cache:
           key: sbt-cache
           paths:
@@ -22,7 +22,7 @@ jobs:
       - checkout
       - restore_cache:
           key: sbt-cache
-      - run: sbt ++2.12.8! scalafmtCheck test:scalafmtCheck scalafmtSbtCheck
+      - run: sbt ++2.12.8! check
       - save_cache:
           key: sbt-cache
           paths:
@@ -37,7 +37,7 @@ jobs:
       - checkout
       - restore_cache:
           key: sbt-cache
-      - run: sbt ++2.12.8! test:run
+      - run: sbt ++2.12.8! test
       - save_cache:
           key: sbt-cache
           paths:
@@ -52,7 +52,7 @@ jobs:
       - checkout
       - restore_cache:
           key: sbt-cache
-      - run: sbt ++2.12.8! test:run
+      - run: sbt ++2.12.8! test
       - save_cache:
           key: sbt-cache
           paths:
