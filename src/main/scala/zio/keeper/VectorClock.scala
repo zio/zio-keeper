@@ -1,8 +1,8 @@
-package scalaz.ziokeeper
+package zio.keeper
 
 import scala.annotation.tailrec
-import VectorClock._
-import scalaz.ziokeeper.VectorClock.VectorClockOrdering.{ After, Before, Concurrent, TheSame }
+import zio.keeper.VectorClock._
+import zio.keeper.VectorClock.VectorClockOrdering.{ After, Before, Concurrent, TheSame }
 
 /**
  * Implements an algorithm for generating a partial ordering of events in a distributed system and detecting causality violations.
