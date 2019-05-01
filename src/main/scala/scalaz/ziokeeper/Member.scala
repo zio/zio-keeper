@@ -1,3 +1,3 @@
-package scalaz.ziokeeper
+package zio.keeper
 
 trait Member

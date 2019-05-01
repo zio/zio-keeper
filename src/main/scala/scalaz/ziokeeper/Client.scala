@@ -1,4 +1,4 @@
-package scalaz.ziokeeper
+package zio.keeper
 
 import java.net.InetAddress
 
@@ -39,7 +39,7 @@ trait Client {
 }
 
 object Client {
-  private[ziokeeper] def default: Client = new Client {
+  private[keeper] def default: Client = new Client {
     override type Type[A]    = InternalType[A]
     override type Path[A, B] = InternalPath[A, B]
 

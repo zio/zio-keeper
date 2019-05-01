@@ -1,8 +1,8 @@
-package scalaz.ziokeeper
+package zio.keeper
 
-import scalaz.ziokeeper.VectorClock.VectorClockOrdering
+import zio.keeper.VectorClock.VectorClockOrdering
 
-class VectorClockSpec extends org.specs2.mutable.Specification {
+final class VectorClockSpec extends org.specs2.mutable.Specification {
   override def is = s2"""
     This specification is for Vector Clock
 
