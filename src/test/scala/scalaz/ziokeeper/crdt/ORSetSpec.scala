@@ -1,9 +1,9 @@
-package scalaz.ziokeeper.crdt
+package zio.keeper.crdt
 
 import org.specs2.mutable.Specification
-import scalaz.ziokeeper.VectorClock
+import zio.keeper.VectorClock
 
-class ORSetSpec extends Specification {
+final class ORSetSpec extends Specification {
   override def is =
     s2"""
     This specification is for ORSet

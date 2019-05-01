@@ -1,6 +1,6 @@
-package scalaz.ziokeeper.crdt
+package zio.keeper.crdt
 
-import scalaz.ziokeeper.VectorClock
+import zio.keeper.VectorClock
 
 case class ORSet[A, B](values: Vector[ORSet.VersionedEntry[A, B]]) {
 
