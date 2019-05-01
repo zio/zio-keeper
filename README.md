@@ -1,9 +1,9 @@
-# Ziokeeper
+# ZIO keeper
 
-[![TravisCI][badge-travis]][link-travis]
+[![CircleCI][badge-ci]][link-ci]
 [![Gitter][badge-gitter]][link-gitter]
 
-Ziokeeper is a purely-functional, type-safe library for managing distributed state in a strong
+ZIO keeper is a purely-functional, type-safe library for managing distributed state in a strong
 eventually consistent manner, backed by [Conflict-free Replicated Data Types][link-crdts-wiki] and
 [ZIO][link-zio].
 
@@ -48,11 +48,11 @@ Production experiences:
 
 - [Lifeguard: Local Health Awareness for More Accurate Failure Detection][link-lifeguard]
 
-[badge-travis]: https://travis-ci.org/scalaz/scalaz-ziokeeper.svg?branch=develop
+[badge-ci]: https://circleci.com/gh/zio/zio-keeper/tree/develop.svg?style=svg
 [badge-gitter]: https://badges.gitter.im/scalaz/scalaz-distributed.svg
 [link-crdts-wiki]: https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type
 [link-zio]: https://scalaz.github.io/scalaz-zio/
-[link-travis]: https://travis-ci.org/scalaz/scalaz-ziokeeper
+[link-ci]: https://circleci.com/gh/zio/zio-keeper/tree/develop
 [link-gitter]: https://gitter.im/scalaz/scalaz-distributed?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge
 [link-dsffap]: http://book.mixu.net/distsys/single-page.html
 [link-crdts-paper]: https://hal.inria.fr/hal-00932836/file/CRDTs_SSS-2011.pdf
