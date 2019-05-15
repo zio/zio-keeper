@@ -5,6 +5,7 @@ Global / pgpPublicRing := file("/tmp/public.asc")
 Global / pgpSecretRing := file("/tmp/secret.asc")
 Global / releaseEarlyWith := SonatypePublisher
 
+ThisBuild / organization := "dev.zio"
 ThisBuild / scalaVersion := "2.12.8"
 
 lazy val root = project
