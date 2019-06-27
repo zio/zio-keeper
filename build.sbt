@@ -5,12 +5,22 @@ inThisBuild(
     developers := List(
       Developer("jdegoes", "John De Goes", "john@degoes.net", url("http://degoes.net")),
       Developer("mijicd", "Dejan Mijic", "dmijic@acm.org", url("https://github.com/mijicd")),
-      Developer("pshemass", "Przemyslaw Wierzbicki", "rzbikson@gmail.com", url("https://github.com/pshemass"))
+      Developer(
+        "pshemass",
+        "Przemyslaw Wierzbicki",
+        "rzbikson@gmail.com",
+        url("https://github.com/pshemass")
+      )
     ),
     pgpPublicRing := file("/tmp/public.asc"),
     pgpSecretRing := file("/tmp/secret.asc"),
     releaseEarlyWith := SonatypePublisher,
-    scmInfo := Some(ScmInfo(url("https://github.com/zio/zio-keeper/"), "scm:git:git@github.com:zio/zio-keeper.git"))
+    scmInfo := Some(
+      ScmInfo(
+        url("https://github.com/zio/zio-keeper/"),
+        "scm:git:git@github.com:zio/zio-keeper.git"
+      )
+    )
   )
 )
 
