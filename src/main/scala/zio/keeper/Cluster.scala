@@ -11,6 +11,7 @@ trait Cluster {
 }
 
 object Cluster {
+
   trait Credentials {
     // TODO: ways to obtain auth data
   }
