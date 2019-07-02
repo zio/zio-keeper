@@ -5,8 +5,6 @@ Thanks for considering contributing to Ziokeeper!
 Please take a moment to review this document in order to make the contribution process easy and
 effective for everyone involved.
 
-By participating, you are expected to uphold our [code of conduct](CODE_OF_CONDUCT.md).
-
 ## Bug reports
 
 Well-written, thorough bug reports are a great way to contribute to the project.
@@ -41,9 +39,9 @@ maintainers might not want to merge into the project.
 To start contributing, fork the project, clone your fork, and configure the remotes:
 
 ```bash
-git clone https://github.com/<your-username>/scalaz-ziokeeper.git
-cd scalaz-ziokeeper
-git remote add upstream https://github.com/scalaz/scalaz-ziokeeper.git
+git clone https://github.com/<your-username>/zio-keeper.git
+cd zio-keeper
+git remote add upstream https://github.com/zio/zio-keeper.git
 ```
 
 If you cloned a while ago, make sure to update your branch with the changes from upstream:
@@ -67,6 +65,6 @@ Before submitting a pull request, make sure the following requirements are met:
 
 Once ready, [open a pull request][link-pr] with a clear title and description.
 
-[link-issues]: https://github.com/mijicd/thorondor/issues
+[link-issues]: https://github.com/zio/zio-keeper/issues
 [link-otp]: https://github.com/erlang/otp/wiki/Writing-good-commit-messages
 [link-pr]: https://help.github.com/articles/about-pull-requests/
