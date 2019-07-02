@@ -1,108 +1,186 @@
 version: 2.1
+
+scala_211: &scala_211
+  SCALA_VERSION: 2.11.12
+
+scala_212: &scala_212
+  SCALA_VERSION: 2.12.8
+
+jdk_8: &jdk_8
+  JDK_VERSION: 8
+
+jdk_11: &jdk_11
+  JDK_VERSION: 11
+
+machine_ubuntu: &machine_ubuntu
+  machine:
+    image: ubuntu-1604:201903-01
+
+install_jdk: &install_jdk
+  - run:
+      name: Install JDK
+      command: |
+        # Wait for apt to be ready
+        while $(ps aux | grep -i ' apt ' | grep -v grep > /dev/null); do sleep 1; done
+        sudo add-apt-repository ppa:openjdk-r/ppa -y
+        sudo apt update
+        sudo apt install openjdk-${JDK_VERSION}-jdk -y
+
+load_cache: &load_cache
+  - restore_cache:
+      key: sbt-keeper-cache
+
+save_cache: &save_cache
+  - save_cache:
+      key: sbt-keeper-cache
+      paths:
+        - "~/.ivy2/cache"
+        - "~/.sbt"
+        - "~/.m2"
+
+compile: &compile
+  steps:
+    - checkout
+    - <<: *load_cache
+    - run:
+        name: Compile code
+        command: ./sbt ++${SCALA_VERSION}! test:compile
+    - <<: *save_cache
+
+lint: &lint
+  steps:
+    - checkout
+    - <<: *load_cache
+    - run:
+        name: Lint code
+        command: ./sbt ++${SCALA_VERSION}! check
+    - <<: *save_cache
+
+test: &test
+  steps:
+    - checkout
+    - <<: *load_cache
+    - <<: *install_jdk
+    - run:
+        name: Run tests
+        command: ./sbt ++${SCALA_VERSION}! test
+    - <<: *save_cache
+
+release: &release
+  steps:
+      - checkout
+      - run:
+          name: Fetch git tags
+          command: git fetch --tags
+      - <<: *load_cache
+      - run:
+          name: Write PGP public key
+          command: echo -n "${PGP_PUBLIC}" | base64 -d > /tmp/public.asc
+      - run:
+          name: Write PGP secret key
+          command: echo -n "${PGP_SECRET}" | base64 -d > /tmp/secret.asc
+      - run:
+          name: Release artifacts
+          command: ./sbt ++${SCALA_VERSION}! releaseEarly
+
 jobs:
-  lint212_jdk8:
-    docker:
-      - image: hseeberger/scala-sbt:8u181_2.12.8_1.2.8
-    steps:
-      - checkout
-      - restore_cache:
-          key: sbt-cache
-      - run: sbt ++2.12.8! check
-      - save_cache:
-          key: sbt-cache
-          paths:
-            - "~/.ivy2/cache"
-            - "~/.sbt"
-            - "~/.m2"
+  lint:
+    <<: *lint
+    <<: *machine_ubuntu
+    environment:
+      - <<: *scala_212
+      - <<: *jdk_8
 
-  lint212_jdk11:
-    docker:
-      - image: hseeberger/scala-sbt:11.0.2_2.12.8_1.2.8
-    steps:
-      - checkout
-      - restore_cache:
-          key: sbt-cache
-      - run: sbt ++2.12.8! check
-      - save_cache:
-          key: sbt-cache
-          paths:
-            - "~/.ivy2/cache"
-            - "~/.sbt"
-            - "~/.m2"
+  test_211_jdk8:
+    <<: *test
+    <<: *machine_ubuntu
+    environment:
+      - <<: *scala_211
+      - <<: *jdk_8
 
-  test212_jdk8:
-    docker:
-      - image: hseeberger/scala-sbt:8u181_2.12.8_1.2.8
-    steps:
-      - checkout
-      - restore_cache:
-          key: sbt-cache
-      - run: sbt ++2.12.8! test
-      - save_cache:
-          key: sbt-cache
-          paths:
-            - "~/.ivy2/cache"
-            - "~/.sbt"
-            - "~/.m2"
+  test_212_jdk8:
+    <<: *test
+    <<: *machine_ubuntu
+    environment:
+      - <<: *scala_212
+      - <<: *jdk_8
 
-  test212_jdk11:
-    docker:
-      - image: hseeberger/scala-sbt:11.0.2_2.12.8_1.2.8
-    steps:
-      - checkout
-      - restore_cache:
-          key: sbt-cache
-      - run: sbt ++2.12.8! test
-      - save_cache:
-          key: sbt-cache
-          paths:
-            - "~/.ivy2/cache"
-            - "~/.sbt"
-            - "~/.m2"
+  test_211_jdk11:
+    <<: *test
+    <<: *machine_ubuntu
+    environment:
+      - <<: *scala_211
+      - <<: *jdk_11
 
-  release:
-    docker:
-      - image: hseeberger/scala-sbt:8u181_2.12.8_1.2.8
-    steps:
-      - checkout
-      - run: git fetch --tags
-      - restore_cache:
-          key: sbt-cache
-      - run: echo -n "${PGP_PUBLIC}" | base64 -d > /tmp/public.asc
-      - run: echo -n "${PGP_SECRET}" | base64 -d > /tmp/secret.asc
-      - run: sbt releaseEarly
+  test_212_jdk11:
+    <<: *test
+    <<: *machine_ubuntu
+    environment:
+      - <<: *scala_212
+      - <<: *jdk_11
+
+  release_211:
+    <<: *release
+    <<: *machine_ubuntu
+    environment:
+      - <<: *scala_211
+      - <<: *jdk_8
+
+  release_212:
+    <<: *release
+    <<: *machine_ubuntu
+    environment:
+      - <<: *scala_212
+      - <<: *jdk_8
 
 workflows:
   version: 2
   build:
     jobs:
-      - lint212_jdk8:
+      - lint:
           filters:
             tags:
-              only: /^v[0-9]+(\.[0-9]+)*$/
-      - lint212_jdk11:
-          filters:
-            tags:
-              only: /^v[0-9]+(\.[0-9]+)*$/
-      - test212_jdk8:
+              only: /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
+      - test_211_jdk8:
           requires:
-            - lint212_jdk8
+            - lint
           filters:
             tags:
-              only: /^v[0-9]+(\.[0-9]+)*$/
-      - test212_jdk11:
+              only: /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
+      - test_212_jdk8:
           requires:
-            - lint212_jdk11
+            - lint
           filters:
             tags:
-              only: /^v[0-9]+(\.[0-9]+)*$/
-      - release:
+              only: /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
+      - test_211_jdk11:
+          requires:
+            - lint
+          filters:
+            tags:
+              only: /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
+      - test_212_jdk11:
+          requires:
+            - lint
+          filters:
+            tags:
+              only: /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
+      - release_211:
           context: Sonatype
           requires:
-            - test212_jdk8
-            - test212_jdk11
+            - test_211_jdk8
+            - test_211_jdk11
           filters:
             branches:
               ignore: /.*/
             tags:
-              only: /^v[0-9]+(\.[0-9]+)*$/
+              only: /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
+      - release_212:
+          context: Sonatype
+          requires:
+            - release_211
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
