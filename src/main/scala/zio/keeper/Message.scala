@@ -1,3 +1,6 @@
 package zio.keeper
 
-final case class Message[S, A](sender: NodeId, state: S, payload: A)
+import zio.Chunk
+import zio.nio.channels.AsynchronousSocketChannel
+
+final case class Message(sender: NodeId, payload: Chunk[Byte], replyTo: AsynchronousSocketChannel)
