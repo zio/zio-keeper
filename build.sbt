@@ -34,7 +34,7 @@ lazy val zioKeeper = project
     libraryDependencies ++= Seq(
       "dev.zio"    %% "zio"                  % "1.0.0-RC11-1",
       "dev.zio"    %% "zio-streams"          % "1.0.0-RC11-1",
-      "dev.zio"    %% "zio-nio"              % "0.1.1",
+      "dev.zio"    %% "zio-nio"              % "0.1.2",
       "org.specs2" %% "specs2-core"          % "4.7.0" % Test,
       "org.specs2" %% "specs2-scalacheck"    % "4.7.0" % Test,
       "org.specs2" %% "specs2-matcher-extra" % "4.7.0" % Test

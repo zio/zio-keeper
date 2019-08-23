@@ -75,7 +75,7 @@ object Cluster {
       ss          <- serializeMessage(me, bytes, 1)
       _           <- channel.write(ss)
       headerBytes <- channel.read(24)
-      byteBuffer  = new zio.nio.ByteBuffer(java.nio.ByteBuffer.wrap(headerBytes.toArray))
+      byteBuffer  <- Buffer.byte(headerBytes)
       l1          <- byteBuffer.getLong
       l2          <- byteBuffer.getLong
       _           <- byteBuffer.getInt
@@ -176,7 +176,7 @@ object Cluster {
               {
                 for {
                   headerBytes            <- channel.read(HeaderSize)
-                  byteBuffer             <- Buffer.byte(headerBytes).map(_.asInstanceOf[ByteBuffer])
+                  byteBuffer             <- Buffer.byte(headerBytes)
                   senderMostSignificant  <- byteBuffer.getLong
                   senderLeastSignificant <- byteBuffer.getLong
                   messageType            <- byteBuffer.getInt
