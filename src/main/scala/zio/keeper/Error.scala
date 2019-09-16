@@ -17,5 +17,7 @@ object Error {
   case class NodeUnknown(nodeId: NodeId)                             extends Error
   case class SendError[A](nodeId: NodeId, message: A, error: String) extends Error
   case class HandshakeError(msg: String)                             extends Error
+
+  case class ServiceDiscoveryError(msg: String) extends Error
   // TODO: define error hierarchy
 }
