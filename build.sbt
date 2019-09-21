@@ -35,8 +35,9 @@ lazy val zioKeeper = project
       "dev.zio"    %% "zio"                  % "1.0.0-RC14",
       "dev.zio"    %% "zio-streams"          % "1.0.0-RC14",
       "dev.zio"    %% "zio-nio"              % "0.1.2",
-      "org.specs2" %% "specs2-core"          % "4.7.1" % Test,
-      "org.specs2" %% "specs2-scalacheck"    % "4.7.1" % Test,
-      "org.specs2" %% "specs2-matcher-extra" % "4.7.1" % Test
+      "dev.zio" %% "zio-test"                % "1.0.0-RC12-1" % "test",
+      "dev.zio" %% "zio-test-sbt"            % "1.0.0-RC12-1" % "test"
     )
   )
+
+testFrameworks := Seq(new TestFramework("zio.test.sbt.ZTestFramework"))
