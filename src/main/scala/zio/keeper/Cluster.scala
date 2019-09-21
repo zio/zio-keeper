@@ -8,7 +8,7 @@ import zio._
 import zio.clock.Clock
 import zio.console.{ Console, putStrLn }
 import zio.duration._
-import zio.keeper.Cluster.InternalProtocol.{ Ack, ProvideIdentity, RequestIdentity }
+import zio.keeper.Cluster.InternalProtocol.{ Ack, ProvideClusterState, RequestClusterState }
 import zio.keeper.Error._
 import zio.nio._
 import zio.nio.channels.{ AsynchronousServerSocketChannel, AsynchronousSocketChannel }
@@ -37,9 +37,10 @@ object Cluster {
                         .inetSocketAddress(localHost, port)
                         .orDie // this should configurable especially for docker port forwarding this might be important
       transport                     <- ZIO.environment[Transport]
-      currentNodeId                 = NodeId(UUID.randomUUID())
-      nodesAndInternalMessagesQueue <- connectToCluster(currentNodeId)
+      localMember                 = Member(NodeId(UUID.randomUUID()), socketAddress)
+      membersAndInternalMessagesQueue <- connectToCluster(localMember)
       userMessagesQueue             <- zio.Queue.bounded[Message](1000)
+      gossipStateRef <- Ref.make(GossipState.Empty)
 
       server <- transport.bind(socketAddress).orDie
       _      <- putStrLn("Listening on " + localHost.hostname + ": " + port)
@@ -49,7 +50,7 @@ object Cluster {
                 for {
                   typeAndMessage <- readMessage(channel)
                   _ <- if (typeAndMessage._1 == 1) {
-                        nodesAndInternalMessagesQueue._2.offer(typeAndMessage._2).unit
+                        membersAndInternalMessagesQueue._2.offer(typeAndMessage._2).unit
                       } else if (typeAndMessage._1 == 2) {
                         userMessagesQueue.offer(typeAndMessage._2).unit
                       } else {
@@ -68,8 +69,8 @@ object Cluster {
             .fork //this is waiting for new connections
 
       payload <- InternalProtocol.NotifyJoin(localHost, port).serialize
-      bytes   <- serializeMessage(currentNodeId, payload, 1)
-      nodes   <- nodesAndInternalMessagesQueue._1.get
+      bytes   <- serializeMessage(localMember, payload, 1)
+      nodes   <- membersAndInternalMessagesQueue._1.get
 
       _ <- ZIO.traversePar_(nodes) {
             case (node, channel) =>
@@ -83,36 +84,38 @@ object Cluster {
                         case InternalProtocol.Ack => putStrLn("connected successfully with " + node)
                         case _ =>
                           putStrLn("unexpected response") *>
-                            nodesAndInternalMessagesQueue._1.update(_ - node)
+                            membersAndInternalMessagesQueue._1.update(_ - node)
                       }
                     case Left(ex) =>
                       putStrLn("fail to send join notification: " + ex) *>
-                        nodesAndInternalMessagesQueue._1.update(_ - node)
+                        membersAndInternalMessagesQueue._1.update(_ - node)
                     case Right((_, _)) =>
                       putStrLn("unexpected response") *>
-                        nodesAndInternalMessagesQueue._1.update(_ - node)
+                        membersAndInternalMessagesQueue._1.update(_ - node)
 
                   }
                   .catchAll(ex => putStrLn("cannot process response for cluster join: " + ex))
 
           }
       _ <- listenForClusterMessages(
-            currentNodeId,
-            nodesAndInternalMessagesQueue._2,
-            nodesAndInternalMessagesQueue._1
+            localMember,
+            gossipStateRef,
+            membersAndInternalMessagesQueue._2,
+            membersAndInternalMessagesQueue._1
           )
 
-      _ <- putStrLn("Node [" + currentNodeId.value + "] started.")
+      _ <- putStrLn("Node [" + localMember.nodeId + "] started.")
     } yield make(
-      currentNodeId,
+      localMember,
       userMessagesQueue,
-      nodesAndInternalMessagesQueue._1
+      membersAndInternalMessagesQueue._1
     )
 
   private def listenForClusterMessages(
-    currentNode: NodeId,
-    messageQueue: zio.Queue[Message],
-    initialNodes: Ref[Map[NodeId, AsynchronousSocketChannel]]
+                                        currentNode: Member,
+                                        gossipState: Ref[GossipState],
+                                        messageQueue: zio.Queue[Message],
+                                        initialNodes: Ref[Map[NodeId, AsynchronousSocketChannel]]
   ) = {
     for {
       message <- messageQueue.take
@@ -125,7 +128,7 @@ object Cluster {
                              (SocketAddress.inetSocketAddress(inetSocketAddress, port) >>=
                                transport.connect) <*
                                putStrLn(
-                                 "connected with node [" + message.sender.value + "] " + inetSocketAddress.hostname + ":" + port
+                                 "connected with node [" + message.sender + "] " + inetSocketAddress.hostname + ":" + port
                                )
                            }
                            .orDie
@@ -134,9 +137,10 @@ object Cluster {
                       (serializeMessage(currentNode, _: Chunk[Byte], 1)) >>=
                       message.replyTo.write
               } yield ()
-            case RequestIdentity =>
+            case RequestClusterState =>
               for {
-                payload <- ProvideIdentity(currentNode).serialize
+                currentClusterState <- gossipState.get
+                payload <- ProvideClusterState(currentClusterState).serialize
                 bytes   <- serializeMessage(currentNode, payload, 1)
                 _       <- message.replyTo.write(bytes)
               } yield ()
@@ -145,21 +149,30 @@ object Cluster {
     } yield ()
   }.forever.fork
 
-  private def connectToCluster(me: NodeId) =
+  private def connectToCluster(me: Member) =
     for {
       nodes <- zio.Ref.make(Map.empty[NodeId, AsynchronousSocketChannel])
       seeds <- ZIO.accessM[Discovery with Console](_.discover)
       _     <- putStrLn("seeds: " + seeds)
-      _ <- ZIO.foreach(seeds) { ip =>
+      newState <- ZIO.foldLeft(seeds)(GossipState.Empty) { case (acc, ip) =>
             connectToSeed(me, ip)
-              .flatMap(newNode => nodes.update(_ + newNode))
-              .catchAll(ex => putStrLn("seed [" + ip + "] ignored because of: " + ex.getMessage)) //we log this
+              .map(acc.merge)
+              .catchAll(ex =>
+                putStrLn("seed [" + ip + "] ignored because of: " + ex.getMessage)
+                  .as(acc)) //we log this
           }
+      _ <- ZIO.foreach(newState.members){m =>
+        ZIO.accessM[Transport with Clock with zio.console.Console](
+          putStrLn("connecting to: " + m) *>
+          _.connect(m.addr).timeoutFail(ConnectionTimeout(m.addr))(Duration(10, TimeUnit.SECONDS))
+          <* putStrLn("connected to: " + m.addr)
+        ).flatMap(channel => nodes.update(_ + (m.nodeId -> channel)))
+      }.orDie
       internalMessagesQueue <- zio.Queue.bounded[Message](1000)
 
     } yield (nodes, internalMessagesQueue)
 
-  private def connectToSeed(me: NodeId, seed: SocketAddress) =
+  private def connectToSeed(me: Member, seed: SocketAddress) =
     for {
       channel <- ZIO.accessM[Transport with Clock with zio.console.Console](
                   putStrLn("connecting to: " + seed) *>
@@ -168,14 +181,14 @@ object Cluster {
                 )
       //initial handshake
       _     <- putStrLn("starting handshake")
-      bytes <- RequestIdentity.serialize.flatMap(serializeMessage(me, _, 1))
+      bytes <- RequestClusterState.serialize.flatMap(serializeMessage(me, _, 1))
       _     <- channel.write(bytes)
       msg   <- readMessage(channel)
 
       m <- InternalProtocol.deserialize(msg._2.payload)
       res <- m match {
-              case InternalProtocol.ProvideIdentity(nodeId) =>
-                ZIO.succeed((nodeId, channel)) <* putStrLn("handshake finished successfully " + seed)
+              case InternalProtocol.ProvideClusterState(gossipState) =>
+                ZIO.succeed(gossipState) <* putStrLn("retrieved state from seed: " + seed)
               case _ =>
                 ZIO.fail(HandshakeError("handshake error for " + seed))
             }
@@ -196,9 +209,9 @@ object Cluster {
     } yield (messageType, Message(sender, payloadByte, channel))
 
   private def make(
-    me: NodeId,
-    q: zio.Queue[Message],
-    initialNodes: Ref[Map[NodeId, AsynchronousSocketChannel]]
+                    me: Member,
+                    q: zio.Queue[Message],
+                    initialNodes: Ref[Map[NodeId, AsynchronousSocketChannel]]
   ) = new Cluster {
     override def nodes =
       initialNodes.get
@@ -230,11 +243,11 @@ object Cluster {
       zio.stream.Stream.fromQueue(q)
   }
 
-  private def serializeMessage(nodeId: NodeId, payload: Chunk[Byte], messageType: Int): IO[Error, Chunk[Byte]] = {
+  private def serializeMessage(member: Member, payload: Chunk[Byte], messageType: Int): IO[Error, Chunk[Byte]] = {
     for {
       byteBuffer <- Buffer.byte(HeaderSize + payload.length)
-      _          <- byteBuffer.putLong(nodeId.value.getMostSignificantBits)
-      _          <- byteBuffer.putLong(nodeId.value.getLeastSignificantBits)
+      _          <- byteBuffer.putLong(member.nodeId.value.getMostSignificantBits)
+      _          <- byteBuffer.putLong(member.nodeId.value.getLeastSignificantBits)
       _          <- byteBuffer.putInt(messageType)
       _          <- byteBuffer.putInt(payload.length)
       _          <- byteBuffer.putChunk(payload)
@@ -275,9 +288,10 @@ object Cluster {
         val messageByte = bytes.drop(1)
         bytes.apply(0) match {
           case RequestIdentityMsgId =>
-            ZIO.succeed(RequestIdentity)
+            ZIO.succeed(RequestClusterState)
           case ProvideIdentityMsgId =>
-            ZIO.effect(ProvideIdentity(NodeId(UUID.fromString(new String(messageByte.toArray)))))
+            ???
+            //ZIO.effect(ProvideClusterState(Member(UUID.fromString(new String(messageByte.toArray)))))//this should using UUID longs
           case NotifyJoinMsgId =>
             for {
               a   <- InetAddress.byAddress(messageByte.take(4).toArray)
@@ -288,9 +302,16 @@ object Cluster {
         }
       }
 
-    final case class ProvideIdentity(node: NodeId) extends InternalProtocol {
+    final case class ProvideClusterState(node: GossipState) extends InternalProtocol {
       override def serialize: IO[SerializationError, Chunk[Byte]] =
-        ZIO.succeed(Chunk(ProvideIdentityMsgId.toByte) ++ Chunk.fromArray(node.value.toString.getBytes))
+//        for {
+//          byteBuffer <- Buffer.byte()
+//
+//        } yield
+//    }
+//        ZIO.succeed(Chunk(ProvideIdentityMsgId.toByte) ++ Chunk.succeed(node.members.size) ++ node.members.foldLeft(Chunk.empty){case (acc, node) => Chunk.fromArray(Array())
+
+    ???
     }
 
     final case class NotifyJoin(addr: InetAddress, port: Int) extends InternalProtocol {
@@ -302,7 +323,7 @@ object Cluster {
         )
     }
 
-    case object RequestIdentity extends InternalProtocol {
+    case object RequestClusterState extends InternalProtocol {
       override val serialize: IO[SerializationError, Chunk[Byte]] =
         ZIO.succeed(Chunk(RequestIdentityMsgId))
     }
