@@ -51,7 +51,7 @@ Production experiences:
 [badge-ci]: https://circleci.com/gh/zio/zio-keeper/tree/master.svg?style=svg
 [badge-gitter]: https://badges.gitter.im/zio/zio-keeper.svg
 [link-crdts-wiki]: https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type
-[link-zio]: https://dev.zio
+[link-zio]: https://zio.dev
 [link-ci]: https://circleci.com/gh/zio/zio-keeper/tree/develop
 [link-gitter]: https://gitter.im/zio/zio-keeper?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge
 [link-dsffap]: http://book.mixu.net/distsys/single-page.html
