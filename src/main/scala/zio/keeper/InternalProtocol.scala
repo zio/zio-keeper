@@ -3,9 +3,9 @@ package zio.keeper
 import java.math.BigInteger
 import java.util.UUID
 
-import zio.{Chunk, IO, ZIO}
+import zio.{ Chunk, IO, ZIO }
 import zio.keeper.Error.SerializationError
-import zio.nio.{Buffer, ByteBuffer, InetAddress, InetSocketAddress, SocketAddress}
+import zio.nio.{ Buffer, ByteBuffer, InetAddress, InetSocketAddress, SocketAddress }
 
 sealed trait InternalProtocol {
   def serialize: IO[SerializationError, Chunk[Byte]]
@@ -53,8 +53,8 @@ object InternalProtocol {
           } yield ProvideClusterState(state)
         case NotifyJoinMsgId =>
           for {
-            a   <- InetAddress.byAddress(messageByte.take(4).toArray)
-            res <- ZIO.effect(new BigInteger(messageByte.drop(4).toArray).intValue())
+            a          <- InetAddress.byAddress(messageByte.take(4).toArray)
+            res        <- ZIO.effect(new BigInteger(messageByte.drop(4).toArray).intValue())
             socketAddr <- SocketAddress.inetSocketAddress(a, res)
           } yield NotifyJoin(socketAddr)
         case AckMsgId =>
@@ -69,13 +69,13 @@ object InternalProtocol {
         _          <- byteBuffer.put(InternalProtocol.ProvideClusterStateMsgId)
         _          <- byteBuffer.putInt(state.members.size)
         _ <- ZIO.foldLeft(state.members)(byteBuffer) {
-          case (acc, member) =>
-            writeMember(member, acc)
-        }
+              case (acc, member) =>
+                writeMember(member, acc)
+            }
         _     <- byteBuffer.flip
         chunk <- byteBuffer.getChunk()
       } yield chunk
-      }.catchAll(ex => ZIO.fail(SerializationError(ex.getMessage)))
+    }.catchAll(ex => ZIO.fail(SerializationError(ex.getMessage)))
   }
 
   final case class NotifyJoin(addr: InetSocketAddress) extends InternalProtocol {
@@ -87,7 +87,6 @@ object InternalProtocol {
           Chunk.fromArray(inetAddr.address) ++
           Chunk.fromArray(BigInteger.valueOf(addr.port.toLong).toByteArray)
       }).catchAll(ex => ZIO.fail(SerializationError(ex.getMessage)))
-
 
   }
 

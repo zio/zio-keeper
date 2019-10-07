@@ -4,7 +4,7 @@ import zio._
 import zio.console.Console
 import zio.keeper.Error._
 import zio.nio._
-import zio.nio.channels.{AsynchronousServerSocketChannel, AsynchronousSocketChannel}
+import zio.nio.channels.{ AsynchronousServerSocketChannel, AsynchronousSocketChannel }
 import zio.stream.Stream
 
 trait Cluster {
@@ -23,9 +23,12 @@ object Cluster {
 
   def join[A](
     port: Int
-  ): ZIO[Credentials with Discovery with Transport with zio.console.Console with zio.clock.Clock with zio.random.Random, Error, Cluster] =
+  ): ZIO[
+    Credentials with Discovery with Transport with zio.console.Console with zio.clock.Clock with zio.random.Random,
+    Error,
+    Cluster
+  ] =
     InternalCluster.initCluster(port)
-
 
   private[keeper] def readMessage(channel: AsynchronousSocketChannel) =
     for {
@@ -40,8 +43,6 @@ object Cluster {
                       .read(payloadSize)
       sender = NodeId(new java.util.UUID(senderMostSignificant, senderLeastSignificant))
     } yield (messageType, Message(sender, payloadByte, channel))
-
-
 
   private[keeper] def serializeMessage(member: Member, payload: Chunk[Byte], messageType: Int): IO[Error, Chunk[Byte]] = {
     for {

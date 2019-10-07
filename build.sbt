@@ -32,11 +32,11 @@ lazy val zioKeeper = project
   .settings(
     name := "zio-keeper",
     libraryDependencies ++= Seq(
-      "dev.zio"    %% "zio"                  % "1.0.0-RC14",
-      "dev.zio"    %% "zio-streams"          % "1.0.0-RC14",
-      "dev.zio"    %% "zio-nio"              % "0.1.2",
-      "dev.zio" %% "zio-test"                % "1.0.0-RC12-1" % "test",
-      "dev.zio" %% "zio-test-sbt"            % "1.0.0-RC12-1" % "test"
+      "dev.zio" %% "zio"          % "1.0.0-RC14",
+      "dev.zio" %% "zio-streams"  % "1.0.0-RC14",
+      "dev.zio" %% "zio-nio"      % "0.1.2",
+      "dev.zio" %% "zio-test"     % "1.0.0-RC14" % "test",
+      "dev.zio" %% "zio-test-sbt" % "1.0.0-RC14" % "test"
     )
   )
 
