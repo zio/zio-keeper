@@ -63,6 +63,7 @@ object InternalProtocol {
     }
 
   final case class ProvideClusterState(state: GossipState) extends InternalProtocol {
+
     override def serialize: IO[SerializationError, Chunk[Byte]] = {
       for {
         byteBuffer <- Buffer.byte(1 + 24 * state.members.size + 4)
@@ -79,6 +80,7 @@ object InternalProtocol {
   }
 
   final case class NotifyJoin(addr: InetSocketAddress) extends InternalProtocol {
+
     override def serialize: IO[SerializationError, Chunk[Byte]] =
       (for {
         inetAddr <- InetAddress.byName(addr.hostString)
@@ -91,11 +93,13 @@ object InternalProtocol {
   }
 
   case object RequestClusterState extends InternalProtocol {
+
     override val serialize: IO[SerializationError, Chunk[Byte]] =
       ZIO.succeed(Chunk(RequestClusterStateMsgId))
   }
 
   case object Ack extends InternalProtocol {
+
     override val serialize: IO[SerializationError, Chunk[Byte]] =
       ZIO.succeed(Chunk(AckMsgId))
   }

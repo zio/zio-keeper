@@ -74,6 +74,7 @@ object Cluster {
   object Transport {
 
     trait TCPTransport extends Transport {
+
       override def bind(publicAddress: InetSocketAddress): Task[AsynchronousServerSocketChannel] =
         for {
           socket <- AsynchronousServerSocketChannel().orDie
