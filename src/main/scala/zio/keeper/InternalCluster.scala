@@ -182,6 +182,7 @@ final class InternalCluster(
 }
 
 object InternalCluster {
+
   private[keeper] def initCluster(port: Int) =
     for {
       localHost <- InetAddress.localHost.orDie
