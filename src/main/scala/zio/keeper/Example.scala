@@ -10,8 +10,12 @@ import zio.{ Chunk, IO }
 
 object Node1 extends zio.App {
 
-  val config = new Credentials with TCPTransport with Discovery with zio.console.Console.Live with zio.clock.Clock.Live
-  with zio.random.Random.Live {
+  val config = new Credentials
+    with TCPTransport
+    with Discovery
+    with zio.console.Console.Live
+    with zio.clock.Clock.Live
+    with zio.random.Random.Live {
 
     override def discover: IO[Error, Set[SocketAddress]] =
       InetAddress.localHost
@@ -56,8 +60,12 @@ object Node1 extends zio.App {
 
 object Node2 extends zio.App {
 
-  val config = new Credentials with TCPTransport with Discovery with zio.console.Console.Live with zio.clock.Clock.Live
-  with zio.random.Random.Live {
+  val config = new Credentials
+    with TCPTransport
+    with Discovery
+    with zio.console.Console.Live
+    with zio.clock.Clock.Live
+    with zio.random.Random.Live {
 
     override def discover: IO[Error, Set[SocketAddress]] =
       InetAddress.localHost
@@ -91,8 +99,12 @@ object Node2 extends zio.App {
 
 object Node3 extends zio.App {
 
-  val config = new Credentials with TCPTransport with Discovery with zio.console.Console.Live with zio.clock.Clock.Live
-  with zio.random.Random.Live {
+  val config = new Credentials
+    with TCPTransport
+    with Discovery
+    with zio.console.Console.Live
+    with zio.clock.Clock.Live
+    with zio.random.Random.Live {
 
     override def discover: IO[Error, Set[SocketAddress]] =
       InetAddress.localHost
