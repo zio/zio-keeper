@@ -8,7 +8,7 @@ import zio.keeper.Cluster.{ Credentials, Discovery }
 import zio.nio.{ InetAddress, SocketAddress }
 import zio.{ Chunk, IO }
 
-object Node1 extends zio.App {
+object Node1 extends zio.ManagedApp {
 
   val config = new Credentials
     with TCPTransport
@@ -18,19 +18,7 @@ object Node1 extends zio.App {
     with zio.random.Random.Live {
 
     override def discover: IO[Error, Set[SocketAddress]] =
-      InetAddress.localHost
-        .flatMap(
-          addr =>
-            zio.ZIO
-              .collectAll(
-                List(
-                  SocketAddress.inetSocketAddress(addr, 5557),
-                  SocketAddress.inetSocketAddress(addr, 5558)
-                )
-              )
-              .map(_.toSet[SocketAddress])
-        )
-        .orDie
+      IO.succeed(Set.empty)
   }
 
   val appLogic = Cluster
@@ -38,17 +26,19 @@ object Node1 extends zio.App {
     .provide(config)
     .flatMap(
       c =>
-        //zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS)) *>
-        c.broadcast(Chunk.fromArray("foo".getBytes)).map(_ => c)
+        (zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS)) *>
+          c.broadcast(Chunk.fromArray("foo".getBytes)).map(_ => c)).toManaged_
     )
     .flatMap(
       c =>
-        c.receive.foreach(
-          n =>
-            putStrLn(new String(n.payload.toArray))
-              *> c.send(n.payload, n.sender)
-              *> zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS))
-        )
+        c.receive
+          .foreach(
+            n =>
+              putStrLn(new String(n.payload.toArray))
+                *> c.send(n.payload, n.sender)
+                *> zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS))
+          )
+          .toManaged_
     )
 
   def run(args: List[String]) =
@@ -58,7 +48,7 @@ object Node1 extends zio.App {
     }, _ => 0)
 }
 
-object Node2 extends zio.App {
+object Node2 extends zio.ManagedApp {
 
   val config = new Credentials
     with TCPTransport
@@ -79,17 +69,19 @@ object Node2 extends zio.App {
     .provide(config)
     .flatMap(
       c =>
-        //zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS)) *>
-        c.broadcast(Chunk.fromArray("bar".getBytes)).map(_ => c)
+        (zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS)) *>
+          c.broadcast(Chunk.fromArray("bar".getBytes)).as(c)).toManaged_
     )
     .flatMap(
       c =>
-        c.receive.foreach(
-          n =>
-            putStrLn(new String(n.payload.toArray))
-              *> c.send(n.payload, n.sender)
-              *> zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS))
-        )
+        c.receive
+          .foreach(
+            n =>
+              putStrLn(new String(n.payload.toArray))
+                *> c.send(n.payload, n.sender)
+                *> zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS))
+          )
+          .toManaged_
     )
 
   def run(args: List[String]) =
@@ -97,7 +89,7 @@ object Node2 extends zio.App {
 
 }
 
-object Node3 extends zio.App {
+object Node3 extends zio.ManagedApp {
 
   val config = new Credentials
     with TCPTransport
@@ -118,17 +110,19 @@ object Node3 extends zio.App {
     .provide(config)
     .flatMap(
       c =>
-        //zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS)) *>
-        c.broadcast(Chunk.fromArray("bar1".getBytes)).map(_ => c)
+        (zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS)) *>
+          c.broadcast(Chunk.fromArray("bar1".getBytes)).as(c)).toManaged_
     )
     .flatMap(
       c =>
-        c.receive.foreach(
-          n =>
-            putStrLn(new String(n.payload.toArray))
-              *> c.send(n.payload, n.sender)
-              *> zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS))
-        )
+        c.receive
+          .foreach(
+            n =>
+              putStrLn(new String(n.payload.toArray))
+                *> c.send(n.payload, n.sender)
+                *> zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS))
+          )
+          .toManaged_
     )
 
   def run(args: List[String]) =

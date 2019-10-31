@@ -23,7 +23,7 @@ object Cluster {
 
   def join[A](
     port: Int
-  ): ZIO[
+  ): ZManaged[
     Credentials with Discovery with Transport with zio.console.Console with zio.clock.Clock with zio.random.Random,
     Error,
     Cluster
@@ -31,18 +31,16 @@ object Cluster {
     InternalCluster.initCluster(port)
 
   private[keeper] def readMessage(channel: AsynchronousSocketChannel) =
-    for {
-      headerBytes <- channel
-                      .read(HeaderSize)
+    (for {
+      headerBytes            <- channel.read(HeaderSize)
       byteBuffer             <- Buffer.byte(headerBytes)
       senderMostSignificant  <- byteBuffer.getLong
       senderLeastSignificant <- byteBuffer.getLong
       messageType            <- byteBuffer.getInt
       payloadSize            <- byteBuffer.getInt
-      payloadByte <- channel
-                      .read(payloadSize)
-      sender = NodeId(new java.util.UUID(senderMostSignificant, senderLeastSignificant))
-    } yield (messageType, Message(sender, payloadByte, channel))
+      payloadByte            <- channel.read(payloadSize)
+      sender                 = NodeId(new java.util.UUID(senderMostSignificant, senderLeastSignificant))
+    } yield (messageType, Message(sender, payloadByte))).mapError(ex => DeserializationError(ex.getMessage()))
 
   private[keeper] def serializeMessage(member: Member, payload: Chunk[Byte], messageType: Int): IO[Error, Chunk[Byte]] = {
     for {
@@ -66,28 +64,26 @@ object Cluster {
   }
 
   trait Transport {
-    def bind(publicAddress: InetSocketAddress): Task[AsynchronousServerSocketChannel]
+    def bind(publicAddress: InetSocketAddress): Managed[Throwable, AsynchronousServerSocketChannel]
 
-    def connect(ip: SocketAddress): Task[AsynchronousSocketChannel]
+    def connect(ip: SocketAddress): Managed[Throwable, AsynchronousSocketChannel]
   }
 
   object Transport {
 
     trait TCPTransport extends Transport {
 
-      override def bind(publicAddress: InetSocketAddress): Task[AsynchronousServerSocketChannel] =
+      override def bind(publicAddress: InetSocketAddress): Managed[Throwable, AsynchronousServerSocketChannel] =
         for {
-          socket <- AsynchronousServerSocketChannel().orDie
-          _      <- socket.bind(publicAddress).orDie
+          socket <- AsynchronousServerSocketChannel()
+          _      <- socket.bind(publicAddress).toManaged_
         } yield socket
 
-      override def connect(ip: SocketAddress): Task[AsynchronousSocketChannel] =
+      override def connect(ip: SocketAddress): Managed[Throwable, AsynchronousSocketChannel] =
         for {
           client <- AsynchronousSocketChannel()
-          _      <- client.connect(ip)
+          _      <- client.connect(ip).toManaged_
         } yield client
     }
-
   }
-
 }
