@@ -18,7 +18,7 @@ object InternalProtocol {
   private val NotifyJoinMsgId: Byte          = 3
   private val AckMsgId: Byte                 = 4
 
-  private def readMember(byteBuffer: ByteBuffer) =
+  def readMember(byteBuffer: ByteBuffer) =
     for {
       ms          <- byteBuffer.getLong
       ls          <- byteBuffer.getLong

@@ -15,13 +15,21 @@ import zio.stream.Stream
 import zio.{ Chunk, IO, Ref, ZIO, ZSchedule }
 import zio.ZManaged
 import zio.UIO
+import zio.Task
+import zio.RIO
+import zio.Queue
+import zio.nio.InetSocketAddress
+import java.nio.channels.Channel
+import zio.stream.ZStream
 
 final class InternalCluster(
   localMember: Member,
-  nodesRef: Ref[Map[NodeId, AsynchronousSocketChannel]],
+  nodesRef: Ref[Map[NodeId, Chunk[Byte] => UIO[Unit]]],
   gossipStateRef: Ref[GossipState],
   clusterMessageQueue: zio.Queue[Message],
-  userMessageQueue: zio.Queue[Message]
+  userMessageQueue: zio.Queue[Message],
+  subscribeToBroadcast: UIO[Stream[Nothing, Chunk[Byte]]],
+  publishToBroadCast: Chunk[Byte] => UIO[Unit],
 ) extends Cluster {
 
   private def removeMember(member: Member) =
@@ -37,61 +45,16 @@ final class InternalCluster(
             for {
               randomInt <- nextInt(gossipStateWithoutLocal.members.size)
               member    = gossipStateWithoutLocal.members.toList(randomInt)
-              channel   <- nodesRef.get.map(_.apply(member.nodeId))
+              send      <- nodesRef.get.map(_.apply(member.nodeId))
               payload   <- ProvideClusterState(gossipState).serialize
               bytes     <- serializeMessage(localMember, payload, 1)
-              _ <- channel
-                    .write(bytes)
-                    .catchAll(_ => removeMember(member))
+              _         <- send(bytes).catchAll(_ => removeMember(member))
             } yield ()
           } else {
             putStrLn("no other nodes")
           }
     } yield ()
   }.repeat(ZSchedule.fixed(5.seconds)).fork
-
-  private def listenForClusterMessages =
-    ZManaged.finalizerRef(_ => UIO.unit).flatMap { finalizer =>
-      val loop =
-        for {
-          message <- clusterMessageQueue.take
-          payload <- InternalProtocol.deserialize(message.payload)
-          _ <- putStrLn(payload.toString())
-          _ <- payload match {
-            case InternalProtocol.NotifyJoin(inetSocketAddress) =>
-              for {
-                transport <- ZIO.environment[Transport]
-                client <- ZIO.uninterruptibleMask { restore =>
-                            for {
-                              reservation <- transport.connect(inetSocketAddress).reserve
-                              _ <- finalizer.update(f => e => f(e) *> reservation.release(e))
-                              channel <- restore(reservation.acquire)
-                            } yield channel
-                          } <*
-                          putStrLn(
-                            "connected with node [" + message.sender + "] " + inetSocketAddress.hostString + ":" + inetSocketAddress.port
-                          ).orDie
-                _ <- nodesRef.update(_.updated(message.sender, client)) //TODO here we should propagate membership event
-                _ <- gossipStateRef.update(_.addMember(Member(message.sender, inetSocketAddress)))
-                _ <- Ack.serialize.flatMap(message.reply)
-              } yield ()
-            case RequestClusterState =>
-              for {
-                currentClusterState <- gossipStateRef.get
-                _                   <- ProvideClusterState(currentClusterState).serialize.flatMap(message.reply)
-              } yield ()
-            case ProvideClusterState(state) =>
-              for {
-                currentClusterState  <- gossipStateRef.get
-                diff                  = currentClusterState.diff(state)
-                _                     = ZIO.foreach_(diff.local)(member => removeMember(member)) //this is incomplete - remote part of diif should be handle
-                _                    <- message.reply(Chunk.empty)
-              } yield ()
-            case _ => putStrLn("unknown message: " + payload)
-          }
-        } yield ()
-      loop.forever.toManaged_
-    }.fork
 
   private def notifyJoin =
     for {
@@ -100,11 +63,10 @@ final class InternalCluster(
       nodes   <- nodesRef.get
 
       _ <- ZIO.traversePar_(nodes) {
-            case (node, channel) =>
-              channel
-                .write(bytes)
+            case (node, send) =>
+              send(bytes)
                 .catchAll(ex => putStrLn("fail to send join notification: " + ex)) *>
-                readMessage(localMember, ZManaged.succeed(channel)).either
+                readMessage(channel).either
                   .flatMap {
                     case Right((1, msg)) =>
                       InternalProtocol.deserialize(msg.payload).flatMap {
@@ -126,31 +88,113 @@ final class InternalCluster(
           }
     } yield ()
 
-  private def accept =
+  private def acceptConnectionRequests =
     for {
       transport <- ZManaged.environment[Transport]
       server    <- transport.bind(localMember.addr).orDie
-      _ <- {
-        val loop =
-          readMessage(localMember, server.accept).flatMap { case (msgType, msg) =>
-            if (msgType == 1) {
-              clusterMessageQueue.offer(msg).unit
-            } else if (msgType == 2) {
-              userMessageQueue.offer(msg).unit
-            } else {
-              //this should be dead letter
-              putStrLn("unsupported message type")
-            }
-          }
-          .catchAll { ex =>
-            putStrLn("channel close because of: " + ex.toString)
-          }
-        loop
-          .orDie
-          .forever
-          .fork
-      }.toManaged_
+      loop = server.accept.use { channel =>
+        for {
+          msg <- readMessage(channel)
+          connectionRequest <- OpenConnection.deserialize(msg._2.payload)
+          _ <- connect(connectionRequest.member.addr).fork
+        } yield ()
+      }
+      _ <- loop.forever.toManaged_
     } yield ()
+
+  private def connect(
+    addr: SocketAddress
+  ): ZIO[Transport with Console with Clock, Throwable, Unit] = for {
+    transport <- ZIO.environment[Transport]
+    _ <- transport
+      .connect(addr)
+      .timeout(Duration(10, TimeUnit.SECONDS))
+      .use { channelOpt =>
+        channelOpt.fold[ZIO[Transport with Console with Clock, Throwable, Unit]](
+          putStrLn(s"Failed initiating connection with node [ ${addr} ]")
+        )( channel =>
+          for {
+            member <- handShake(channel)
+            msgBox <- listenOnChannel(channel)
+            _ <- nodesRef.update(_ + (member.nodeId -> ((b: Chunk[Byte]) => msgBox.offer(b).unit.catchSomeCause { case c if (c.interrupted) => ZIO.unit })))
+          } yield ()
+        )
+      }
+    } yield ()
+
+  private def handShake(
+    channel: AsynchronousSocketChannel
+  ): UIO[Member] = ???
+
+  private def listenOnChannel(
+    channel: AsynchronousSocketChannel
+  ) =
+    for {
+      clusterMessageQueue <- Queue.bounded[Message](1000)
+      userMessageQueue <- Queue.bounded[Message](1000)
+      _ <- accept0(channel, clusterMessageQueue, userMessageQueue).fork
+      broadcasted <- subscribeToBroadcast
+      privateQueue <- Queue.bounded[Chunk[Byte]](1000)
+      _ <- handleSends(broadcasted.interleave(ZStream.fromQueue(privateQueue)), channel).fork
+      _ <- handleClusterMessages(clusterMessageQueue, channel).fork
+    } yield privateQueue
+
+  private def accept0(
+    channel: AsynchronousSocketChannel,
+    clusterMessageQueue: Queue[Message],
+    userMessageQueue: Queue[Message]
+  ) = {
+    val loop = readMessage(channel).flatMap { case (msgType, msg) =>
+      if (msgType == 1) {
+        clusterMessageQueue.offer(msg).unit
+      } else if (msgType == 2) {
+        userMessageQueue.offer(msg).unit
+      } else {
+        //this should be dead letter
+        putStrLn("unsupported message type")
+      }
+    }.catchAll { ex => putStrLn("channel close because of: " + ex.toString) }
+    loop
+      .orDie
+      .forever
+  }
+
+  private def handleSends(messages: Stream[Nothing, Chunk[Byte]], channel: AsynchronousSocketChannel) =
+    messages.tap { bytes =>
+      channel
+        .write(bytes)
+        .catchAll(ex => putStrLn("fail to send join notification: " + ex))
+    }.runDrain
+
+  private def handleClusterMessages(queue: Queue[Message], replyTo: AsynchronousSocketChannel) = {
+    val loop =
+    for {
+      message <- queue.take
+      payload <- InternalProtocol.deserialize(message.payload)
+      _ <- putStrLn(payload.toString())
+      _ <- payload match {
+        case InternalProtocol.NotifyJoin(inetSocketAddress) =>
+          connect(inetSocketAddress) *>
+            Ack.serialize.flatMap(serializeMessage(localMember, _, 1)) >>= replyTo.write
+        case RequestClusterState =>
+          for {
+            currentClusterState <- gossipStateRef.get
+            payload             <- ProvideClusterState(currentClusterState).serialize
+            bytes               <- serializeMessage(localMember, payload, 1)
+            _                   <- replyTo.write(bytes)
+          } yield ()
+        case ProvideClusterState(state) =>
+          for {
+            currentClusterState  <- gossipStateRef.get
+            diff                  = currentClusterState.diff(state)
+            _                    <- ZIO.foreach_(diff.local)(member => removeMember(member))
+            _                    <- ZIO.foreach_(diff.remote)(member => connect(member.addr))
+          } yield ()
+        case _ => putStrLn("unknown message: " + payload)
+      }
+    } yield ()
+    loop.forever
+  }
 
   override def nodes =
     nodesRef.get
@@ -159,24 +203,13 @@ final class InternalCluster(
   override def send(data: Chunk[Byte], receipt: NodeId): IO[Error, Unit] =
     for {
       nodes          <- nodesRef.get
-      receiptChannel <- ZIO.fromEither(nodes.get(receipt).toRight(NodeUnknown(receipt)))
+      send           <- ZIO.fromEither(nodes.get(receipt).toRight(NodeUnknown(receipt)))
       payload        <- serializeMessage(localMember, data, 2)
-      _ <- receiptChannel
-            .write(payload)
-            .catchAll(ex => ZIO.fail(SendError(receipt, data, ex.getMessage)))
+      _              <- send(payload)
     } yield ()
 
   override def broadcast(data: Chunk[Byte]): IO[Error, Unit] =
-    for {
-      nodes   <- nodesRef.get
-      payload <- serializeMessage(localMember, data, 2).orDie
-      _ <- ZIO.traversePar_(nodes) {
-            case (receipt, channel) =>
-              channel
-                .write(payload)
-                .catchAll(ex => ZIO.fail(SendError(receipt, data, ex.getMessage)))
-          }
-    } yield ()
+    serializeMessage(localMember, data, 2).flatMap[Any, Error, Unit](publishToBroadCast).unit.orDie
 
   override def receive: Stream[Error, Message] =
     zio.stream.Stream.fromQueue(userMessageQueue)
