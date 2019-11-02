@@ -56,6 +56,7 @@ final class InternalCluster(
         for {
           message <- clusterMessageQueue.take
           payload <- InternalProtocol.deserialize(message.payload)
+          _ <- putStrLn(payload.toString())
           _ <- payload match {
             case InternalProtocol.NotifyJoin(inetSocketAddress) =>
               for {
@@ -72,23 +73,19 @@ final class InternalCluster(
                           ).orDie
                 _ <- nodesRef.update(_.updated(message.sender, client)) //TODO here we should propagate membership event
                 _ <- gossipStateRef.update(_.addMember(Member(message.sender, inetSocketAddress)))
-                _ <- Ack.serialize >>=
-                      (serializeMessage(localMember, _: Chunk[Byte], 1)) >>=
-                      message.replyTo.write
+                _ <- Ack.serialize.flatMap(message.reply)
               } yield ()
             case RequestClusterState =>
               for {
                 currentClusterState <- gossipStateRef.get
-                payload             <- ProvideClusterState(currentClusterState).serialize
-                bytes               <- serializeMessage(localMember, payload, 1)
-                _                   <- message.replyTo.write(bytes)
+                _                   <- ProvideClusterState(currentClusterState).serialize.flatMap(message.reply)
               } yield ()
             case ProvideClusterState(state) =>
               for {
-                currentClusterState <- gossipStateRef.get
-                diff                = currentClusterState.diff(state)
-                _                   = ZIO.foreach_(diff.local)(member => removeMember(member)) //this is incomplete - remote part of diif should be handle
-
+                currentClusterState  <- gossipStateRef.get
+                diff                  = currentClusterState.diff(state)
+                _                     = ZIO.foreach_(diff.local)(member => removeMember(member)) //this is incomplete - remote part of diif should be handle
+                _                    <- message.reply(Chunk.empty)
               } yield ()
             case _ => putStrLn("unknown message: " + payload)
           }
@@ -107,7 +104,7 @@ final class InternalCluster(
               channel
                 .write(bytes)
                 .catchAll(ex => putStrLn("fail to send join notification: " + ex)) *>
-                readMessage(channel).either
+                readMessage(localMember, ZManaged.succeed(channel)).either
                   .flatMap {
                     case Right((1, msg)) =>
                       InternalProtocol.deserialize(msg.payload).flatMap {
@@ -135,23 +132,19 @@ final class InternalCluster(
       server    <- transport.bind(localMember.addr).orDie
       _ <- {
         val loop =
-          server.accept.use { channel =>
-            for {
-              typeAndMessage <- readMessage(channel)
-              _ <- if (typeAndMessage._1 == 1) {
-                    clusterMessageQueue.offer(typeAndMessage._2).unit
-                  } else if (typeAndMessage._1 == 2) {
-                    userMessageQueue.offer(typeAndMessage._2).unit
-                  } else {
-                    //this should be dead letter
-                    putStrLn("unsupported message type")
-                  }
-            } yield ()
+          readMessage(localMember, server.accept).flatMap { case (msgType, msg) =>
+            if (msgType == 1) {
+              clusterMessageQueue.offer(msg).unit
+            } else if (msgType == 2) {
+              userMessageQueue.offer(msg).unit
+            } else {
+              //this should be dead letter
+              putStrLn("unsupported message type")
+            }
           }
           .catchAll { ex =>
             putStrLn("channel close because of: " + ex.toString)
           }
-          .fork
         loop
           .orDie
           .forever
@@ -203,12 +196,16 @@ object InternalCluster {
       nodes       <- zio.Ref.make(Map.empty[NodeId, AsynchronousSocketChannel]).toManaged_
       seeds       <- ZManaged.environment[Discovery with Console].flatMap(d => ZManaged.fromEffect(d.discover))
       _           <- putStrLn("seeds: " + seeds).toManaged_
-      newState <- ZManaged.collectAll(
-        seeds.map(ip => connectToSeed(localMember, ip).foldM(
-          ex => putStrLn("seed [" + ip + "] ignored because of: " + ex.getMessage).toManaged_.as(None),
-          s => ZManaged.succeed(Some(s))
-        ))
-      ).map(_.flatten.foldLeft(GossipState.Empty)(_ merge _))
+      newState <- ZIO.foldLeft(seeds)(GossipState.Empty) {
+        case (acc, ip) =>
+          connectToSeed(localMember, ip)
+            .map(acc.merge)
+            .catchAll(
+              ex =>
+                putStrLn("seed [" + ip + "] ignored because of: " + ex.getMessage)
+                  .as(acc)
+            )
+        }.toManaged_
       _ <- ZManaged
             .foreach(newState.members) { m =>
               for {
@@ -216,7 +213,7 @@ object InternalCluster {
                 _ <- putStrLn(s"connecting to: $m").toManaged_
                 out <- transport.connect(m.addr)
                       .timeout(Duration(10, TimeUnit.SECONDS))
-                      .flatMap(_.fold[ZManaged[Clock, Throwable, AsynchronousSocketChannel]](ZManaged.fail(ConnectionTimeout(m.addr)))(ZManaged.succeed))
+                      .flatMap(_.fold[ZManaged[Clock, Throwable, Unit]](ZManaged.fail(ConnectionTimeout(m.addr)))(channel => nodes.update(_ + (m.nodeId -> channel)).toManaged_.unit))
                 _ <- putStrLn(s"connected to: ${m.addr}").toManaged_
               } yield out
             }
@@ -236,32 +233,33 @@ object InternalCluster {
       _ <- cluster.notifyJoin.toManaged_
       _ <- cluster.listenForClusterMessages
       _ <- cluster.startGossiping.toManaged_
+      _ <- putStrLn("Init cluster completed").toManaged_
     } yield cluster
 
   private def connectToSeed(me: Member, seed: SocketAddress) =
-    for {
-      transport <- ZManaged.environment[Transport with Clock with zio.console.Console]
-      _ <-  putStrLn("connecting to: " + seed).toManaged_
-      channel <- transport
-        .connect(seed)
-        .timeout(Duration(10, TimeUnit.SECONDS))
-        .flatMap(_.fold[ZManaged[Transport, Throwable, AsynchronousSocketChannel]](
-          ZManaged.fail(ConnectionTimeout(seed)))(
-          ZManaged.succeed
-        ))
-      _ <- putStrLn("connected to: " + seed).toManaged_
-      //initial handshake
-      _     <- putStrLn("starting handshake").toManaged_
-      bytes <- RequestClusterState.serialize.flatMap(serializeMessage(me, _, 1)).toManaged_
-      _     <- channel.write(bytes).toManaged_
-      msg   <- readMessage(channel).toManaged_
-
-      m <- InternalProtocol.deserialize(msg._2.payload).toManaged_
-      res <- m match {
-              case InternalProtocol.ProvideClusterState(gossipState) =>
-                ZManaged.succeed(gossipState) <* putStrLn("retrieved state from seed: " + seed).toManaged_
-              case _ =>
-                ZManaged.fail(HandshakeError("handshake error for " + seed))
-            }
-    } yield res
+    ZManaged
+      .environment[Transport]
+      .flatMap(_.connect(seed))
+      .timeout(Duration(10, TimeUnit.SECONDS))
+      .flatMap(_.fold[ZManaged[Transport, Throwable, AsynchronousSocketChannel]](
+        ZManaged.fail(ConnectionTimeout(seed)))(
+        ZManaged.succeed
+      )).use { channel =>
+        for {
+          //initial handshake
+          _     <- putStrLn("starting handshake")
+          bytes <- RequestClusterState.serialize.flatMap(serializeMessage(me, _, 1))
+          _     <- channel.write(bytes)
+          _     <- putStrLn("foo")
+          msg   <- readMessage(me, ZManaged.succeed(channel))
+          _     <- putStrLn("bar")
+          m <- InternalProtocol.deserialize(msg._2.payload)
+          res <- m match {
+                  case InternalProtocol.ProvideClusterState(gossipState) =>
+                    ZIO.succeed(gossipState) <* putStrLn("retrieved state from seed: " + seed)
+                  case _ =>
+                    ZIO.fail(HandshakeError("handshake error for " + seed))
+                }
+        } yield res
+      }
 }

@@ -30,19 +30,26 @@ object Cluster {
   ] =
     InternalCluster.initCluster(port)
 
-  private[keeper] def readMessage(channel: AsynchronousSocketChannel) =
-    for {
-      headerBytes <- channel
-                      .read(HeaderSize)
-      byteBuffer             <- Buffer.byte(headerBytes)
-      senderMostSignificant  <- byteBuffer.getLong
-      senderLeastSignificant <- byteBuffer.getLong
-      messageType            <- byteBuffer.getInt
-      payloadSize            <- byteBuffer.getInt
-      payloadByte <- channel
-                      .read(payloadSize)
-      sender = NodeId(new java.util.UUID(senderMostSignificant, senderLeastSignificant))
-    } yield (messageType, Message(sender, payloadByte, channel))
+  private[keeper] def readMessage(localMember: Member, openChannel: Managed[Throwable, AsynchronousSocketChannel]) =
+    ZIO.uninterruptibleMask { restore =>
+      openChannel.reserve.flatMap { reservation =>
+        restore {
+          for {
+            channel                <- reservation.acquire
+            headerBytes            <- channel.read(HeaderSize)
+            byteBuffer             <- Buffer.byte(headerBytes)
+            senderMostSignificant  <- byteBuffer.getLong
+            senderLeastSignificant <- byteBuffer.getLong
+            messageType            <- byteBuffer.getInt
+            payloadSize            <- byteBuffer.getInt
+            payloadByte            <- channel.read(payloadSize)
+            sender = NodeId(new java.util.UUID(senderMostSignificant, senderLeastSignificant))
+            sendReply = (reply: Chunk[Byte]) => serializeMessage(localMember, reply, messageType).flatMap(channel.write) *> reservation.release(Exit.Success(())).unit
+          } yield (messageType, Message(sender, payloadByte, sendReply))
+        }.onError(c => reservation.release(Exit.Failure(c)))
+      }
+    }
+
 
   private[keeper] def serializeMessage(member: Member, payload: Chunk[Byte], messageType: Int): IO[Error, Chunk[Byte]] = {
     for {

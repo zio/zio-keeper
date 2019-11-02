@@ -34,7 +34,7 @@ lazy val zioKeeper = project
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio"          % "1.0.0-RC16",
       "dev.zio" %% "zio-streams"  % "1.0.0-RC16",
-      "dev.zio" %% "zio-nio"      % "0.2.1",
+      "dev.zio" %% "zio-nio"      % "0.3.0",
       "dev.zio" %% "zio-test"     % "1.0.0-RC16" % "test",
       "dev.zio" %% "zio-test-sbt" % "1.0.0-RC16" % "test"
     )

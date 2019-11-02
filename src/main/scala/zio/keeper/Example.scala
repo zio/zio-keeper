@@ -18,19 +18,7 @@ object Node1 extends zio.ManagedApp {
     with zio.random.Random.Live {
 
     override def discover: IO[Error, Set[SocketAddress]] =
-      InetAddress.localHost
-        .flatMap(
-          addr =>
-            zio.ZIO
-              .collectAll(
-                List(
-                  SocketAddress.inetSocketAddress(addr, 5557),
-                  SocketAddress.inetSocketAddress(addr, 5558)
-                )
-              )
-              .map(_.toSet[SocketAddress])
-        )
-        .orDie
+      IO.succeed(Set.empty)
   }
 
   val appLogic = Cluster
