@@ -5,6 +5,7 @@ import zio.nio.{ InetAddress, SocketAddress }
 import zio.test.DefaultRunnableSpec
 import zio.test._
 import zio.test.Assertion._
+import scala.collection.SortedSet
 
 object GossipStateSpec
     extends DefaultRunnableSpec(
@@ -17,11 +18,11 @@ object GossipStateSpec
             val member1 = Member(NodeId.generateNew, socketAddr)
             val member2 = Member(NodeId.generateNew, socketAddr)
             val member3 = Member(NodeId.generateNew, socketAddr)
-            val local   = GossipState(Set(member1, member3))
-            val remote  = GossipState(Set(member2, member3))
+            val local   = GossipState(SortedSet(member1, member3))
+            val remote  = GossipState(SortedSet(member2, member3))
             val diff    = local.diff(remote)
 
-            assert(diff, equalTo(StateDiff(Set(member1), Set(member2))))
+            assert(diff, equalTo(StateDiff(SortedSet(member1), SortedSet(member2))))
           }
 
         }
