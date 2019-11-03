@@ -39,7 +39,7 @@ object Cluster {
       messageType            <- byteBuffer.getInt
       payloadSize            <- byteBuffer.getInt
       payloadByte            <- channel.read(payloadSize)
-      sender = NodeId(new java.util.UUID(senderMostSignificant, senderLeastSignificant))
+      sender                 = NodeId(new java.util.UUID(senderMostSignificant, senderLeastSignificant))
     } yield (messageType, Message(sender, payloadByte))).mapError(ex => DeserializationError(ex.getMessage()))
 
   private[keeper] def serializeMessage(member: Member, payload: Chunk[Byte], messageType: Int): IO[Error, Chunk[Byte]] = {

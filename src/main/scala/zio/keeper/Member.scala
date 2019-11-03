@@ -14,6 +14,7 @@ object NodeId {
 }
 
 final case class Member(nodeId: NodeId, addr: InetSocketAddress)
+
 object Member {
   implicit val ordering: Ordering[Member] = Ordering.by(_.nodeId)
 

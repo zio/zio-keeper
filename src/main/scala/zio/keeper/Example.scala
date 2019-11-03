@@ -27,16 +27,18 @@ object Node1 extends zio.ManagedApp {
     .flatMap(
       c =>
         (zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS)) *>
-        c.broadcast(Chunk.fromArray("foo".getBytes)).map(_ => c)).toManaged_
+          c.broadcast(Chunk.fromArray("foo".getBytes)).map(_ => c)).toManaged_
     )
     .flatMap(
       c =>
-        c.receive.foreach(
-          n =>
-            putStrLn(new String(n.payload.toArray))
-              *> c.send(n.payload, n.sender)
-              *> zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS))
-        ).toManaged_
+        c.receive
+          .foreach(
+            n =>
+              putStrLn(new String(n.payload.toArray))
+                *> c.send(n.payload, n.sender)
+                *> zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS))
+          )
+          .toManaged_
     )
 
   def run(args: List[String]) =
@@ -68,16 +70,18 @@ object Node2 extends zio.ManagedApp {
     .flatMap(
       c =>
         (zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS)) *>
-        c.broadcast(Chunk.fromArray("bar".getBytes)).as(c)).toManaged_
+          c.broadcast(Chunk.fromArray("bar".getBytes)).as(c)).toManaged_
     )
     .flatMap(
       c =>
-        c.receive.foreach(
-          n =>
-            putStrLn(new String(n.payload.toArray))
-              *> c.send(n.payload, n.sender)
-              *> zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS))
-        ).toManaged_
+        c.receive
+          .foreach(
+            n =>
+              putStrLn(new String(n.payload.toArray))
+                *> c.send(n.payload, n.sender)
+                *> zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS))
+          )
+          .toManaged_
     )
 
   def run(args: List[String]) =
@@ -107,16 +111,18 @@ object Node3 extends zio.ManagedApp {
     .flatMap(
       c =>
         (zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS)) *>
-        c.broadcast(Chunk.fromArray("bar1".getBytes)).as(c)).toManaged_
+          c.broadcast(Chunk.fromArray("bar1".getBytes)).as(c)).toManaged_
     )
     .flatMap(
       c =>
-        c.receive.foreach(
-          n =>
-            putStrLn(new String(n.payload.toArray))
-              *> c.send(n.payload, n.sender)
-              *> zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS))
-        ).toManaged_
+        c.receive
+          .foreach(
+            n =>
+              putStrLn(new String(n.payload.toArray))
+                *> c.send(n.payload, n.sender)
+                *> zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS))
+          )
+          .toManaged_
     )
 
   def run(args: List[String]) =
