@@ -26,8 +26,8 @@ object Node1 extends zio.ManagedApp {
     .provide(config)
     .flatMap(
       c =>
-        //zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS)) *>
-        c.broadcast(Chunk.fromArray("foo".getBytes)).map(_ => c).toManaged_
+        (zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS)) *>
+        c.broadcast(Chunk.fromArray("foo".getBytes)).map(_ => c)).toManaged_
     )
     .flatMap(
       c =>
@@ -67,8 +67,8 @@ object Node2 extends zio.ManagedApp {
     .provide(config)
     .flatMap(
       c =>
-        //zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS)) *>
-        c.broadcast(Chunk.fromArray("bar".getBytes)).as(c).toManaged_
+        (zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS)) *>
+        c.broadcast(Chunk.fromArray("bar".getBytes)).as(c)).toManaged_
     )
     .flatMap(
       c =>
@@ -106,8 +106,8 @@ object Node3 extends zio.ManagedApp {
     .provide(config)
     .flatMap(
       c =>
-        //zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS)) *>
-        c.broadcast(Chunk.fromArray("bar1".getBytes)).as(c).toManaged_
+        (zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS)) *>
+        c.broadcast(Chunk.fromArray("bar1".getBytes)).as(c)).toManaged_
     )
     .flatMap(
       c =>

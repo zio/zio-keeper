@@ -31,7 +31,7 @@ object Cluster {
     InternalCluster.initCluster(port)
 
   private[keeper] def readMessage(channel: AsynchronousSocketChannel) =
-    for {
+    (for {
       headerBytes            <- channel.read(HeaderSize)
       byteBuffer             <- Buffer.byte(headerBytes)
       senderMostSignificant  <- byteBuffer.getLong
@@ -40,7 +40,7 @@ object Cluster {
       payloadSize            <- byteBuffer.getInt
       payloadByte            <- channel.read(payloadSize)
       sender = NodeId(new java.util.UUID(senderMostSignificant, senderLeastSignificant))
-    } yield (messageType, Message(sender, payloadByte))
+    } yield (messageType, Message(sender, payloadByte))).mapError(ex => DeserializationError(ex.getMessage()))
 
   private[keeper] def serializeMessage(member: Member, payload: Chunk[Byte], messageType: Int): IO[Error, Chunk[Byte]] = {
     for {

@@ -1,8 +1,9 @@
 package zio.keeper
 
 import zio.keeper.GossipState.StateDiff
+import scala.collection.SortedSet
 
-case class GossipState(members: Set[Member]) extends AnyVal {
+case class GossipState(members: SortedSet[Member]) extends AnyVal {
 
   def merge(other: GossipState) =
     copy(members = this.members ++ other.members)
@@ -21,6 +22,6 @@ case class GossipState(members: Set[Member]) extends AnyVal {
 }
 
 object GossipState {
-  val Empty = GossipState(Set.empty)
-  final case class StateDiff(local: Set[Member], remote: Set[Member])
+  val Empty = GossipState(SortedSet())
+  final case class StateDiff(local: SortedSet[Member], remote: SortedSet[Member])
 }
