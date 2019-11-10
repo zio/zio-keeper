@@ -9,6 +9,7 @@ trait Transport {
 }
 
 object Transport {
+
   /**
    * TODO: Naming should be discussed.
    * Our low level transport interface that allows sending messages either in fire-and-forget

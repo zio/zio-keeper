@@ -2,10 +2,11 @@ package zio.membership
 import zio.nio.SocketAddress
 
 sealed trait Error extends Exception
+
 object Error {
   case class BindFailed(addr: SocketAddress, msg: String) extends Error
-  case class ConnectionTimeout(addr: SocketAddress) extends Error
-  case class RequestTimeout(addr: SocketAddress)    extends Error
+  case class ConnectionTimeout(addr: SocketAddress)       extends Error
+  case class RequestTimeout(addr: SocketAddress)          extends Error
 
   case class CannotFindSerializerForMessage[A](obj: A)    extends Error
   case class CannotFindSerializerForMessageId(msgId: Int) extends Error

@@ -15,6 +15,7 @@ trait Membership {
 }
 
 object Membership {
+
   trait Service[R] {
 
     /**
