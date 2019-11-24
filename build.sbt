@@ -1,6 +1,9 @@
+import BuildHelper._
+
 inThisBuild(
   List(
     organization := "dev.zio",
+    homepacge := Some(url("https://github.com/zio/zio-keeper/")),
     licenses := List("Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0")),
     developers := List(
       Developer("jdegoes", "John De Goes", "john@degoes.net", url("http://degoes.net")),
@@ -37,13 +40,9 @@ addCommandAlias("check", "all scalafmtSbtCheck scalafmtCheck test:scalafmtCheck"
 
 lazy val root = project
   .in(file("."))
-  .settings(
-    skip in publish := true
-  )
-  .aggregate(
-    membership,
-    keeper
-  )
+  .settings(stdSettings("zio-keeper"))
+  .settings(skip in publish := true)
+  .aggregate(membership,keeper)
 
 lazy val keeper = project
   .in(file("keeper"))
