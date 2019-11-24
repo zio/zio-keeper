@@ -12,15 +12,11 @@ object Transport {
 
   /**
    * TODO: Naming should be discussed.
-   * Our low level transport interface that allows sending messages either in fire-and-forget
-   * or in streaming style. Also allows listening to messages sends from other nodes.
-   *
-   * The default implementation of this should use both TCP and UDP and bind both protocols
-   * to the same port number on bind.
+   * Our low level transport interface that allows sending messages.
+   * Also allows listening to messages sends from other nodes.
    */
   trait Service[R] {
-    def sendBestEffort(to: SocketAddress, msg: Chunk[Byte]): ZIO[R, Error, Unit]
-    def sendReliable(to: SocketAddress, msg: Chunk[Byte]): ZIO[R, Error, Unit]
+    def send(to: SocketAddress, data: Chunk[Byte]): ZIO[R, Error, Unit]
     def bind(addr: SocketAddress): ZStream[R, Error, Chunk[Byte]]
   }
 }

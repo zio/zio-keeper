@@ -6,13 +6,10 @@ import zio.nio.SocketAddress
 
 package object transport extends Transport.Service[Transport] {
 
-  def sendBestEffort(to: SocketAddress, msg: Chunk[Byte]) =
-    ZIO.accessM(_.transport.sendBestEffort(to, msg))
+  override def send(to: SocketAddress, data: Chunk[Byte]) =
+    ZIO.accessM(_.transport.send(to, data))
 
-  def sendReliable(to: SocketAddress, msg: Chunk[Byte]) =
-    ZIO.accessM(_.transport.sendReliable(to, msg))
-
-  def bind(addr: SocketAddress) =
+  override def bind(addr: SocketAddress) =
     ZStream.unwrap {
       ZIO.environment.map(_.transport.bind(addr))
     }
