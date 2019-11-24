@@ -1,7 +1,7 @@
 version: 2.1
 
 scala_212: &scala_212
-  SCALA_VERSION: 2.12.8
+  SCALA_VERSION: 2.12.10
 
 jdk_8: &jdk_8
   JDK_VERSION: 8
