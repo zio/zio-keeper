@@ -84,7 +84,7 @@ lazy val examples = project
   .dependsOn(keeper)
 
 lazy val docs = project
-  .in(file("docs"))
+  .in(file("zio-keeper-docs"))
   .settings(
     skip in publish := true,
     moduleName := "docs",
