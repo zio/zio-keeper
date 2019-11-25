@@ -30,6 +30,14 @@ load_cache: &load_cache
   - restore_cache:
       key: sbt-keeper-cache
 
+clean_cache: &clean_cache
+  - run:
+      name: Clean unwanted files from cache
+      command: |
+        rm -fv $HOME/.ivy2/.sbt.ivy.lock
+        find $HOME/.ivy2/cache -name "ivydata-*.properties" -print -delete
+        find $HOME/.sbt        -name "*.lock"               -print -delete
+
 save_cache: &save_cache
   - save_cache:
       key: sbt-keeper-cache
@@ -37,14 +45,39 @@ save_cache: &save_cache
         - "~/.ivy2/cache"
         - "~/.sbt"
         - "~/.m2"
+        - "~/.cache"
+        - "~/website/node_modules"
 
-compile: &compile
+install_yarn: &install_yarn
+  - run:
+      name: Install Yarn
+      command: |
+        curl -sL https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
+        sudo bash -c 'echo "deb https://dl.yarnpkg.com/debian/ stable main" > /etc/apt/sources.list.d/yarn.list'
+        sudo apt update && sudo apt install yarn -y
+        yarn policies set-version
+        yarn -v
+
+install_nodejs: &install_nodejs
+  - run:
+      name: Install node.js
+      command: |
+        export NVM_DIR="/opt/circleci/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+        nvm install
+        nvm use
+        node -v
+
+mdoc: &mdoc
   steps:
     - checkout
     - <<: *load_cache
     - run:
-        name: Compile code
-        command: ./sbt ++${SCALA_VERSION}! test:compile
+        name: Generate documentation
+        command: |
+          ./sbt coreJVM/doc coreJS/doc streamsJVM/doc streamsJS/doc testJVM/doc testJS/doc
+          ./sbt ++${SCALA_VERSION}! mdoc
+    - <<: *clean_cache
     - <<: *save_cache
 
 lint: &lint
@@ -54,6 +87,7 @@ lint: &lint
     - run:
         name: Lint code
         command: ./sbt ++${SCALA_VERSION}! check
+    - <<: *clean_cache
     - <<: *save_cache
 
 test: &test
@@ -64,7 +98,36 @@ test: &test
     - run:
         name: Run tests
         command: ./sbt ++${SCALA_VERSION}! test
+    - <<: *clean_cache
     - <<: *save_cache
+
+microsite: &microsite
+  steps:
+      - add_ssh_keys:
+          fingerprints:
+            - "TODO"
+      - checkout
+      - <<: *load_cache
+      - <<: *install_nodejs
+      - <<: *install_yarn
+      - run:
+          name: Publishing website
+          command: |
+            git config --global user.email "${GH_NAME}@users.noreply.github.com"
+            git config --global user.name "${GH_NAME}"
+            export GIT_USER=${GH_NAME}
+            export TRAVIS_BUILD_NUMBER="${CIRCLE_BUILD_NUM}"
+            export TRAVIS_COMMIT="${CIRCLE_SHA1}"
+            sudo chown -R $USER:$USER /tmp
+            export NVM_DIR="/opt/circleci/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            nvm install
+            nvm use
+            node -v
+            ./sbt docs/docusaurusCreateSite
+            ./sbt docs/docusaurusPublishGhpages
+      - <<: *clean_cache
+      - <<: *save_cache
 
 release: &release
   steps:
@@ -94,6 +157,13 @@ jobs:
       - <<: *scala_212
       - <<: *jdk_8
 
+  mdoc:
+    <<: *mdoc
+    <<: *machine_ubuntu
+    environment:
+      - <<: *scala_212
+      - <<: *jdk_8
+
   test_212_jdk8:
     <<: *test
     <<: *machine_ubuntu
@@ -115,6 +185,12 @@ jobs:
       - <<: *scala_213
       - <<: *jdk_8
 
+  microsite:
+    <<: *microsite
+    <<: *machine_ubuntu
+    environment:
+      - <<: *jdk_8
+
   release:
     <<: *release
     <<: *machine_ubuntu
@@ -127,6 +203,12 @@ workflows:
   build:
     jobs:
       - lint:
+          filters:
+            tags:
+              only: /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
+      - mdoc:
+          requires:
+            - lint
           filters:
             tags:
               only: /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
@@ -148,12 +230,21 @@ workflows:
           filters:
             tags:
               only: /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
-      - release:
-          context: Sonatype
+      - microsite:
+          context: Website
           requires:
+            - mdoc
             - test_212_jdk8
             - test_212_jdk11
             - test_213_jdk8
+          filters:
+            branches:
+              only: 
+                - master
+      - release:
+          context: Sonatype
+          requires:
+            - microsite
           filters:
             branches:
               ignore: /.*/
