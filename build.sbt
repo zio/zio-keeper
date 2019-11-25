@@ -40,7 +40,6 @@ addCommandAlias("check", "all scalafmtSbtCheck scalafmtCheck test:scalafmtCheck"
 
 lazy val root = project
   .in(file("."))
-  .settings(stdSettings("zio-keeper"))
   .settings(skip in publish := true)
   .aggregate(keeper, membership, examples)
 
