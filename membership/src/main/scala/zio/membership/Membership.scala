@@ -1,0 +1,40 @@
+package zio.membership
+
+import zio._
+import zio.stream._
+
+/**
+ * The main entrypoint to the membership library. Allows querying the cluster state
+ * and sending messages to members.
+ */
+trait Membership {
+  val membership: Membership.Service[Any]
+}
+
+object Membership {
+
+  trait Service[R] {
+
+    /**
+     * Get a list of all nodes that are currently considered healthy.
+     * Note that depending on implementation this might only return the nodes
+     * in a local view.
+     */
+    def nodes: ZIO[R, Nothing, List[Member]]
+
+    /**
+     * Send a message to a node.
+     */
+    def send[R1 <: R, A](to: Member, payload: A)(implicit ev: ByteCodec[R1, A]): ZIO[R1, Error, Unit]
+
+    /**
+     * Send a message to all nodes.
+     */
+    def broadcast[R1 <: R, A](payload: A)(implicit ev: ByteCodec[R1, A]): ZIO[R1, Error, Unit]
+
+    /**
+     * Receive a stream of all messages.
+     */
+    def receive: ZStream[R, Error, Message]
+  }
+}

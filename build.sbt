@@ -29,8 +29,18 @@ ThisBuild / publishTo := sonatypePublishToBundle.value
 addCommandAlias("fmt", "all scalafmtSbt scalafmt test:scalafmt")
 addCommandAlias("check", "all scalafmtSbtCheck scalafmtCheck test:scalafmtCheck")
 
-lazy val zioKeeper = project
+lazy val root = project
   .in(file("."))
+  .settings(
+    skip in publish := true
+  )
+  .aggregate(
+    membership,
+    keeper
+  )
+
+lazy val keeper = project
+  .in(file("keeper"))
   .settings(
     name := "zio-keeper",
     libraryDependencies ++= Seq(
@@ -39,7 +49,21 @@ lazy val zioKeeper = project
       "dev.zio" %% "zio-nio"      % "0.1.2",
       "dev.zio" %% "zio-test"     % "1.0.0-RC16" % "test",
       "dev.zio" %% "zio-test-sbt" % "1.0.0-RC16" % "test"
-    )
+    ),
+    testFrameworks := Seq(new TestFramework("zio.test.sbt.ZTestFramework"))
   )
 
-testFrameworks := Seq(new TestFramework("zio.test.sbt.ZTestFramework"))
+lazy val membership = project
+  .in(file("membership"))
+  .settings(
+    name := "zio-membership",
+    libraryDependencies ++= Seq(
+      "dev.zio"     %% "zio"          % "1.0.0-RC16",
+      "dev.zio"     %% "zio-streams"  % "1.0.0-RC16",
+      "dev.zio"     %% "zio-nio"      % "0.3.0",
+      "com.lihaoyi" %% "upickle"      % "0.8.0",
+      "dev.zio"     %% "zio-test"     % "1.0.0-RC16" % "test",
+      "dev.zio"     %% "zio-test-sbt" % "1.0.0-RC16" % "test"
+    ),
+    testFrameworks := Seq(new TestFramework("zio.test.sbt.ZTestFramework"))
+  )
