@@ -1,0 +1,15 @@
+{
+  "essentials-sidebar": {
+    "Essentials": [
+      "essentials/essentials_index",
+      "essentials/essentials_files",
+      "essentials/essentials_sockets"
+    ]
+  },
+  "usecases-sidebar": {
+    "Use Cases": [
+      "usecases/usecases_index",
+      "usecases/usecases_client_server"
+    ]
+  }
+}
