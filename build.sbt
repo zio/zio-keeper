@@ -1,4 +1,5 @@
 import BuildHelper._
+import explicitdeps.ExplicitDepsPlugin.autoImport.moduleFilterRemoveValue
 
 inThisBuild(
   List(
@@ -82,22 +83,19 @@ lazy val examples = project
   .settings(stdSettings("zio-keeper-examples"))
   .dependsOn(keeper)
 
-lazy val docs = project.module
+lazy val docs = project
   .in(file("docs"))
   .settings(
-    // skip 2.13 mdoc until mdoc is available for 2.13
-    crossScalaVersions -= "2.13.1",
-    //
     skip in publish := true,
     moduleName := "docs",
     unusedCompileDependenciesFilter -= moduleFilter("org.scalameta", "mdoc"),
     scalacOptions -= "-Yno-imports",
     scalacOptions -= "-Xfatal-warnings",
-    scalacOptions ~= { _ filterNot (_ startsWith "-Ywarn") },
-    scalacOptions ~= { _ filterNot (_ startsWith "-Xlint") },
+    scalacOptions ~= { _.filterNot(_.startsWith("-Ywarn")) },
+    scalacOptions ~= { _.filterNot(_.startsWith("-Xlint")) },
     libraryDependencies ++= Seq(
-      "com.github.ghik"     % "silencer-lib"                 % "1.4.4" % Provided cross CrossVersion.full,
+      ("com.github.ghik" % "silencer-lib" % "1.4.4" % Provided).cross(CrossVersion.full)
+    )
   )
-  .settings(macroSettings)
   .dependsOn(keeper, membership)
   .enablePlugins(MdocPlugin, DocusaurusPlugin)
