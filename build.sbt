@@ -41,7 +41,7 @@ addCommandAlias("check", "all scalafmtSbtCheck scalafmtCheck test:scalafmtCheck"
 lazy val root = project
   .in(file("."))
   .settings(skip in publish := true)
-  .aggregate(keeper, membership, examples)
+  .aggregate(docs, keeper, membership, examples)
 
 lazy val keeper = project
   .in(file("keeper"))
@@ -81,7 +81,23 @@ lazy val examples = project
   .in(file("examples"))
   .settings(stdSettings("zio-keeper-examples"))
   .dependsOn(keeper)
+
+lazy val docs = project.module
+  .in(file("docs"))
   .settings(
+    // skip 2.13 mdoc until mdoc is available for 2.13
+    crossScalaVersions -= "2.13.1",
+    //
+    skip in publish := true,
+    moduleName := "docs",
+    unusedCompileDependenciesFilter -= moduleFilter("org.scalameta", "mdoc"),
+    scalacOptions -= "-Yno-imports",
+    scalacOptions -= "-Xfatal-warnings",
+    scalacOptions ~= { _ filterNot (_ startsWith "-Ywarn") },
+    scalacOptions ~= { _ filterNot (_ startsWith "-Xlint") },
     libraryDependencies ++= Seq(
-      )
+      "com.github.ghik"     % "silencer-lib"                 % "1.4.4" % Provided cross CrossVersion.full,
   )
+  .settings(macroSettings)
+  .dependsOn(keeper, membership)
+  .enablePlugins(MdocPlugin, DocusaurusPlugin)
