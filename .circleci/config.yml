@@ -76,6 +76,7 @@ mdoc: &mdoc
   steps:
     - checkout
     - <<: *load_cache
+    - <<: *install_nodejs
     - <<: *install_yarn
     - run:
         name: Generate documentation
