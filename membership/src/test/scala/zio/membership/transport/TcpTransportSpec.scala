@@ -9,7 +9,6 @@ import zio.macros.delegate._
 import zio.nio.SocketAddress
 import zio.test.environment.TestClock
 import zio.test.environment.Live
-import zio.test.TestAspect._
 
 object TransportSpec
     extends DefaultRunnableSpec({
@@ -41,7 +40,7 @@ object TransportSpec
               result <- chunk.join
             } yield assert(result, equalTo(payload)))
           }
-        } @@ flaky,
+        },
         testM("handles interrupts like a good boy") {
           val payload = Chunk.single(Byte.MaxValue)
 
@@ -53,6 +52,6 @@ object TransportSpec
             _      <- send(addr, payload).retry(Schedule.spaced(10.milliseconds))
             result <- latch.await *> fiber.interrupt
           } yield assert(result, isInterrupted))
-        } @@ flaky
+        }
       )
     })

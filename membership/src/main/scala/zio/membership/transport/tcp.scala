@@ -6,10 +6,10 @@ import zio.nio.channels._
 import zio.stream._
 import zio.duration._
 import zio.clock.Clock
-import zio.membership.SendError
+import zio.membership.{ BindFailed, ExceptionThrown, RequestTimeout }
 import java.math.BigInteger
-import zio.membership.ReceiveError
 import zio.macros.delegate._
+import zio.membership.RequestTimeout
 
 object tcp {
 
@@ -38,8 +38,8 @@ object tcp {
                   _ <- client.write(data)
                 } yield ()
               }
-              .mapError(SendError.ExceptionThrown(_))
-              .timeoutFail(SendError.Timeout(sendTimeout))(sendTimeout)
+              .mapError(ExceptionThrown(_))
+              .timeoutFail(RequestTimeout(sendTimeout))(sendTimeout)
               .provide(env)
 
           override def bind(addr: SocketAddress) =
@@ -47,7 +47,7 @@ object tcp {
               .unwrapManaged {
                 AsynchronousServerSocketChannel()
                   .flatMap(s => s.bind(addr).toManaged_.as(s))
-                  .mapError(ReceiveError.BindFailed(addr, _))
+                  .mapError(BindFailed(addr, _))
                   .withEarlyRelease
                   .map {
                     case (close, server) =>
@@ -70,7 +70,7 @@ object tcp {
                             }
                           }
                         }
-                        .mapError(ReceiveError.ExceptionThrown)
+                        .mapError(ExceptionThrown)
                       // hack to properly handle interrupts
                       messages.merge(ZStream.never.ensuring(close))
                   }

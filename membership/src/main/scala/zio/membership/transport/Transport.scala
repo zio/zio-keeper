@@ -3,8 +3,7 @@ package zio.membership.transport
 import zio._
 import zio.nio._
 import zio.stream._
-import zio.membership.SendError
-import zio.membership.ReceiveError
+import zio.membership.TransportError
 
 trait Transport {
   val transport: Transport.Service[Any]
@@ -17,7 +16,7 @@ object Transport {
    * Also allows listening to messages sends from other nodes.
    */
   trait Service[R] {
-    def send(to: SocketAddress, data: Chunk[Byte]): ZIO[R, SendError, Unit]
-    def bind(addr: SocketAddress): ZStream[R, ReceiveError, Chunk[Byte]]
+    def send(to: SocketAddress, data: Chunk[Byte]): ZIO[R, TransportError, Unit]
+    def bind(addr: SocketAddress): ZStream[R, TransportError, Chunk[Byte]]
   }
 }
