@@ -58,12 +58,13 @@ lazy val membership = project
   .settings(
     name := "zio-membership",
     libraryDependencies ++= Seq(
-      "dev.zio"     %% "zio"          % "1.0.0-RC16",
-      "dev.zio"     %% "zio-streams"  % "1.0.0-RC16",
-      "dev.zio"     %% "zio-nio"      % "0.3.0",
-      "com.lihaoyi" %% "upickle"      % "0.8.0",
-      "dev.zio"     %% "zio-test"     % "1.0.0-RC16" % "test",
-      "dev.zio"     %% "zio-test-sbt" % "1.0.0-RC16" % "test"
+      "dev.zio"     %% "zio"              % "1.0.0-RC17",
+      "dev.zio"     %% "zio-streams"      % "1.0.0-RC17",
+      "dev.zio"     %% "zio-nio"          % "0.4.0",
+      "dev.zio"     %% "zio-macros-core"  % "0.6.0",
+      "com.lihaoyi" %% "upickle"          % "0.8.0",
+      "dev.zio"     %% "zio-test"         % "1.0.0-RC17" % "test",
+      "dev.zio"     %% "zio-test-sbt"     % "1.0.0-RC17" % "test"
     ),
     testFrameworks := Seq(new TestFramework("zio.test.sbt.ZTestFramework"))
   )
