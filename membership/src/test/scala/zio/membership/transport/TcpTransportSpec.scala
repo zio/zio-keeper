@@ -9,7 +9,6 @@ import zio.macros.delegate._
 import zio.nio.SocketAddress
 import zio.test.environment.TestClock
 import zio.test.environment.Live
-import zio.test.environment.TestEnvironment
 import zio.test.TestAspect._
 
 object TransportSpec
@@ -21,13 +20,11 @@ object TransportSpec
 
       val withTransport = tcp.withTcpTransport(10, 10.seconds, 10.seconds)
 
-      def environment: ZIO[TestEnvironment, Nothing, TestClock with Transport with Live[Clock with Transport]] =
+      val environment =
         for {
-          clock  <- Live.live(ZIO.environment[Clock])
-          tClock <- ZIO.environment[TestClock]
-          live   <- (ZIO.succeed(clock) @@ withTransport).flatMap(Live.make(_))
-          test   <- (ZIO.succeed(tClock) @@ withTransport)
-          env    <- ZIO.succeed(live) @@ enrichWith(test)
+          test <- (ZIO.environment[TestClock] @@ withTransport)
+          live <- (Live.live(ZIO.environment[Clock]) @@ withTransport).flatMap(Live.make(_))
+          env  <- ZIO.succeed(live) @@ enrichWith(test)
         } yield env
 
       suite("TcpTransport")(

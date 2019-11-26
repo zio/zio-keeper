@@ -26,7 +26,7 @@ object tcp {
   ): ZIO[Clock, Nothing, Transport] =
     ZIO.environment[Clock].map { env =>
       new Transport {
-        val transport: Transport.Service[Any] = new Transport.Service[Any] {
+        val transport = new Transport.Service[Any] {
           // TODO: cache connections
           override def send(to: SocketAddress, data: Chunk[Byte]) =
             AsynchronousSocketChannel()
