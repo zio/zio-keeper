@@ -14,9 +14,7 @@ import zio.test.TestAspect._
 object TransportSpec
     extends DefaultRunnableSpec({
       // todo: actually find free port
-      def freePort = ZIO.succeed(8010)
-
-      val connectDelay = 300.milliseconds
+      val freePort = ZIO.succeed(8010)
 
       val withTransport = tcp.withTcpTransport(10, 10.seconds, 10.seconds)
 
@@ -39,10 +37,22 @@ object TransportSpec
               port   <- freePort
               addr   <- SocketAddress.inetSocketAddress(port)
               chunk  <- readOne(addr).fork
-              _      <- send(addr, payload).delay(connectDelay)
+              _      <- send(addr, payload).retry(Schedule.spaced(10.milliseconds))
               result <- chunk.join
             } yield assert(result, equalTo(payload)))
           }
-        } @@ flaky @@ timeout(120.seconds) // this one is slow
+        } @@ flaky,
+        testM("handles interrupts like a good boy") {
+          val payload = Chunk.single(Byte.MaxValue)
+
+          environment >>> Live.live(for {
+            latch  <- Promise.make[Nothing, Unit]
+            port   <- freePort.map(_ + 1)
+            addr   <- SocketAddress.inetSocketAddress(port)
+            fiber  <- bind(addr).take(2).tap(_ => latch.succeed(())).runDrain.fork
+            _      <- send(addr, payload).retry(Schedule.spaced(10.milliseconds))
+            result <- latch.await *> fiber.interrupt
+          } yield assert(result, isInterrupted))
+        } @@ flaky
       )
     })
