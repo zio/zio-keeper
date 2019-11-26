@@ -1,6 +1,9 @@
+import BuildHelper._
+
 inThisBuild(
   List(
     organization := "dev.zio",
+    homepage := Some(url("https://zio.github.io/zio-keeper/")),
     licenses := List("Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0")),
     developers := List(
       Developer("jdegoes", "John De Goes", "john@degoes.net", url("http://degoes.net")),
@@ -37,32 +40,27 @@ addCommandAlias("check", "all scalafmtSbtCheck scalafmtCheck test:scalafmtCheck"
 
 lazy val root = project
   .in(file("."))
-  .settings(
-    skip in publish := true
-  )
-  .aggregate(
-    membership,
-    keeper
-  )
+  .settings(skip in publish := true)
+  .aggregate(keeper, membership)
 
 lazy val keeper = project
   .in(file("keeper"))
+  .settings(stdSettings("zio-keeper"))
   .settings(
-    name := "zio-keeper",
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio"          % "1.0.0-RC16",
       "dev.zio" %% "zio-streams"  % "1.0.0-RC16",
       "dev.zio" %% "zio-nio"      % "0.1.2",
-      "dev.zio" %% "zio-test"     % "1.0.0-RC16" % "test",
-      "dev.zio" %% "zio-test-sbt" % "1.0.0-RC16" % "test"
+      "dev.zio" %% "zio-test"     % "1.0.0-RC16" % Test,
+      "dev.zio" %% "zio-test-sbt" % "1.0.0-RC16" % Test
     ),
     testFrameworks := Seq(new TestFramework("zio.test.sbt.ZTestFramework"))
   )
 
 lazy val membership = project
   .in(file("membership"))
+  .settings(stdSettings("zio-membership"))
   .settings(
-    name := "zio-membership",
     libraryDependencies ++= Seq(
       "dev.zio"     %% "zio"             % "1.0.0-RC17",
       "dev.zio"     %% "zio-streams"     % "1.0.0-RC17",
