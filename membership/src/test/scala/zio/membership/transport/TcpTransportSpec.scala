@@ -26,30 +26,30 @@ object TransportSpec
 
       suite("TcpTransport")(
         testM("can send and receive messages") {
-          checkM(Gen.listOf(Gen.anyByte)) { bytes =>
-            val payload = Chunk.fromIterable(bytes)
+          checkM(Gen.listOf(Gen.anyByte)) {
+            bytes =>
+              val payload = Chunk.fromIterable(bytes)
 
-            def readOne(addr: SocketAddress) =
-              bind(addr).take(1).runCollect.map(_.head)
-
-            environment >>> Live.live(for {
-              port   <- freePort
-              addr   <- SocketAddress.inetSocketAddress(port)
-              chunk  <- readOne(addr).fork
-              _      <- send(addr, payload).retry(Schedule.spaced(10.milliseconds))
-              result <- chunk.join
-            } yield assert(result, equalTo(payload)))
+              environment >>> Live.live(for {
+                trans  <- ZIO.environment[Transport[SocketAddress]].map(_.transport)
+                port   <- freePort
+                addr   <- SocketAddress.inetSocketAddress(port)
+                chunk  <- trans.bind(addr).take(1).runCollect.map(_.head).fork
+                _      <- trans.send(addr, payload).retry(Schedule.spaced(10.milliseconds))
+                result <- chunk.join
+              } yield assert(result, equalTo(payload)))
           }
         },
         testM("handles interrupts like a good boy") {
           val payload = Chunk.single(Byte.MaxValue)
 
           environment >>> Live.live(for {
+            trans  <- ZIO.environment[Transport[SocketAddress]].map(_.transport)
             latch  <- Promise.make[Nothing, Unit]
             port   <- freePort.map(_ + 1)
             addr   <- SocketAddress.inetSocketAddress(port)
-            fiber  <- bind(addr).take(2).tap(_ => latch.succeed(())).runDrain.fork
-            _      <- send(addr, payload).retry(Schedule.spaced(10.milliseconds))
+            fiber  <- trans.bind(addr).take(2).tap(_ => latch.succeed(())).runDrain.fork
+            _      <- trans.send(addr, payload).retry(Schedule.spaced(10.milliseconds))
             result <- latch.await *> fiber.interrupt
           } yield assert(result, isInterrupted))
         }

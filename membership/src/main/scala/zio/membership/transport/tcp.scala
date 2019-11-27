@@ -17,16 +17,16 @@ object tcp {
     maxConnections: Int,
     connectionTimeout: Duration,
     sendTimeout: Duration
-  ) = enrichWithM[Transport](tcpTransport(maxConnections, connectionTimeout, sendTimeout))
+  ) = enrichWithM[Transport[SocketAddress]](tcpTransport(maxConnections, connectionTimeout, sendTimeout))
 
   def tcpTransport(
     maxConnections: Int,
     connectionTimeout: Duration,
     sendTimeout: Duration
-  ): ZIO[Clock, Nothing, Transport] =
+  ): ZIO[Clock, Nothing, Transport[SocketAddress]] =
     ZIO.environment[Clock].map { env =>
-      new Transport {
-        val transport = new Transport.Service[Any] {
+      new Transport[SocketAddress] {
+        val transport = new Transport.Service[Any, SocketAddress] {
           // TODO: cache connections
           override def send(to: SocketAddress, data: Chunk[Byte]) =
             AsynchronousSocketChannel()
