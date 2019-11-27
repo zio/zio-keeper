@@ -12,6 +12,10 @@ object Protocol {
     isHighPriority: Boolean
   ) extends Protocol[T]
 
+  final case class RefuseNeighbor[T](
+    sender: T
+  ) extends Protocol[T]
+
   final case class Disconnect[T](
     sender: T,
     alive: Boolean

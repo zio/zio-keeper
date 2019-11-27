@@ -97,7 +97,27 @@ object HyParView {
               } yield ()
             }
 
-          def handleNeighbor(msg: Protocol.Neighbor[T]) = UIO.succeed(msg).unit
+          def handleNeighbor(msg: Protocol.Neighbor[T]) =
+            if (msg.isHighPriority) {
+              (for {
+                 dropped <- addNodeToActiveView(msg.sender)
+                 _       <- passiveView.delete(msg.sender)
+              } yield dropped).commit.flatMap[Any, Nothing, Unit](n => disconnect(n.toList))
+            } else {
+              (for {
+                full <- activeView.size.map(_ == activeViewCapactiy)
+                task <- if (full) {
+                  for {
+                    _ <- addNodeToPassiveView(msg.sender)
+                  } yield env.transport.send(msg.sender, Protocol.RefuseNeighbor(myself).asInstanceOf[Chunk[Byte]])
+                } else {
+                  for {
+                    dropped <- addNodeToActiveView(msg.sender)
+                    _       <- passiveView.delete(msg.sender)
+                  } yield disconnect(dropped.toList)
+                }
+              } yield task).commit.flatten
+            }
 
           def handleJoin(msg: Protocol.Join[T]) =
             (for {
@@ -115,23 +135,17 @@ object HyParView {
           def handleForwardJoin(msg: Protocol.ForwardJoin[T]) = {
             val process = activeView.size.map((_, msg.ttl.step)).flatMap {
               case (0, _) | (_, None) =>
-                addNodeToActiveView(msg.sender).map((_, None))
+                addNodeToActiveView(msg.sender).map(n => disconnect(n.toList))
               case (_, Some(ttl)) =>
                 for {
-                  dropped <- if (ttl.count == prwl) addNodeToActiveView(msg.sender) else STM.succeed(None)
+                  drop <- if (ttl.count == prwl) {
+                    addNodeToActiveView(msg.sender).map(n => disconnect(n.toList))
+                  } else STM.succeed(ZIO.unit)
                   list    <- activeView.toList.map(_.filterNot(_ == msg.sender))
                   next    <- selectOne(list)
-                } yield (dropped, Some((next, msg.copy(sender = myself, ttl = ttl))))
+                } yield drop *> env.transport.send(next, msg.copy(sender = myself, ttl = ttl).asInstanceOf[Chunk[Byte]])
             }
-            process.commit.flatMap {
-              case (dropped, forwardTo) =>
-                for {
-                  _ <- disconnect(dropped.toList)
-                  _ <- ZIO.foreach(forwardTo) {
-                        case (next, msg) => env.transport.send(next, msg.asInstanceOf[Chunk[Byte]])
-                      }
-                } yield ()
-            }
+            process.commit.flatten
           }
 
           //  def handleShuffle(shuffle: Protocol.Shuffle[T]) = UIO.unit
@@ -149,6 +163,7 @@ object HyParView {
                         case m: Protocol.ForwardJoin[T]  => handleForwardJoin(m)
                         case _: Protocol.Shuffle[T]      => ???
                         case _: Protocol.ShuffleReply[T] => ???
+                        case _: Protocol.RefuseNeighbor[T] => ???
                       }
                     }
                     .fork
