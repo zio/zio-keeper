@@ -2,28 +2,34 @@ package zio.keeper
 
 import java.util.concurrent.TimeUnit
 
+import zio.clock.Clock
 import zio.console._
-import zio.keeper.Cluster.Transport.TCPTransport
-import zio.keeper.Cluster.{ Credentials, Discovery }
-import zio.nio.{ InetAddress, SocketAddress }
-import zio.{ Chunk, IO }
+import zio.duration._
+import zio.keeper.Cluster.{Credentials, Discovery}
+import zio.macros.delegate._
+import zio.nio.{InetAddress, SocketAddress}
+import zio.random.Random
+import zio.{Chunk, IO, Schedule, ZIO}
 
 object Node1 extends zio.ManagedApp {
 
-  val config = new Credentials
-    with TCPTransport
-    with Discovery
-    with zio.console.Console.Live
-    with zio.clock.Clock.Live
-    with zio.random.Random.Live {
+  val withTransport = transport.tcp.withTcpTransport(10.seconds, 10.seconds)
 
-    override def discover: IO[Error, Set[SocketAddress]] =
-      IO.succeed(Set.empty)
-  }
+  val env =
+    for {
+      transport <- (ZIO.environment[Clock with Console with Random] @@ withTransport)
+      config: Credentials with Discovery = new Credentials with Discovery {
+
+        override def discover: IO[Error, Set[SocketAddress]] =
+          IO.succeed(Set.empty)
+      }
+      result <- ZIO.succeed(config) @@ enrichWith(transport)
+    } yield result
+
 
   val appLogic = Cluster
     .join(5557)
-    .provide(config)
+
     .flatMap(
       c =>
         (zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS)) *>
@@ -42,31 +48,37 @@ object Node1 extends zio.ManagedApp {
     )
 
   def run(args: List[String]) =
-    appLogic.fold(ex => {
+    env.toManaged_.flatMap( e =>
+      appLogic.provide(e)
+    ).fold(ex => {
       println(ex)
       1
     }, _ => 0)
+
 }
 
 object Node2 extends zio.ManagedApp {
 
-  val config = new Credentials
-    with TCPTransport
-    with Discovery
-    with zio.console.Console.Live
-    with zio.clock.Clock.Live
-    with zio.random.Random.Live {
+  val withTransport = transport.tcp.withTcpTransport(10.seconds, 10.seconds)
 
-    override def discover: IO[Error, Set[SocketAddress]] =
-      InetAddress.localHost
-        .flatMap(addr => SocketAddress.inetSocketAddress(addr, 5557))
-        .map(Set(_: SocketAddress))
-        .orDie
-  }
+  val env =
+    for {
+      transport <- (ZIO.environment[Clock with Console with Random] @@ withTransport)
+      config: Credentials with Discovery = new Credentials with Discovery {
+
+        override def discover: IO[Error, Set[SocketAddress]] =
+          InetAddress.localHost
+            .flatMap(addr => SocketAddress.inetSocketAddress(addr, 5557))
+            .map(Set(_: SocketAddress))
+            .orDie
+      }
+      result <- ZIO.succeed(config) @@ enrichWith(transport)
+    } yield result
+
+
 
   val appLogic = Cluster
     .join(5558)
-    .provide(config)
     .flatMap(
       c =>
         (zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS)) *>
@@ -85,29 +97,34 @@ object Node2 extends zio.ManagedApp {
     )
 
   def run(args: List[String]) =
-    appLogic.fold(_ => 1, _ => 0)
-
+    env.toManaged_.flatMap( e =>
+      appLogic.provide(e)
+    ).fold(ex => {
+      println(ex)
+      1
+    }, _ => 0)
 }
 
 object Node3 extends zio.ManagedApp {
 
-  val config = new Credentials
-    with TCPTransport
-    with Discovery
-    with zio.console.Console.Live
-    with zio.clock.Clock.Live
-    with zio.random.Random.Live {
+  val withTransport = transport.tcp.withTcpTransport(10.seconds, 10.seconds)
 
-    override def discover: IO[Error, Set[SocketAddress]] =
-      InetAddress.localHost
-        .flatMap(addr => SocketAddress.inetSocketAddress(addr, 5558))
-        .map(Set(_: SocketAddress))
-        .orDie
-  }
+  val env =
+    for {
+      transport <- (ZIO.environment[Clock with Console with Random] @@ withTransport)
+      config: Credentials with Discovery = new Credentials with Discovery {
+
+        override def discover: IO[Error, Set[SocketAddress]] =
+          InetAddress.localHost
+            .flatMap(addr => SocketAddress.inetSocketAddress(addr, 5558))
+            .map(Set(_: SocketAddress))
+            .orDie
+      }
+      result <- ZIO.succeed(config) @@ enrichWith(transport)
+    } yield result
 
   val appLogic = Cluster
     .join(5559)
-    .provide(config)
     .flatMap(
       c =>
         (zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS)) *>
@@ -126,6 +143,61 @@ object Node3 extends zio.ManagedApp {
     )
 
   def run(args: List[String]) =
-    appLogic.fold(_ => 1, _ => 0)
+    env.toManaged_.flatMap( e =>
+      appLogic.provide(e)
+    ).fold(ex => {
+      println(ex)
+      1
+    }, _ => 0)
 
+}
+
+object Server extends zio.App {
+  import zio._
+  import zio.duration._
+  import zio.keeper.transport._
+
+
+  override def run(args: List[String]) =
+    (for {
+      tcp       <- tcp.tcpTransport(10.seconds, 10.seconds)
+      localHost <- InetAddress.localHost.orDie
+      publicAddress <- SocketAddress
+                        .inetSocketAddress(localHost, 8010)
+                        .orDie
+      console <- ZIO.environment[Console]
+      handler = (channel: ChannelOut) => {
+        for {
+          data <- channel.read
+          _    <- putStrLn(new String(data.toArray))
+          _    <- channel.send(data)
+        } yield ()
+      }.forever
+        .catchAll(ex => putStrLn("error: " + ex.getCause))
+        .provide(console)
+
+      _ <- putStrLn("public address: " + publicAddress.toString())
+      _ <- bind(publicAddress)(handler)
+            .provide(tcp)
+            .useForever
+    } yield ()).orDie.as(0)
+}
+
+object Client extends zio.App {
+  import zio.duration._
+  import zio.keeper.transport._
+
+  override def run(args: List[String]) =
+    (for {
+      tcp       <- tcp.tcpTransport(10.seconds, 10.seconds)
+      localHost <- InetAddress.localHost.orDie
+      publicAddress <- SocketAddress
+                        .inetSocketAddress(localHost, 8010)
+                        .orDie
+      _ <- putStrLn("connect to address: " + publicAddress.toString())
+      _ <- connect(publicAddress)
+            .provide(tcp)
+            .use(_.send(Chunk.fromArray("qwee".getBytes)).repeat(Schedule.recurs(100)))
+      _ <- ZIO.never
+    } yield ()).orDie.as(0)
 }

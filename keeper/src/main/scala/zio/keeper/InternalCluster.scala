@@ -2,24 +2,19 @@ package zio.keeper
 
 import java.util.concurrent.TimeUnit
 
+import zio._
 import zio.clock.Clock
 import zio.console.{ Console, putStrLn }
 import zio.duration._
-import zio.keeper.Cluster.{ Discovery, Transport, readMessage, serializeMessage }
-import zio.keeper.InternalProtocol._
-import zio.nio.channels.AsynchronousSocketChannel
-import zio.nio.{ InetAddress, SocketAddress }
-import zio.stream.Stream
-import zio.{ Chunk, IO, Ref, ZIO, ZSchedule }
-import zio.ZManaged
-import zio.UIO
-import zio.Queue
-import zio.stream.ZStream
-import zio.stm.TMap
-import zio.Promise
-import zio.stm.STM
-import scala.collection.SortedSet
+import zio.keeper.Cluster.{ Discovery, readMessage, serializeMessage }
 import zio.keeper.Error.SendError
+import zio.keeper.InternalProtocol._
+import zio.keeper.transport.{ ChannelOut, Transport }
+import zio.nio.{ InetAddress, SocketAddress }
+import zio.stm.{ STM, TMap }
+import zio.stream.{ Stream, ZStream }
+
+import scala.collection.SortedSet
 
 final class InternalCluster(
   localMember: Member,
@@ -88,7 +83,7 @@ final class InternalCluster(
   private def runSwim =
     Ref.make(0).flatMap { roundRobinOffset =>
       val loop = gossipStateRef.get.map(_.members.filterNot(_ == localMember).toIndexedSeq).flatMap { nodes =>
-        if (nodes.size > 0) {
+        if (nodes.nonEmpty) {
           for {
             next           <- roundRobinOffset.update(old => if (old < nodes.size - 1) old + 1 else 0)
             state          <- gossipStateRef.get
@@ -127,42 +122,38 @@ final class InternalCluster(
           putStrLn("SWIM: No nodes to spread gossip to")
         }
       }
-      loop.repeat(ZSchedule.spaced(30.seconds))
+      loop.repeat(Schedule.spaced(30.seconds))
     }
 
   private def acceptConnectionRequests =
-    ZManaged.environment[Transport].flatMap(_.bind(localMember.addr).orDie).flatMap { server =>
-      ZIO
-        .uninterruptibleMask { restore =>
-          for {
-            res <- server.accept.reserve
-            _ <- restore(ZManaged.reserve(res).use { channel =>
-                  (for {
-                    state   <- gossipStateRef.get
-                    payload <- OpenConnection(state, localMember).serialize
-                    msg     <- serializeMessage(localMember, payload, 0)
-                    _       <- channel.write(msg)
-                    msg     <- readMessage(channel)
-                    _ <- OpenConnection
-                          .deserialize(msg._2.payload)
-                          .foldM(
-                            ex => putStrLn(s"Failed to parse handshake response: $ex"), {
-                              case OpenConnection(_, address) => listenOnChannel(channel, address)
-                            }
-                          )
-                  } yield ()).catchAll(ex => putStrLn(s"Connection failed: $ex"))
-                }).fork
-          } yield ()
-        }
-        .forever
-        .toManaged_
-    }
+    ZManaged
+      .environment[Console with Transport with Clock]
+      .flatMap(
+        env =>
+          transport.bind(localMember.addr) { channelOut =>
+            {
+              (for {
+                state   <- gossipStateRef.get
+                payload <- OpenConnection(state, localMember).serialize
+                msg     <- serializeMessage(localMember, payload, 0)
+                _       <- channelOut.send(msg)
+                msg     <- readMessage(channelOut)
+                _ <- OpenConnection
+                      .deserialize(msg._2.payload)
+                      .foldM(
+                        ex => putStrLn(s"Failed to parse handshake response: $ex"), {
+                          case OpenConnection(_, address) => listenOnChannel(channelOut, address)
+                        }
+                      )
+              } yield ()).catchAll(ex => putStrLn(s"Connection failed: $ex"))
+            }.provide(env)
+          }
+      )
 
   private def connect(
     addr: SocketAddress
   ): ZIO[Transport with Console with Clock, Error, Unit] =
     for {
-      transport <- ZIO.environment[Transport]
       _ <- transport
             .connect(addr)
             .timeout(Duration(10, TimeUnit.SECONDS))
@@ -172,42 +163,42 @@ final class InternalCluster(
               )(
                 channel =>
                   putStrLn(s"Initiating handshake with node at ${addr}") *>
-                    handShake(channel)
+                    handshake(channel)
               )
             }
             .catchAll(ex => putStrLn(s"Failed initiating connection with node [ ${addr} ]: $ex"))
             .fork
     } yield ()
 
-  private def handShake(
-    channel: AsynchronousSocketChannel
-  ) =
+  private def handshake(
+    channel: ChannelOut
+  ): ZIO[Transport with Console with Clock, Error, Unit] =
     for {
       msg <- readMessage(channel)
       _ <- OpenConnection
             .deserialize(msg._2.payload)
             .foldM(
-              ex => putStrLn(s"Failed to parse handshake response: $ex}"), {
+              ex => putStrLn(s"Failed11 to parse handshake response: $ex}"), {
                 case OpenConnection(_, address) =>
                   (for {
                     state   <- gossipStateRef.get
                     payload <- OpenConnection(state, localMember).serialize
                     msg     <- serializeMessage(localMember, payload, 0)
-                    _       <- channel.write(msg)
+                    _       <- channel.send(msg)
                   } yield ()) *> listenOnChannel(channel, address)
               }
             )
     } yield ()
 
   private def listenOnChannel(
-    channel: AsynchronousSocketChannel,
+    channel: ChannelOut,
     partner: Member
   ) = {
 
     def handleSends(messages: Stream[Nothing, Chunk[Byte]]) =
       messages.tap { bytes =>
         channel
-          .write(bytes)
+          .send(bytes)
           .catchAll(ex => ZIO.fail(SendError(partner.nodeId, bytes, ex.getMessage)))
       }.runDrain
 
@@ -226,7 +217,7 @@ final class InternalCluster(
   }
 
   private def routeMessages(
-    channel: AsynchronousSocketChannel,
+    channel: ChannelOut,
     clusterMessageQueue: Queue[Message],
     userMessageQueue: Queue[Message]
   ) = {
@@ -245,7 +236,7 @@ final class InternalCluster(
       .catchAll { ex =>
         putStrLn(s"channel close because of: $ex")
       }
-    loop.orDie.forever
+    loop.forever
   }
 
   private def handleClusterMessages(stream: Stream[Nothing, Message]) =
@@ -291,7 +282,7 @@ final class InternalCluster(
     sendMessage(receipt, 2, data)
 
   override def broadcast(data: Chunk[Byte]): IO[Error, Unit] =
-    serializeMessage(localMember, data, 2).flatMap[Any, Error, Unit](publishToBroadCast).unit.orDie
+    serializeMessage(localMember, data, 2).flatMap[Any, Error, Unit](publishToBroadCast).unit
 
   override def receive: Stream[Error, Message] =
     zio.stream.Stream.fromQueue(userMessageQueue)
@@ -315,15 +306,15 @@ object InternalCluster {
       userMessagesQueue <- zio.Queue.bounded[Message](1000).toManaged_
       gossipState       <- Ref.make(GossipState(SortedSet(localMember))).toManaged_
       broadcastQueue    <- zio.Queue.bounded[Chunk[Byte]](1000).toManaged_
-      subscribetoBroadcast <- ZStream
-                               .fromQueue(broadcastQueue)
-                               .distributedDynamicWith[Nothing, Chunk[Byte]](
-                                 32,
-                                 _ => ZIO.succeed(_ => true),
-                                 _ => ZIO.unit
-                               )
-                               .map(_.map(_._2))
-                               .map(_.map(ZStream.fromQueue(_).unTake))
+      subscriberBroadcast <- ZStream
+                              .fromQueue(broadcastQueue)
+                              .distributedWithDynamic[Nothing, Chunk[Byte]](
+                                32,
+                                _ => ZIO.succeed(_ => true),
+                                _ => ZIO.unit
+                              )
+                              .map(_.map(_._2))
+                              .map(_.map(ZStream.fromQueue(_).unTake))
       msgOffSet <- Ref.make(0L).toManaged_
       ackMap    <- TMap.empty[Long, Promise[Nothing, Unit]].commit.toManaged_
 
@@ -332,7 +323,7 @@ object InternalCluster {
         nodes,
         gossipState,
         userMessagesQueue,
-        subscribetoBroadcast,
+        subscriberBroadcast,
         (c: Chunk[Byte]) => broadcastQueue.offer(c).unit,
         msgOffSet,
         ackMap
