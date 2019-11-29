@@ -7,7 +7,7 @@ import zio.clock.Clock
 import zio.console.Console
 import zio.duration._
 import zio.keeper.Error.ConnectionTimeout
-import zio.keeper.{ BindFailed, ExceptionThrown, RequestTimeout, TransportError }
+import zio.keeper.{BindFailed, ExceptionThrown, RequestTimeout, TransportError}
 import zio.macros.delegate._
 import zio.nio._
 import zio.nio.channels._
@@ -28,12 +28,13 @@ object tcp {
         val transport = new Transport.Service[Any] {
           override def connect(to: SocketAddress) =
             (for {
-              socketChannel <- AsynchronousSocketChannel()
+              socketChannelAndClose <- AsynchronousSocketChannel().withEarlyRelease
+              (close, socketChannel) = socketChannelAndClose
               _ <- socketChannel
                     .connect(to)
                     .timeoutFail(ConnectionTimeout(to, requestTimeout))(requestTimeout)
                     .toManaged_
-            } yield new NioChannelOut(socketChannel, requestTimeout, env))
+            } yield new NioChannelOut(socketChannel, requestTimeout, close, env))
               .mapError(ExceptionThrown(_))
               .provide(env)
 
@@ -45,8 +46,8 @@ object tcp {
               .mapM {
                 case (close, server) =>
                   (for {
-                    cur <- server.accept
-                            .map(socket => new NioChannelOut(socket, connectionTimeout, env))
+                    cur <- server.accept.withEarlyRelease
+                            .map{ case (close, socket) => new NioChannelOut(socket, connectionTimeout, close, env)}
                             .mapError(ExceptionThrown)
                             .preallocate.race(
                                 ZIO.never.ensuring(close)
@@ -64,6 +65,7 @@ object tcp {
 class NioChannelOut(
   socket: AsynchronousSocketChannel,
   requestTimeout: Duration,
+  finalizer: URIO[Any, Any],
   clock: Clock
 ) extends ChannelOut {
 
@@ -89,7 +91,8 @@ class NioChannelOut(
   override def isOpen: ZIO[Any, TransportError, Boolean] =
     socket.isOpen
 
-  override def close: ZIO[Any, TransportError, Unit] = ???
+  override def close: ZIO[Any, TransportError, Unit] =
+    finalizer.ignore
 }
 
 class NioChannelIn(
