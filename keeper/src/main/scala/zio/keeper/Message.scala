@@ -6,5 +6,3 @@ final case class Message(
   sender: NodeId,
   payload: Chunk[Byte]
 )
-
-

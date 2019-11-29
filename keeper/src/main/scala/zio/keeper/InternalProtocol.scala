@@ -126,13 +126,13 @@ object InternalProtocol {
         _          <- InternalProtocol.writeMember(address, byteBuffer)
         _          <- byteBuffer.putInt(state.members.size)
         _ <- ZIO.foldLeft(state.members)(byteBuffer) {
-          case (acc, member) =>
-            InternalProtocol.writeMember(member, acc)
-        }
+              case (acc, member) =>
+                InternalProtocol.writeMember(member, acc)
+            }
         _     <- byteBuffer.flip
         chunk <- byteBuffer.getChunk()
       } yield chunk
-      }.catchAll(ex => ZIO.fail(SerializationError(ex.getMessage)))
+    }.catchAll(ex => ZIO.fail(SerializationError(ex.getMessage)))
   }
 
   object OpenConnection {
@@ -146,8 +146,8 @@ object InternalProtocol {
           addr <- InternalProtocol.readMember(bb)
           size <- bb.getInt
           state <- ZIO.foldLeft(1 to size)(GossipState.Empty) {
-            case (acc, _) => InternalProtocol.readMember(bb).map(acc.addMember)
-          }
+                    case (acc, _) => InternalProtocol.readMember(bb).map(acc.addMember)
+                  }
         } yield OpenConnection(state, addr)).mapError(ex => DeserializationError(ex.getMessage))
       }
   }

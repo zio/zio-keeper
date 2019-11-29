@@ -5,12 +5,12 @@ import java.util.concurrent.TimeUnit
 import zio.clock.Clock
 import zio.console._
 import zio.duration._
-import zio.keeper.Cluster.{Credentials, Discovery}
-import zio.keeper.{Cluster, Error, transport}
+import zio.keeper.Cluster.{ Credentials, Discovery }
+import zio.keeper.{ Cluster, Error, transport }
 import zio.macros.delegate._
-import zio.nio.{InetAddress, SocketAddress}
+import zio.nio.{ InetAddress, SocketAddress }
 import zio.random.Random
-import zio.{Chunk, IO, Schedule, ZIO}
+import zio.{ Chunk, IO, Schedule, ZIO }
 
 object Node1 extends zio.ManagedApp {
 
@@ -27,10 +27,8 @@ object Node1 extends zio.ManagedApp {
       result <- ZIO.succeed(config) @@ enrichWith(transport)
     } yield result
 
-
   val appLogic = Cluster
     .join(5557)
-
     .flatMap(
       c =>
         (zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS)) *>
@@ -49,12 +47,12 @@ object Node1 extends zio.ManagedApp {
     )
 
   def run(args: List[String]) =
-    env.toManaged_.flatMap( e =>
-      appLogic.provide(e)
-    ).fold(ex => {
-      println(ex)
-      1
-    }, _ => 0)
+    env.toManaged_
+      .flatMap(e => appLogic.provide(e))
+      .fold(ex => {
+        println(ex)
+        1
+      }, _ => 0)
 
 }
 
@@ -76,8 +74,6 @@ object Node2 extends zio.ManagedApp {
       result <- ZIO.succeed(config) @@ enrichWith(transport)
     } yield result
 
-
-
   val appLogic = Cluster
     .join(5558)
     .flatMap(
@@ -98,12 +94,12 @@ object Node2 extends zio.ManagedApp {
     )
 
   def run(args: List[String]) =
-    env.toManaged_.flatMap( e =>
-      appLogic.provide(e)
-    ).fold(ex => {
-      println(ex)
-      1
-    }, _ => 0)
+    env.toManaged_
+      .flatMap(e => appLogic.provide(e))
+      .fold(ex => {
+        println(ex)
+        1
+      }, _ => 0)
 }
 
 object Node3 extends zio.ManagedApp {
@@ -144,12 +140,12 @@ object Node3 extends zio.ManagedApp {
     )
 
   def run(args: List[String]) =
-    env.toManaged_.flatMap( e =>
-      appLogic.provide(e)
-    ).fold(ex => {
-      println(ex)
-      1
-    }, _ => 0)
+    env.toManaged_
+      .flatMap(e => appLogic.provide(e))
+      .fold(ex => {
+        println(ex)
+        1
+      }, _ => 0)
 
 }
 
@@ -177,10 +173,11 @@ object Server extends zio.App {
         .provide(console)
 
       _ <- putStrLn("public address: " + publicAddress.toString())
-    //TODO useForever caused dead code so we should find other way to block this from exit.
+      //TODO useForever caused dead code so we should find other way to block this from exit.
       _ <- bind(publicAddress)(handler)
             .provide(tcp)
-            .useForever.fork
+            .useForever
+            .fork
 
     } yield ()).as(0)
 }

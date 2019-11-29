@@ -7,7 +7,7 @@ import zio.clock.Clock
 import zio.console.Console
 import zio.duration._
 import zio.keeper.Error.ConnectionTimeout
-import zio.keeper.{BindFailed, ExceptionThrown, RequestTimeout, TransportError}
+import zio.keeper.{ BindFailed, ExceptionThrown, RequestTimeout, TransportError }
 import zio.macros.delegate._
 import zio.nio._
 import zio.nio.channels._
@@ -28,7 +28,7 @@ object tcp {
         val transport = new Transport.Service[Any] {
           override def connect(to: SocketAddress) =
             (for {
-              socketChannelAndClose <- AsynchronousSocketChannel().withEarlyRelease
+              socketChannelAndClose  <- AsynchronousSocketChannel().withEarlyRelease
               (close, socketChannel) = socketChannelAndClose
               _ <- socketChannel
                     .connect(to)
@@ -47,14 +47,14 @@ object tcp {
                 case (close, server) =>
                   (for {
                     cur <- server.accept.withEarlyRelease
-                            .map{ case (close, socket) => new NioChannelOut(socket, connectionTimeout, close, env)}
+                            .map { case (close, socket) => new NioChannelOut(socket, connectionTimeout, close, env) }
                             .mapError(ExceptionThrown)
-                            .preallocate.race(
-                                ZIO.never.ensuring(close)
+                            .preallocate
+                            .race(
+                              ZIO.never.ensuring(close)
                             )
                     _ <- cur.use(connectionHandler).fork
-                  } yield ()).forever
-                    .fork
+                  } yield ()).forever.fork
                     .as(new NioChannelIn(server, close))
               }
         }
@@ -97,7 +97,7 @@ class NioChannelOut(
 
 class NioChannelIn(
   serverSocket: AsynchronousServerSocketChannel,
-  finalizer: URIO[Any, Any],
+  finalizer: URIO[Any, Any]
 ) extends ChannelIn {
 
   override def isOpen: ZIO[Any, TransportError, Boolean] =

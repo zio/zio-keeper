@@ -2,7 +2,7 @@ package zio.keeper.transport
 
 import zio.keeper.TransportError
 import zio.nio.SocketAddress
-import zio.{Chunk, ZIO, ZManaged}
+import zio.{ Chunk, ZIO, ZManaged }
 
 trait Transport {
   val transport: Transport.Service[Any]
@@ -12,7 +12,10 @@ object Transport {
 
   trait Service[R] {
     def connect(to: SocketAddress): ZManaged[R, TransportError, ChannelOut]
-    def bind(localAddr: SocketAddress)(connectionHandler: ChannelOut => ZIO[Any, Nothing, Unit]): ZManaged[R, TransportError, ChannelIn]
+
+    def bind(localAddr: SocketAddress)(
+      connectionHandler: ChannelOut => ZIO[Any, Nothing, Unit]
+    ): ZManaged[R, TransportError, ChannelIn]
   }
 }
 
@@ -26,7 +29,4 @@ trait ChannelOut extends Channel {
   def read: ZIO[Any, TransportError, Chunk[Byte]]
 }
 
-trait ChannelIn extends Channel {
-}
-
-
+trait ChannelIn extends Channel {}

@@ -3,7 +3,7 @@ package zio.keeper
 import zio._
 import zio.console.Console
 import zio.keeper.Error._
-import zio.keeper.transport.{ChannelOut, Transport}
+import zio.keeper.transport.{ ChannelOut, Transport }
 import zio.nio._
 import zio.stream.Stream
 
