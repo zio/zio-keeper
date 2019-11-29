@@ -1,4 +1,4 @@
-package zio.keeper
+package zio.keeper.example
 
 import java.util.concurrent.TimeUnit
 
@@ -6,6 +6,7 @@ import zio.clock.Clock
 import zio.console._
 import zio.duration._
 import zio.keeper.Cluster.{Credentials, Discovery}
+import zio.keeper.{Cluster, Error, transport}
 import zio.macros.delegate._
 import zio.nio.{InetAddress, SocketAddress}
 import zio.random.Random
@@ -157,7 +158,6 @@ object Server extends zio.App {
   import zio.duration._
   import zio.keeper.transport._
 
-
   override def run(args: List[String]) =
     (for {
       tcp       <- tcp.tcpTransport(10.seconds, 10.seconds)
@@ -177,10 +177,12 @@ object Server extends zio.App {
         .provide(console)
 
       _ <- putStrLn("public address: " + publicAddress.toString())
+    //TODO useForever caused dead code so we should find other way to block this from exit.
       _ <- bind(publicAddress)(handler)
             .provide(tcp)
-            .useForever
-    } yield ()).orDie.as(0)
+            .useForever.fork
+
+    } yield ()).as(0)
 }
 
 object Client extends zio.App {
@@ -197,7 +199,6 @@ object Client extends zio.App {
       _ <- putStrLn("connect to address: " + publicAddress.toString())
       _ <- connect(publicAddress)
             .provide(tcp)
-            .use(_.send(Chunk.fromArray("qwee".getBytes)).repeat(Schedule.recurs(100)))
-      _ <- ZIO.never
+            .use(_.send(Chunk.fromArray("message from client".getBytes)).repeat(Schedule.recurs(100)))
     } yield ()).orDie.as(0)
 }

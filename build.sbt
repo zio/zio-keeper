@@ -41,7 +41,7 @@ addCommandAlias("check", "all scalafmtSbtCheck scalafmtCheck test:scalafmtCheck"
 lazy val root = project
   .in(file("."))
   .settings(skip in publish := true)
-  .aggregate(keeper, membership)
+  .aggregate(keeper, membership, examples)
 
 lazy val keeper = project
   .in(file("keeper"))
@@ -73,4 +73,13 @@ lazy val membership = project
       "dev.zio"     %% "zio-test-sbt"    % "1.0.0-RC17" % "test"
     ),
     testFrameworks := Seq(new TestFramework("zio.test.sbt.ZTestFramework"))
+  )
+
+lazy val examples = project
+  .in(file("examples"))
+  .settings(stdSettings("zio-keeper-examples"))
+  .dependsOn(keeper)
+  .settings(
+    libraryDependencies ++= Seq(
+    )
   )
