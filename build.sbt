@@ -41,18 +41,20 @@ addCommandAlias("check", "all scalafmtSbtCheck scalafmtCheck test:scalafmtCheck"
 lazy val root = project
   .in(file("."))
   .settings(skip in publish := true)
-  .aggregate(keeper, membership)
+  .aggregate(keeper, membership, examples)
 
 lazy val keeper = project
   .in(file("keeper"))
   .settings(stdSettings("zio-keeper"))
   .settings(
     libraryDependencies ++= Seq(
-      "dev.zio" %% "zio"          % "1.0.0-RC16",
-      "dev.zio" %% "zio-streams"  % "1.0.0-RC16",
-      "dev.zio" %% "zio-nio"      % "0.1.2",
-      "dev.zio" %% "zio-test"     % "1.0.0-RC16" % Test,
-      "dev.zio" %% "zio-test-sbt" % "1.0.0-RC16" % Test
+      "dev.zio"     %% "zio"             % "1.0.0-RC17",
+      "dev.zio"     %% "zio-streams"     % "1.0.0-RC17",
+      "dev.zio"     %% "zio-nio"         % "0.4.0",
+      "dev.zio"     %% "zio-macros-core" % "0.6.0",
+      "com.lihaoyi" %% "upickle"         % "0.8.0",
+      "dev.zio"     %% "zio-test"        % "1.0.0-RC17" % Test,
+      "dev.zio"     %% "zio-test-sbt"    % "1.0.0-RC17" % Test
     ),
     testFrameworks := Seq(new TestFramework("zio.test.sbt.ZTestFramework"))
   )
@@ -71,4 +73,13 @@ lazy val membership = project
       "dev.zio"     %% "zio-test-sbt"    % "1.0.0-RC17" % "test"
     ),
     testFrameworks := Seq(new TestFramework("zio.test.sbt.ZTestFramework"))
+  )
+
+lazy val examples = project
+  .in(file("examples"))
+  .settings(stdSettings("zio-keeper-examples"))
+  .dependsOn(keeper)
+  .settings(
+    libraryDependencies ++= Seq(
+      )
   )
