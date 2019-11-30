@@ -42,18 +42,17 @@ object TransportSpec
 
       suite("TcpTransport")(
         testM("can send and receive messages") {
-          checkM(Gen.listOf(Gen.anyByte)) {
-            bytes =>
-              val payload = Chunk.fromIterable(bytes)
+          checkM(Gen.listOf(Gen.anyByte)) { bytes =>
+            val payload = Chunk.fromIterable(bytes)
 
-              environment >>> Live.live(for {
-                addr         <- SocketAddress.inetSocketAddress(0)
-                startPromise <- Promise.make[Nothing, Unit]
-                chunk        <- bindAndWaitForValue(addr, startPromise).fork
-                _            <- startPromise.await
-                _            <- connect(addr).use(_.send(payload).retry(Schedule.spaced(10.milliseconds)))
-                result       <- chunk.join
-              } yield assert(result, equalTo(payload)))
+            environment >>> Live.live(for {
+              addr         <- SocketAddress.inetSocketAddress(0)
+              startPromise <- Promise.make[Nothing, Unit]
+              chunk        <- bindAndWaitForValue(addr, startPromise).fork
+              _            <- startPromise.await
+              _            <- connect(addr).use(_.send(payload).retry(Schedule.spaced(10.milliseconds)))
+              result       <- chunk.join
+            } yield assert(result, equalTo(payload)))
           }
         },
         testM("we should be able to close the client connection") {
