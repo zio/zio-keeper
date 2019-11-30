@@ -6,9 +6,11 @@ import zio._
 import zio.clock.Clock
 import zio.console.{ Console, putStrLn }
 import zio.duration._
-import zio.keeper.Cluster.{ Discovery, readMessage, serializeMessage }
-import zio.keeper.Error.SendError
-import zio.keeper.InternalProtocol._
+import zio.keeper.Cluster.{ readMessage, serializeMessage }
+import zio.keeper.Error.{ SendError, UnexpectedMessage }
+import zio.keeper.discovery.Discovery
+import zio.keeper.protocol.InternalProtocol
+import zio.keeper.protocol.InternalProtocol._
 import zio.keeper.transport.{ ChannelOut, Transport }
 import zio.nio.{ InetAddress, SocketAddress }
 import zio.stm.{ STM, TMap }
@@ -53,6 +55,25 @@ final class InternalCluster(
             case None => ZIO.unit
           }
     } yield ()
+
+  private def sendInternalMessage(to: ChannelOut, msg: InternalProtocol) =
+    for {
+      payload <- msg.serialize
+      msg     <- serializeMessage(localMember, payload, 1)
+      _       <- to.send(msg)
+    } yield ()
+
+  private def expects[R, A](
+    channel: ChannelOut
+  )(pf: PartialFunction[InternalProtocol, ZIO[R, Error, A]]): ZIO[R, Error, A] =
+    for {
+      bytes <- readMessage(channel)
+      msg   <- InternalProtocol.deserialize(bytes._2.payload)
+      result <- pf.lift(msg) match {
+                 case None         => ZIO.fail(UnexpectedMessage(bytes._2))
+                 case Some(action) => action
+               }
+    } yield result
 
   private def ackMessage(timeout: Duration) =
     for {
@@ -135,18 +156,11 @@ final class InternalCluster(
               transport.bind(localAddress) { channelOut =>
                 {
                   (for {
-                    state   <- gossipStateRef.get
-                    payload <- OpenConnection(state, localMember).serialize
-                    msg     <- serializeMessage(localMember, payload, 0)
-                    _       <- channelOut.send(msg)
-                    msg     <- readMessage(channelOut)
-                    _ <- InternalProtocol
-                          .deserialize[OpenConnection](msg._2.payload)
-                          .foldM(
-                            ex => putStrLn(s"Failed to parse handshake response: $ex"), {
-                              case OpenConnection(_, address) => listenOnChannel(channelOut, address)
-                            }
-                          )
+                    state <- gossipStateRef.get
+                    _     <- sendInternalMessage(channelOut, OpenConnection(state, localMember))
+                    _ <- expects(channelOut) {
+                          case OpenConnection(_, address) => listenOnChannel(channelOut, address)
+                        }
                   } yield ()).catchAll(ex => putStrLn(s"Connection failed: $ex"))
                 }.provide(env)
               }
@@ -176,22 +190,13 @@ final class InternalCluster(
   private def handshake(
     channel: ChannelOut
   ): ZIO[Transport with Console with Clock, Error, Unit] =
-    for {
-      msg <- readMessage(channel)
-      _ <- InternalProtocol
-            .deserialize[OpenConnection](msg._2.payload)
-            .foldM(
-              ex => putStrLn(s"Failed11 to parse handshake response: $ex}"), {
-                case OpenConnection(_, address) =>
-                  (for {
-                    state   <- gossipStateRef.get
-                    payload <- OpenConnection(state, localMember).serialize
-                    msg     <- serializeMessage(localMember, payload, 0)
-                    _       <- channel.send(msg)
-                  } yield ()) *> listenOnChannel(channel, address)
-              }
-            )
-    } yield ()
+    expects(channel) {
+      case OpenConnection(_, address) =>
+        (for {
+          state <- gossipStateRef.get
+          _     <- sendInternalMessage(channel, OpenConnection(state, localMember))
+        } yield ()) *> listenOnChannel(channel, address)
+    }
 
   private def listenOnChannel(
     channel: ChannelOut,
@@ -202,6 +207,7 @@ final class InternalCluster(
       messages.tap { bytes =>
         channel
           .send(bytes)
+          //          .retry(Schedule.recurs(3))
           .catchAll(ex => ZIO.fail(SendError(partner.nodeId, bytes, ex.getMessage)))
       }.runDrain
 
@@ -239,13 +245,13 @@ final class InternalCluster(
       .catchAll { ex =>
         putStrLn(s"channel close because of: $ex")
       }
-    loop.forever
+    loop.whenM(channel.isOpen.catchAll[Any, Nothing, Boolean](_ => ZIO.succeed(false))).forever
   }
 
   private def handleClusterMessages(stream: Stream[Nothing, Message]) =
     stream.tap { message =>
       for {
-        payload <- InternalProtocol.deserialize[InternalProtocol](message.payload)
+        payload <- InternalProtocol.deserialize(message.payload)
         _ <- payload match {
               case Ack(ackId, state) =>
                 updateState(state) *>

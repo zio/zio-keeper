@@ -1,9 +1,10 @@
-package zio.keeper
+package zio.keeper.protocol
 
 import java.math.BigInteger
 
 import upickle.default._
 import zio.keeper.Error.SerializationError
+import zio.keeper.{ GossipState, Member, NodeAddress, NodeId }
 import zio.{ Chunk, IO, ZIO }
 
 sealed trait InternalProtocol {
@@ -16,13 +17,13 @@ sealed trait InternalProtocol {
 
 object InternalProtocol {
 
-  def deserialize[A <: InternalProtocol](bytes: Chunk[Byte]): IO[SerializationError, A] =
+  def deserialize(bytes: Chunk[Byte]): IO[SerializationError, InternalProtocol] =
     if (bytes.isEmpty) {
       ZIO.fail(SerializationError("Fail to deserialize message"))
     } else {
       ZIO
         .effect(
-          readBinary[InternalProtocol](bytes.toArray).asInstanceOf[A]
+          readBinary[InternalProtocol](bytes.toArray)
         )
         .mapError(ex => SerializationError(ex.getMessage))
     }

@@ -1,8 +1,8 @@
 package zio.keeper
 
 import zio._
-import zio.console.Console
 import zio.keeper.Error._
+import zio.keeper.discovery.Discovery
 import zio.keeper.transport.{ ChannelOut, Transport }
 import zio.nio._
 import zio.stream.Stream
@@ -31,15 +31,17 @@ object Cluster {
     InternalCluster.initCluster(port)
 
   private[keeper] def readMessage(channel: ChannelOut) =
-    (for {
-      headerBytes            <- channel.read
-      byteBuffer             <- Buffer.byte(headerBytes)
-      senderMostSignificant  <- byteBuffer.getLong
-      senderLeastSignificant <- byteBuffer.getLong
-      messageType            <- byteBuffer.getInt
-      payloadByte            <- byteBuffer.getChunk()
-      sender                 = NodeId(new java.util.UUID(senderMostSignificant, senderLeastSignificant))
-    } yield (messageType, Message(sender, payloadByte))).mapError(ex => DeserializationError(ex.getMessage))
+    channel.read.flatMap(
+      headerBytes =>
+        (for {
+          byteBuffer             <- Buffer.byte(headerBytes)
+          senderMostSignificant  <- byteBuffer.getLong
+          senderLeastSignificant <- byteBuffer.getLong
+          messageType            <- byteBuffer.getInt
+          payloadByte            <- byteBuffer.getChunk()
+          sender                 = NodeId(new java.util.UUID(senderMostSignificant, senderLeastSignificant))
+        } yield (messageType, Message(sender, payloadByte))).mapError(e => DeserializationError(e.getMessage))
+    )
 
   private[keeper] def serializeMessage(member: Member, payload: Chunk[Byte], messageType: Int): IO[Error, Chunk[Byte]] = {
     for {
@@ -55,9 +57,5 @@ object Cluster {
 
   trait Credentials {
     // TODO: ways to obtain auth data
-  }
-
-  trait Discovery {
-    def discover: ZIO[Console, Error, Set[zio.nio.SocketAddress]]
   }
 }

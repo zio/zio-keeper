@@ -5,7 +5,8 @@ import java.util.concurrent.TimeUnit
 import zio.clock.Clock
 import zio.console._
 import zio.duration._
-import zio.keeper.Cluster.{ Credentials, Discovery }
+import zio.keeper.Cluster.Credentials
+import zio.keeper.discovery.Discovery
 import zio.keeper.{ Cluster, Error, transport }
 import zio.macros.delegate._
 import zio.nio.{ InetAddress, SocketAddress }

@@ -1,12 +1,13 @@
 package zio.keeper.transport
 
+import java.io.IOException
 import java.math.BigInteger
 
 import zio._
 import zio.clock.Clock
 import zio.console.Console
 import zio.duration._
-import zio.keeper.Error.ConnectionTimeout
+import zio.keeper.Error.{ ChannelClosed, ConnectionTimeout }
 import zio.keeper.{ BindFailed, ExceptionThrown, RequestTimeout, TransportError }
 import zio.macros.delegate._
 import zio.nio._
@@ -72,6 +73,7 @@ class NioChannelOut(
   override def send(data: Chunk[Byte]): ZIO[Any, TransportError, Unit] = {
     val size = data.size
     (for {
+      _ <- isOpen.flatMap(isOpen => if (isOpen) ZIO.unit else ZIO.fail(ChannelClosed()))
       _ <- socket.write(Chunk((size >>> 24).toByte, (size >>> 16).toByte, (size >>> 8).toByte, size.toByte))
       _ <- socket.write(data)
     } yield ())
@@ -82,11 +84,16 @@ class NioChannelOut(
 
   override def read: ZIO[Any, TransportError, Chunk[Byte]] =
     (for {
+      _ <- isOpen.flatMap(isOpen => if (isOpen) ZIO.unit else ZIO.fail(ChannelClosed()))
       length <- socket
                  .read(4)
                  .flatMap(c => ZIO.effect(new BigInteger(c.toArray).intValue()))
       data <- socket.read(length)
-    } yield data).mapError(ExceptionThrown)
+    } yield data)
+      .catchSome {
+        case ex: IOException if ex.getMessage == "Connection reset by peer" => close *> ZIO.fail(ex)
+      }
+      .mapError(ExceptionThrown)
 
   override def isOpen: ZIO[Any, TransportError, Boolean] =
     socket.isOpen
