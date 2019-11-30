@@ -4,7 +4,7 @@ import zio.keeper.GossipState.StateDiff
 import zio.test.Assertion._
 import zio.test.{ DefaultRunnableSpec, _ }
 
-import scala.collection.SortedSet
+import scala.collection.immutable.SortedSet
 
 object GossipStateSpec
     extends DefaultRunnableSpec(

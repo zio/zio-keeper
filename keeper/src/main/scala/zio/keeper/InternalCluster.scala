@@ -16,7 +16,7 @@ import zio.nio.{ InetAddress, SocketAddress }
 import zio.stm.{ STM, TMap }
 import zio.stream.{ Stream, ZStream }
 
-import scala.collection.SortedSet
+import scala.collection.immutable.SortedSet
 
 final class InternalCluster(
   localMember: Member,
