@@ -9,10 +9,10 @@ import zio.{ Chunk, IO, ZIO }
 
 sealed trait InternalProtocol {
 
-  final def serialize: IO[SerializationError, Chunk[Byte]] =
+  final val serialize: IO[SerializationError, Chunk[Byte]] =
     ZIO
       .effect(Chunk.fromArray(writeBinary(this)))
-      .mapError(ex => SerializationError(ex.getMessage))
+      .mapError(ex => SerializationError(ex.toString))
 }
 
 object InternalProtocol {

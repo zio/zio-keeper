@@ -22,6 +22,10 @@ object Member {
 
 final case class NodeAddress(ip: Array[Byte], port: Int) {
 
+  override def equals(obj: Any): Boolean = obj match {
+    case NodeAddress(ip, port) => this.port == port && ip.sameElements(this.ip)
+  }
+
   def socketAddress: ZIO[Any, TransportError, InetSocketAddress] =
     (for {
       addr <- InetAddress.byAddress(ip)

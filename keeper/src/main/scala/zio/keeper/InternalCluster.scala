@@ -69,10 +69,7 @@ final class InternalCluster(
     for {
       bytes <- readMessage(channel)
       msg   <- InternalProtocol.deserialize(bytes._2.payload)
-      result <- pf.lift(msg) match {
-                 case None         => ZIO.fail(UnexpectedMessage(bytes._2))
-                 case Some(action) => action
-               }
+      result <- pf.lift(msg).getOrElse(ZIO.fail(UnexpectedMessage(bytes._2)))
     } yield result
 
   private def ackMessage(timeout: Duration) =
@@ -207,7 +204,6 @@ final class InternalCluster(
       messages.tap { bytes =>
         channel
           .send(bytes)
-          //          .retry(Schedule.recurs(3))
           .catchAll(ex => ZIO.fail(SendError(partner.nodeId, bytes, ex.getMessage)))
       }.runDrain
 

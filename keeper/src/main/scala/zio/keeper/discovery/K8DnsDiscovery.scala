@@ -19,7 +19,7 @@ import zio.{ IO, ZIO, keeper }
  */
 trait K8DnsDiscovery extends Discovery {
 
-  final override def discover: ZIO[Console, keeper.Error, Set[SocketAddress]] = {
+  final override val discover: ZIO[Console, keeper.Error, Set[SocketAddress]] = {
     for {
       addresses <- K8DnsDiscovery.lookup(serviceDns, serviceDnsTimeout)
       nodes     <- ZIO.foreach(addresses)(addr => zio.nio.SocketAddress.inetSocketAddress(addr, servicePort))
