@@ -7,8 +7,14 @@ import zio._
 import zio.clock.Clock
 import zio.console.Console
 import zio.duration._
-import zio.keeper.Error.{ ChannelClosed, ConnectionTimeout }
-import zio.keeper.{ BindFailed, ExceptionThrown, RequestTimeout, TransportError }
+import zio.keeper.{
+  BindFailed,
+  ChannelClosed,
+  ConnectionTimeout,
+  RequestTimeout,
+  TransportError,
+  TransportExceptionWrapper
+}
 import zio.macros.delegate._
 import zio.nio._
 import zio.nio.channels._
@@ -29,14 +35,14 @@ object tcp {
         val transport = new Transport.Service[Any] {
           override def connect(to: SocketAddress) =
             (for {
-              socketChannelAndClose  <- AsynchronousSocketChannel().withEarlyRelease
+              socketChannelAndClose  <- AsynchronousSocketChannel().withEarlyRelease.mapError(TransportExceptionWrapper)
               (close, socketChannel) = socketChannelAndClose
               _ <- socketChannel
                     .connect(to)
-                    .timeoutFail(ConnectionTimeout(to, requestTimeout))(requestTimeout)
+                    .mapError(TransportExceptionWrapper)
+                    .timeoutFail(ConnectionTimeout(to, connectionTimeout))(connectionTimeout)
                     .toManaged_
-            } yield new NioChannelOut(socketChannel, requestTimeout, close, env))
-              .mapError(ExceptionThrown(_))
+            } yield new NioChannelOut(socketChannel, to, requestTimeout, close, env))
               .provide(env)
 
           override def bind(addr: SocketAddress)(connectionHandler: ChannelOut => ZIO[Any, Nothing, Unit]) =
@@ -48,8 +54,19 @@ object tcp {
                 case (close, server) =>
                   (for {
                     cur <- server.accept.withEarlyRelease
-                            .map { case (close, socket) => new NioChannelOut(socket, connectionTimeout, close, env) }
-                            .mapError(ExceptionThrown)
+                            .mapError(TransportExceptionWrapper)
+                            .mapM {
+                              case (close, socket) =>
+                                socket.remoteAddress.flatMap {
+                                  case None =>
+                                    // This is almost impossible here but still we need to handle it.
+                                    ZIO.fail(TransportExceptionWrapper(new RuntimeException("cannot obtain address")))
+                                  case Some(addr) =>
+                                    ZIO.succeed(
+                                      new NioChannelOut(socket, addr, connectionTimeout, close, env)
+                                    )
+                                }
+                            }
                             .preallocate
                             .race(
                               ZIO.never.ensuring(close)
@@ -65,6 +82,7 @@ object tcp {
 
 class NioChannelOut(
   socket: AsynchronousSocketChannel,
+  remoteAddress: SocketAddress,
   requestTimeout: Duration,
   finalizer: URIO[Any, Any],
   clock: Clock
@@ -73,33 +91,39 @@ class NioChannelOut(
   override def send(data: Chunk[Byte]): ZIO[Any, TransportError, Unit] = {
     val size = data.size
     (for {
-      _ <- isOpen.flatMap(isOpen => if (isOpen) ZIO.unit else ZIO.fail(ChannelClosed()))
-      _ <- socket.write(Chunk((size >>> 24).toByte, (size >>> 16).toByte, (size >>> 8).toByte, size.toByte))
-      _ <- socket.write(data)
+      _ <- validateConnection
+      _ <- socket
+            .write(Chunk((size >>> 24).toByte, (size >>> 16).toByte, (size >>> 8).toByte, size.toByte))
+            .mapError(TransportExceptionWrapper(_))
+      _ <- socket.write(data).mapError(TransportExceptionWrapper(_))
     } yield ())
-      .mapError(ExceptionThrown(_))
-      .timeoutFail(RequestTimeout(requestTimeout))(requestTimeout)
+      .timeoutFail(RequestTimeout(remoteAddress, requestTimeout))(requestTimeout)
       .provide(clock)
   }
 
   override def read: ZIO[Any, TransportError, Chunk[Byte]] =
     (for {
-      _ <- isOpen.flatMap(isOpen => if (isOpen) ZIO.unit else ZIO.fail(ChannelClosed()))
+      _ <- validateConnection
       length <- socket
                  .read(4)
                  .flatMap(c => ZIO.effect(new BigInteger(c.toArray).intValue()))
-      data <- socket.read(length)
+                 .mapError(TransportExceptionWrapper)
+      data <- socket.read(length).mapError(TransportExceptionWrapper)
     } yield data)
       .catchSome {
-        case ex: IOException if ex.getMessage == "Connection reset by peer" => close *> ZIO.fail(ex)
+        case TransportExceptionWrapper(ex: IOException) if ex.getMessage == "Connection reset by peer" =>
+          close *> ZIO.fail(TransportExceptionWrapper(ex))
       }
-      .mapError(ExceptionThrown)
+
+  private def validateConnection =
+    isOpen.flatMap(isOpen => if (isOpen) ZIO.unit else ZIO.fail(ChannelClosed(remoteAddress)))
 
   override def isOpen: ZIO[Any, TransportError, Boolean] =
     socket.isOpen
 
   override def close: ZIO[Any, TransportError, Unit] =
     finalizer.ignore
+
 }
 
 class NioChannelIn(

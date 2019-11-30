@@ -1,7 +1,6 @@
 package zio.keeper
 
 import zio._
-import zio.keeper.Error._
 import zio.keeper.discovery.Discovery
 import zio.keeper.transport.{ ChannelOut, Transport }
 import zio.nio._
@@ -40,7 +39,8 @@ object Cluster {
           messageType            <- byteBuffer.getInt
           payloadByte            <- byteBuffer.getChunk()
           sender                 = NodeId(new java.util.UUID(senderMostSignificant, senderLeastSignificant))
-        } yield (messageType, Message(sender, payloadByte))).mapError(e => DeserializationError(e.getMessage))
+        } yield (messageType, Message(sender, payloadByte)))
+          .mapError(e => DeserializationTypeError[Message](e))
     )
 
   private[keeper] def serializeMessage(member: Member, payload: Chunk[Byte], messageType: Int): IO[Error, Chunk[Byte]] = {
@@ -53,7 +53,7 @@ object Cluster {
       _          <- byteBuffer.flip
       bytes      <- byteBuffer.getChunk()
     } yield bytes
-  }.catchAll(ex => ZIO.fail(SerializationError(ex.getMessage)))
+  }.mapError(ex => SerializationTypeError[Message](ex))
 
   trait Credentials {
     // TODO: ways to obtain auth data

@@ -30,5 +30,5 @@ final case class NodeAddress(ip: Array[Byte], port: Int) {
     (for {
       addr <- InetAddress.byAddress(ip)
       sa   <- SocketAddress.inetSocketAddress(addr, port)
-    } yield sa).mapError(ExceptionThrown)
+    } yield sa).mapError(TransportExceptionWrapper)
 }

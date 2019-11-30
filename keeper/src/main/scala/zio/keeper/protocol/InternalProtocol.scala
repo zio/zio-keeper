@@ -3,30 +3,26 @@ package zio.keeper.protocol
 import java.math.BigInteger
 
 import upickle.default._
-import zio.keeper.Error.SerializationError
+import zio.keeper.SerializationTypeError
 import zio.keeper.{ GossipState, Member, NodeAddress, NodeId }
 import zio.{ Chunk, IO, ZIO }
 
 sealed trait InternalProtocol {
 
-  final val serialize: IO[SerializationError, Chunk[Byte]] =
+  final val serialize: IO[SerializationTypeError[InternalProtocol], Chunk[Byte]] =
     ZIO
       .effect(Chunk.fromArray(writeBinary(this)))
-      .mapError(ex => SerializationError(ex.toString))
+      .mapError(ex => SerializationTypeError[InternalProtocol](ex))
 }
 
 object InternalProtocol {
 
-  def deserialize(bytes: Chunk[Byte]): IO[SerializationError, InternalProtocol] =
-    if (bytes.isEmpty) {
-      ZIO.fail(SerializationError("Fail to deserialize message"))
-    } else {
-      ZIO
-        .effect(
-          readBinary[InternalProtocol](bytes.toArray)
-        )
-        .mapError(ex => SerializationError(ex.getMessage))
-    }
+  def deserialize(bytes: Chunk[Byte]): IO[SerializationTypeError[InternalProtocol], InternalProtocol] =
+    ZIO
+      .effect(
+        readBinary[InternalProtocol](bytes.toArray)
+      )
+      .mapError(ex => SerializationTypeError[InternalProtocol](ex))
 
   final case class Ack(conversation: Long, state: GossipState) extends InternalProtocol
 

@@ -5,7 +5,7 @@ import zio.clock.Clock
 import zio.console.Console
 import zio.duration._
 import zio.console._
-import zio.keeper.ExceptionThrown
+import zio.keeper.TransportExceptionWrapper
 import zio.macros.delegate._
 import zio.nio.SocketAddress
 import zio.test.Assertion._
@@ -70,8 +70,8 @@ object TransportSpec
           } yield (result match {
             case Right(_) =>
               assert(false, equalTo(true))
-            case Left(ex: ExceptionThrown) =>
-              assert(ex.getCause.getMessage, equalTo("Connection reset by peer"))
+            case Left(ex: TransportExceptionWrapper) =>
+              assert(ex.throwable.getMessage, equalTo("Connection reset by peer"))
             case Left(_) =>
               assert(false, equalTo(true))
           }))
