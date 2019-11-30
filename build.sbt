@@ -48,13 +48,14 @@ lazy val keeper = project
   .settings(stdSettings("zio-keeper"))
   .settings(
     libraryDependencies ++= Seq(
-      "dev.zio"     %% "zio"             % "1.0.0-RC17",
-      "dev.zio"     %% "zio-streams"     % "1.0.0-RC17",
-      "dev.zio"     %% "zio-nio"         % "0.4.0",
-      "dev.zio"     %% "zio-macros-core" % "0.6.0",
-      "com.lihaoyi" %% "upickle"         % "0.8.0",
-      "dev.zio"     %% "zio-test"        % "1.0.0-RC17" % Test,
-      "dev.zio"     %% "zio-test-sbt"    % "1.0.0-RC17" % Test
+      "dev.zio"                %% "zio"                     % "1.0.0-RC17",
+      "dev.zio"                %% "zio-streams"             % "1.0.0-RC17",
+      "dev.zio"                %% "zio-nio"                 % "0.4.0",
+      "dev.zio"                %% "zio-macros-core"         % "0.6.0",
+      "com.lihaoyi"            %% "upickle"                 % "0.8.0",
+      "org.scala-lang.modules" %% "scala-collection-compat" % "2.1.2",
+      "dev.zio"                %% "zio-test"                % "1.0.0-RC17" % Test,
+      "dev.zio"                %% "zio-test-sbt"            % "1.0.0-RC17" % Test
     ),
     testFrameworks := Seq(new TestFramework("zio.test.sbt.ZTestFramework"))
   )
@@ -64,13 +65,14 @@ lazy val membership = project
   .settings(stdSettings("zio-membership"))
   .settings(
     libraryDependencies ++= Seq(
-      "dev.zio"     %% "zio"             % "1.0.0-RC17",
-      "dev.zio"     %% "zio-streams"     % "1.0.0-RC17",
-      "dev.zio"     %% "zio-nio"         % "0.4.0",
-      "dev.zio"     %% "zio-macros-core" % "0.6.0",
-      "com.lihaoyi" %% "upickle"         % "0.8.0",
-      "dev.zio"     %% "zio-test"        % "1.0.0-RC17" % "test",
-      "dev.zio"     %% "zio-test-sbt"    % "1.0.0-RC17" % "test"
+      "dev.zio"                %% "zio"                     % "1.0.0-RC17",
+      "dev.zio"                %% "zio-streams"             % "1.0.0-RC17",
+      "dev.zio"                %% "zio-nio"                 % "0.4.0",
+      "dev.zio"                %% "zio-macros-core"         % "0.6.0",
+      "com.lihaoyi"            %% "upickle"                 % "0.8.0",
+      "org.scala-lang.modules" %% "scala-collection-compat" % "2.1.2",
+      "dev.zio"                %% "zio-test"                % "1.0.0-RC17" % Test,
+      "dev.zio"                %% "zio-test-sbt"            % "1.0.0-RC17" % Test
     ),
     testFrameworks := Seq(new TestFramework("zio.test.sbt.ZTestFramework"))
   )
