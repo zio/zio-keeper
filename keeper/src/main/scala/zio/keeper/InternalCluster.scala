@@ -67,8 +67,8 @@ final class InternalCluster(
     channel: ChannelOut
   )(pf: PartialFunction[InternalProtocol, ZIO[R, Error, A]]): ZIO[R, Error, A] =
     for {
-      bytes <- readMessage(channel)
-      msg   <- InternalProtocol.deserialize(bytes._2.payload)
+      bytes  <- readMessage(channel)
+      msg    <- InternalProtocol.deserialize(bytes._2.payload)
       result <- pf.lift(msg).getOrElse(ZIO.fail(UnexpectedMessage(bytes._2)))
     } yield result
 

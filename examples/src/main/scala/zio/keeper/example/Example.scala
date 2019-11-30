@@ -22,7 +22,7 @@ object Node1 extends zio.ManagedApp {
       transport <- (ZIO.environment[Clock with Console with Random] @@ withTransport)
       config: Credentials with Discovery = new Credentials with Discovery {
 
-        override def discover: IO[Error, Set[SocketAddress]] =
+        override val discover: IO[Error, Set[SocketAddress]] =
           IO.succeed(Set.empty)
       }
       result <- ZIO.succeed(config) @@ enrichWith(transport)
@@ -66,7 +66,7 @@ object Node2 extends zio.ManagedApp {
       transport <- (ZIO.environment[Clock with Console with Random] @@ withTransport)
       config: Credentials with Discovery = new Credentials with Discovery {
 
-        override def discover: IO[Error, Set[SocketAddress]] =
+        override val discover: IO[Error, Set[SocketAddress]] =
           InetAddress.localHost
             .flatMap(addr => SocketAddress.inetSocketAddress(addr, 5557))
             .map(Set(_: SocketAddress))
@@ -112,7 +112,7 @@ object Node3 extends zio.ManagedApp {
       transport <- (ZIO.environment[Clock with Console with Random] @@ withTransport)
       config: Credentials with Discovery = new Credentials with Discovery {
 
-        override def discover: IO[Error, Set[SocketAddress]] =
+        override val discover: IO[Error, Set[SocketAddress]] =
           InetAddress.localHost
             .flatMap(addr => SocketAddress.inetSocketAddress(addr, 5558))
             .map(Set(_: SocketAddress))
