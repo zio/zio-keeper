@@ -12,6 +12,9 @@ import zio.test.environment.Live
 
 object TransportSpec
     extends DefaultRunnableSpec({
+      // todo: actually find free port
+      val freePort = ZIO.succeed(8010)
+
       val withTransport = tcp.withTcpTransport(10, 10.seconds, 10.seconds)
 
       val environment =
@@ -30,7 +33,8 @@ object TransportSpec
               bind(addr).take(1).runCollect.map(_.head)
 
             environment >>> Live.live(for {
-              addr   <- SocketAddress.inetSocketAddress(0)
+              port   <- freePort
+              addr   <- SocketAddress.inetSocketAddress(port)
               chunk  <- readOne(addr).fork
               _      <- send(addr, payload).retry(Schedule.spaced(10.milliseconds))
               result <- chunk.join
@@ -42,7 +46,8 @@ object TransportSpec
 
           environment >>> Live.live(for {
             latch  <- Promise.make[Nothing, Unit]
-            addr   <- SocketAddress.inetSocketAddress(0)
+            port   <- freePort.map(_ + 1)
+            addr   <- SocketAddress.inetSocketAddress(port)
             fiber  <- bind(addr).take(2).tap(_ => latch.succeed(())).runDrain.fork
             _      <- send(addr, payload).retry(Schedule.spaced(10.milliseconds))
             result <- latch.await *> fiber.interrupt
