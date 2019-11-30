@@ -6,7 +6,7 @@ import zio.keeper.{ GossipState, Member, NodeAddress, NodeId }
 import zio.test.Assertion._
 import zio.test._
 
-import scala.collection.SortedSet
+import scala.collection.immutable.SortedSet
 
 object InternalProtocolSpec
     extends DefaultRunnableSpec({
