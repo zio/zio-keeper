@@ -6,9 +6,11 @@ import zio._
 import zio.clock.Clock
 import zio.console.{ Console, putStrLn }
 import zio.duration._
-import zio.keeper.Cluster.{ Discovery, readMessage, serializeMessage }
-import zio.keeper.Error.SendError
-import zio.keeper.InternalProtocol._
+import zio.keeper.Cluster.{ readMessage, serializeMessage }
+import zio.keeper.Error.{ SendError, UnexpectedMessage }
+import zio.keeper.discovery.Discovery
+import zio.keeper.protocol.InternalProtocol
+import zio.keeper.protocol.InternalProtocol._
 import zio.keeper.transport.{ ChannelOut, Transport }
 import zio.nio.{ InetAddress, SocketAddress }
 import zio.stm.{ STM, TMap }
@@ -41,7 +43,7 @@ final class InternalCluster(
     for {
       current <- gossipStateRef.get
       diff    = newState.diff(current)
-      _       <- ZIO.foreach(diff.local)(n => connect(n.addr))
+      _       <- ZIO.foreach(diff.local)(n => n.addr.socketAddress >>= connect)
     } yield ()
 
   private def sendMessage(to: NodeId, msgType: Int, payload: Chunk[Byte]) =
@@ -53,6 +55,22 @@ final class InternalCluster(
             case None => ZIO.unit
           }
     } yield ()
+
+  private def sendInternalMessage(to: ChannelOut, msg: InternalProtocol) =
+    for {
+      payload <- msg.serialize
+      msg     <- serializeMessage(localMember, payload, 1)
+      _       <- to.send(msg)
+    } yield ()
+
+  private def expects[R, A](
+    channel: ChannelOut
+  )(pf: PartialFunction[InternalProtocol, ZIO[R, Error, A]]): ZIO[R, Error, A] =
+    for {
+      bytes  <- readMessage(channel)
+      msg    <- InternalProtocol.deserialize(bytes._2.payload)
+      result <- pf.lift(msg).getOrElse(ZIO.fail(UnexpectedMessage(bytes._2)))
+    } yield result
 
   private def ackMessage(timeout: Duration) =
     for {
@@ -130,24 +148,20 @@ final class InternalCluster(
       .environment[Console with Transport with Clock]
       .flatMap(
         env =>
-          transport.bind(localMember.addr) { channelOut =>
-            {
-              (for {
-                state   <- gossipStateRef.get
-                payload <- OpenConnection(state, localMember).serialize
-                msg     <- serializeMessage(localMember, payload, 0)
-                _       <- channelOut.send(msg)
-                msg     <- readMessage(channelOut)
-                _ <- OpenConnection
-                      .deserialize(msg._2.payload)
-                      .foldM(
-                        ex => putStrLn(s"Failed to parse handshake response: $ex"), {
+          localMember.addr.socketAddress.toManaged_.flatMap(
+            localAddress =>
+              transport.bind(localAddress) { channelOut =>
+                {
+                  (for {
+                    state <- gossipStateRef.get
+                    _     <- sendInternalMessage(channelOut, OpenConnection(state, localMember))
+                    _ <- expects(channelOut) {
                           case OpenConnection(_, address) => listenOnChannel(channelOut, address)
                         }
-                      )
-              } yield ()).catchAll(ex => putStrLn(s"Connection failed: $ex"))
-            }.provide(env)
-          }
+                  } yield ()).catchAll(ex => putStrLn(s"Connection failed: $ex"))
+                }.provide(env)
+              }
+          )
       )
 
   private def connect(
@@ -173,22 +187,13 @@ final class InternalCluster(
   private def handshake(
     channel: ChannelOut
   ): ZIO[Transport with Console with Clock, Error, Unit] =
-    for {
-      msg <- readMessage(channel)
-      _ <- OpenConnection
-            .deserialize(msg._2.payload)
-            .foldM(
-              ex => putStrLn(s"Failed11 to parse handshake response: $ex}"), {
-                case OpenConnection(_, address) =>
-                  (for {
-                    state   <- gossipStateRef.get
-                    payload <- OpenConnection(state, localMember).serialize
-                    msg     <- serializeMessage(localMember, payload, 0)
-                    _       <- channel.send(msg)
-                  } yield ()) *> listenOnChannel(channel, address)
-              }
-            )
-    } yield ()
+    expects(channel) {
+      case OpenConnection(_, address) =>
+        (for {
+          state <- gossipStateRef.get
+          _     <- sendInternalMessage(channel, OpenConnection(state, localMember))
+        } yield ()) *> listenOnChannel(channel, address)
+    }
 
   private def listenOnChannel(
     channel: ChannelOut,
@@ -236,7 +241,7 @@ final class InternalCluster(
       .catchAll { ex =>
         putStrLn(s"channel close because of: $ex")
       }
-    loop.forever
+    loop.whenM(channel.isOpen.catchAll[Any, Nothing, Boolean](_ => ZIO.succeed(false))).forever
   }
 
   private def handleClusterMessages(stream: Stream[Nothing, Message]) =
@@ -293,12 +298,8 @@ object InternalCluster {
 
   private[keeper] def initCluster(port: Int) =
     for {
-      localHost <- InetAddress.localHost.toManaged_.orDie
-      socketAddress <- SocketAddress
-                        .inetSocketAddress(localHost, port)
-                        .toManaged_
-                        .orDie
-      localMember       = Member(NodeId.generateNew, socketAddress)
+      localHost         <- InetAddress.localHost.toManaged_.orDie
+      localMember       = Member(NodeId.generateNew, NodeAddress(localHost.address, port))
       _                 <- putStrLn(s"Starting node [ ${localMember.nodeId} ]").toManaged_
       nodes             <- zio.Ref.make(Map.empty[NodeId, Chunk[Byte] => UIO[Unit]]).toManaged_
       seeds             <- ZManaged.environment[Discovery with Console].flatMap(d => ZManaged.fromEffect(d.discover))

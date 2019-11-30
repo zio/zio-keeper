@@ -17,9 +17,9 @@ import zio.{ IO, ZIO, keeper }
  * Headless service is a service of type ClusterIP with the clusterIP property set to None.
  *
  */
-trait K8DnsDiscovery extends zio.keeper.Cluster.Discovery {
+trait K8DnsDiscovery extends Discovery {
 
-  final override def discover: ZIO[Console, keeper.Error, Set[SocketAddress]] = {
+  final override val discover: ZIO[Console, keeper.Error, Set[SocketAddress]] = {
     for {
       addresses <- K8DnsDiscovery.lookup(serviceDns, serviceDnsTimeout)
       nodes     <- ZIO.foreach(addresses)(addr => zio.nio.SocketAddress.inetSocketAddress(addr, servicePort))
