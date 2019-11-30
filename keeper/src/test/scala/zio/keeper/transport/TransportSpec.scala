@@ -14,9 +14,6 @@ import zio.test.environment.{ Live, TestClock, TestConsole }
 
 object TransportSpec
     extends DefaultRunnableSpec({
-      // todo: actually find free port
-      val freePort = ZIO.succeed(8010)
-
       val withTransport = tcp.withTcpTransport(10.seconds, 10.seconds)
 
       val environment =
@@ -50,8 +47,7 @@ object TransportSpec
               val payload = Chunk.fromIterable(bytes)
 
               environment >>> Live.live(for {
-                port         <- freePort
-                addr         <- SocketAddress.inetSocketAddress(port)
+                addr         <- SocketAddress.inetSocketAddress(0)
                 startPromise <- Promise.make[Nothing, Unit]
                 chunk        <- bindAndWaitForValue(addr, startPromise).fork
                 _            <- startPromise.await
@@ -62,8 +58,7 @@ object TransportSpec
         },
         testM("we should be able to close the client connection") {
           environment >>> Live.live(for {
-            port <- freePort.map(_ + 2)
-            addr <- SocketAddress.inetSocketAddress(port)
+            addr <- SocketAddress.inetSocketAddress(0)
             result <- bind(addr)(channel => channel.close.ignore).use_(
                        connect(addr).use(client => client.read).either
                      )
@@ -82,8 +77,7 @@ object TransportSpec
 
           environment >>> Live.live(for {
             latch  <- Promise.make[Nothing, Unit]
-            port   <- freePort.map(_ + 1)
-            addr   <- SocketAddress.inetSocketAddress(port)
+            addr   <- SocketAddress.inetSocketAddress(0)
             fiber  <- bindAndWaitForValue(addr, latch, _ => ZIO.never).fork
             _      <- connect(addr).use(_.send(payload).retry(Schedule.spaced(10.milliseconds)))
             result <- latch.await *> fiber.interrupt
