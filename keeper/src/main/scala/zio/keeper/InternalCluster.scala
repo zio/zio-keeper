@@ -41,7 +41,7 @@ final class InternalCluster(
     for {
       current <- gossipStateRef.get
       diff    = newState.diff(current)
-      _       <- ZIO.foreach(diff.local)(n => connect(n.addr))
+      _       <- ZIO.foreach(diff.local)(n => n.addr.socketAddress >>= connect)
     } yield ()
 
   private def sendMessage(to: NodeId, msgType: Int, payload: Chunk[Byte]) =
@@ -130,24 +130,27 @@ final class InternalCluster(
       .environment[Console with Transport with Clock]
       .flatMap(
         env =>
-          transport.bind(localMember.addr) { channelOut =>
-            {
-              (for {
-                state   <- gossipStateRef.get
-                payload <- OpenConnection(state, localMember).serialize
-                msg     <- serializeMessage(localMember, payload, 0)
-                _       <- channelOut.send(msg)
-                msg     <- readMessage(channelOut)
-                _ <- OpenConnection
-                      .deserialize(msg._2.payload)
-                      .foldM(
-                        ex => putStrLn(s"Failed to parse handshake response: $ex"), {
-                          case OpenConnection(_, address) => listenOnChannel(channelOut, address)
-                        }
-                      )
-              } yield ()).catchAll(ex => putStrLn(s"Connection failed: $ex"))
-            }.provide(env)
-          }
+          localMember.addr.socketAddress.toManaged_.flatMap(
+            localAddress =>
+              transport.bind(localAddress) { channelOut =>
+                {
+                  (for {
+                    state   <- gossipStateRef.get
+                    payload <- OpenConnection(state, localMember).serialize
+                    msg     <- serializeMessage(localMember, payload, 0)
+                    _       <- channelOut.send(msg)
+                    msg     <- readMessage(channelOut)
+                    _ <- InternalProtocol
+                          .deserialize[OpenConnection](msg._2.payload)
+                          .foldM(
+                            ex => putStrLn(s"Failed to parse handshake response: $ex"), {
+                              case OpenConnection(_, address) => listenOnChannel(channelOut, address)
+                            }
+                          )
+                  } yield ()).catchAll(ex => putStrLn(s"Connection failed: $ex"))
+                }.provide(env)
+              }
+          )
       )
 
   private def connect(
@@ -175,8 +178,8 @@ final class InternalCluster(
   ): ZIO[Transport with Console with Clock, Error, Unit] =
     for {
       msg <- readMessage(channel)
-      _ <- OpenConnection
-            .deserialize(msg._2.payload)
+      _ <- InternalProtocol
+            .deserialize[OpenConnection](msg._2.payload)
             .foldM(
               ex => putStrLn(s"Failed11 to parse handshake response: $ex}"), {
                 case OpenConnection(_, address) =>
@@ -242,7 +245,7 @@ final class InternalCluster(
   private def handleClusterMessages(stream: Stream[Nothing, Message]) =
     stream.tap { message =>
       for {
-        payload <- InternalProtocol.deserialize(message.payload)
+        payload <- InternalProtocol.deserialize[InternalProtocol](message.payload)
         _ <- payload match {
               case Ack(ackId, state) =>
                 updateState(state) *>
@@ -293,12 +296,8 @@ object InternalCluster {
 
   private[keeper] def initCluster(port: Int) =
     for {
-      localHost <- InetAddress.localHost.toManaged_.orDie
-      socketAddress <- SocketAddress
-                        .inetSocketAddress(localHost, port)
-                        .toManaged_
-                        .orDie
-      localMember       = Member(NodeId.generateNew, socketAddress)
+      localHost         <- InetAddress.localHost.toManaged_.orDie
+      localMember       = Member(NodeId.generateNew, NodeAddress(localHost.address, port))
       _                 <- putStrLn(s"Starting node [ ${localMember.nodeId} ]").toManaged_
       nodes             <- zio.Ref.make(Map.empty[NodeId, Chunk[Byte] => UIO[Unit]]).toManaged_
       seeds             <- ZManaged.environment[Discovery with Console].flatMap(d => ZManaged.fromEffect(d.discover))
