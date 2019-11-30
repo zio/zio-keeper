@@ -1,7 +1,8 @@
 package zio.keeper
 
 import zio.keeper.GossipState.StateDiff
-import scala.collection.SortedSet
+
+import scala.collection.immutable.SortedSet
 
 case class GossipState(members: SortedSet[Member]) extends AnyVal {
 

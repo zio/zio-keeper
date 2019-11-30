@@ -41,7 +41,7 @@ trait K8DnsDiscovery extends Discovery {
 object K8DnsDiscovery {
 
   def lookup(serviceDns: InetAddress, serviceDnsTimeout: Duration) = {
-    import collection.JavaConverters._
+    import scala.jdk.CollectionConverters._
     val env = new util.Hashtable[String, String]
     env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.dns.DnsContextFactory")
     env.put(Context.PROVIDER_URL, "dns:")
