@@ -12,6 +12,7 @@ import zio.keeper.transport.{ ChannelOut, Transport }
 import zio.nio.{ InetAddress, SocketAddress }
 import zio.stm.{ STM, TMap }
 import zio.stream.{ Stream, ZStream }
+import zio.keeper.ClusterError._
 
 import scala.collection.immutable.SortedSet
 

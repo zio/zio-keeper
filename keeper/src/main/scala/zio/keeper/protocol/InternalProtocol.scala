@@ -3,7 +3,7 @@ package zio.keeper.protocol
 import java.math.BigInteger
 
 import upickle.default._
-import zio.keeper.SerializationTypeError
+import zio.keeper.SerializationError.SerializationTypeError
 import zio.keeper.{ GossipState, Member, NodeAddress, NodeId }
 import zio.{ Chunk, IO, ZIO }
 

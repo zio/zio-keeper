@@ -5,6 +5,7 @@ import zio.keeper.discovery.Discovery
 import zio.keeper.transport.{ ChannelOut, Transport }
 import zio.nio._
 import zio.stream.Stream
+import zio.keeper.SerializationError._
 
 trait Cluster {
   def nodes: UIO[List[NodeId]]

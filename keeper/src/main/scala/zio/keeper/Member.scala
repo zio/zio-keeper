@@ -4,6 +4,7 @@ import java.util.UUID
 
 import zio.ZIO
 import zio.nio.{ InetAddress, InetSocketAddress, SocketAddress }
+import zio.keeper.TransportError._
 
 final case class NodeId(value: UUID) extends AnyVal
 
@@ -30,5 +31,5 @@ final case class NodeAddress(ip: Array[Byte], port: Int) {
     (for {
       addr <- InetAddress.byAddress(ip)
       sa   <- SocketAddress.inetSocketAddress(addr, port)
-    } yield sa).mapError(TransportExceptionWrapper)
+    } yield sa).mapError(ExceptionWrapper)
 }
