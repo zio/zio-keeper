@@ -7,7 +7,7 @@ import javax.naming.directory.InitialDirContext
 import javax.naming.{ Context, NamingException }
 import zio.console._
 import zio.duration.Duration
-import zio.keeper.Error.ServiceDiscoveryError
+import zio.keeper.ServiceDiscoveryError
 import zio.nio.{ InetAddress, SocketAddress }
 import zio.{ IO, ZIO, keeper }
 

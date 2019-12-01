@@ -170,7 +170,7 @@ object Server extends zio.App {
           _    <- channel.send(data)
         } yield ()
       }.forever
-        .catchAll(ex => putStrLn("error: " + ex.getCause))
+        .catchAll(ex => putStrLn("error: " + ex.msg))
         .provide(console)
 
       _ <- putStrLn("public address: " + publicAddress.toString())
@@ -198,5 +198,5 @@ object Client extends zio.App {
       _ <- connect(publicAddress)
             .provide(tcp)
             .use(_.send(Chunk.fromArray("message from client".getBytes)).repeat(Schedule.recurs(100)))
-    } yield ()).orDie.as(0)
+    } yield ()).ignore.as(0)
 }

@@ -1,13 +1,10 @@
 package zio.keeper
 
-import java.util.concurrent.TimeUnit
-
 import zio._
 import zio.clock.Clock
 import zio.console.{ Console, putStrLn }
 import zio.duration._
 import zio.keeper.Cluster.{ readMessage, serializeMessage }
-import zio.keeper.Error.{ SendError, UnexpectedMessage }
 import zio.keeper.discovery.Discovery
 import zio.keeper.protocol.InternalProtocol
 import zio.keeper.protocol.InternalProtocol._
@@ -15,6 +12,7 @@ import zio.keeper.transport.{ ChannelOut, Transport }
 import zio.nio.{ InetAddress, SocketAddress }
 import zio.stm.{ STM, TMap }
 import zio.stream.{ Stream, ZStream }
+import zio.keeper.ClusterError._
 
 import scala.collection.immutable.SortedSet
 
@@ -24,7 +22,7 @@ final class InternalCluster(
   gossipStateRef: Ref[GossipState],
   userMessageQueue: zio.Queue[Message],
   subscribeToBroadcast: UIO[Stream[Nothing, Chunk[Byte]]],
-  publishToBroadCast: Chunk[Byte] => UIO[Unit],
+  publishToBroadcast: Chunk[Byte] => UIO[Unit],
   msgOffset: Ref[Long],
   acks: TMap[Long, Promise[Nothing, Unit]]
 ) extends Cluster {
@@ -170,17 +168,12 @@ final class InternalCluster(
     for {
       _ <- transport
             .connect(addr)
-            .timeout(Duration(10, TimeUnit.SECONDS))
-            .use { channelOpt =>
-              channelOpt.fold[ZIO[Transport with Console with Clock, Throwable, Unit]](
-                putStrLn(s"Timed out initiating connection with node [ ${addr} ]")
-              )(
-                channel =>
-                  putStrLn(s"Initiating handshake with node at ${addr}") *>
-                    handshake(channel)
-              )
+            .use { channel =>
+              putStrLn(s"Initiating handshake with node at ${addr}") *>
+                handshake(channel)
             }
-            .catchAll(ex => putStrLn(s"Failed initiating connection with node [ ${addr} ]: $ex"))
+            .mapError(HandshakeError(addr, _))
+            //            .catchAll(ex => putStrLn(s"Failed initiating connection with node [ ${addr} ]: $ex"))
             .fork
     } yield ()
 
@@ -198,13 +191,13 @@ final class InternalCluster(
   private def listenOnChannel(
     channel: ChannelOut,
     partner: Member
-  ) = {
+  ): ZIO[Transport with Console with Clock, Error, Unit] = {
 
     def handleSends(messages: Stream[Nothing, Chunk[Byte]]) =
       messages.tap { bytes =>
         channel
           .send(bytes)
-          .catchAll(ex => ZIO.fail(SendError(partner.nodeId, bytes, ex.getMessage)))
+          .catchAll(ex => ZIO.fail(SendError(partner.nodeId, bytes, ex)))
       }.runDrain
 
     (for {
@@ -287,7 +280,7 @@ final class InternalCluster(
     sendMessage(receipt, 2, data)
 
   override def broadcast(data: Chunk[Byte]): IO[Error, Unit] =
-    serializeMessage(localMember, data, 2).flatMap[Any, Error, Unit](publishToBroadCast).unit
+    serializeMessage(localMember, data, 2).flatMap[Any, Error, Unit](publishToBroadcast).unit
 
   override def receive: Stream[Error, Message] =
     zio.stream.Stream.fromQueue(userMessageQueue)
