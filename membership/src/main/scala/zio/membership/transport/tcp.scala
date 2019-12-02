@@ -10,15 +10,18 @@ import zio.membership.{ BindFailed, ExceptionThrown, RequestTimeout, TransportEr
 import java.math.BigInteger
 import zio.macros.delegate._
 import zio.membership.RequestTimeout
+import zio.membership.MaxConnectionsReached
 
 object tcp {
 
   def withTcpTransport(
+    maxConnections: Int,
     connectionTimeout: Duration,
     sendTimeout: Duration
-  ) = enrichWithManaged[Transport[SocketAddress]](tcpTransport(connectionTimeout, sendTimeout))
+  ) = enrichWithManaged[Transport[SocketAddress]](tcpTransport(maxConnections, connectionTimeout, sendTimeout))
 
   def tcpTransport(
+    maxConnections: Int,
     connectionTimeout: Duration,
     sendTimeout: Duration
   ): ZManaged[Clock, Nothing, Transport[SocketAddress]] =
@@ -28,7 +31,7 @@ object tcp {
         nextId    <- Ref.make(-1).map(_.update(_ + 1))
         finalizer <- Ref.make(Map.empty[Int, Exit[_, _] => UIO[_]])
       } yield {
-        def toConnection[E](channelManaged: ZManaged[Clock, E, AsynchronousSocketChannel]) =
+        def toConnection(channelManaged: ZManaged[Clock, TransportError, AsynchronousSocketChannel]) =
           (for {
             writeLock <- Semaphore.make(1)
             readLock  <- Semaphore.make(1)
@@ -70,13 +73,18 @@ object tcp {
               }
               .provide(env)
 
-            ZIO.uninterruptibleMask { restore =>
-              for {
-                res        <- managed.reserve
-                connection <- restore(res.acquire).onError(c => res.release(Exit.halt(c)))
-                _          <- finalizer.update(_ + (id -> res.release))
-              } yield connection
-            }
+            for {
+              overCapacity <- finalizer.get.map(_.size >= maxConnections) // it's fine to go over maximum for a short time
+              connection <- if (overCapacity) ZIO.fail(MaxConnectionsReached(maxConnections)) else {
+                ZIO.uninterruptibleMask { restore =>
+                  for {
+                    res        <- managed.reserve
+                    connection <- restore(res.acquire).onError(c => res.release(Exit.halt(c)))
+                    _          <- finalizer.update(_ + (id -> res.release))
+                  } yield connection
+                }
+              }
+            } yield connection
           }).flatten
 
         Reservation(
@@ -85,7 +93,7 @@ object tcp {
               val transport = new Transport.Service[Any, SocketAddress] {
 
                 override def connect(to: SocketAddress) =
-                  toConnection(AsynchronousSocketChannel().tapM(_.connect(to))).mapError(ExceptionThrown(_))
+                  toConnection(AsynchronousSocketChannel().tapM(_.connect(to)).mapError(ExceptionThrown(_)))
 
                 override def bind(addr: SocketAddress) =
                   ZStream
@@ -95,8 +103,7 @@ object tcp {
                         .mapError(BindFailed(addr, _))
                         .map { server =>
                           ZStream
-                            .repeatEffect(toConnection(server.accept))
-                            .mapError(ExceptionThrown(_))
+                            .repeatEffect(toConnection(server.accept.mapError(BindFailed(addr, _))))
                         }
                     }
               }

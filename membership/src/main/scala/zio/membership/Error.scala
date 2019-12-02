@@ -8,8 +8,8 @@ sealed abstract class Error(msg: String = "", cause: Throwable = null) extends E
 
 sealed abstract class TransportError(msg: String = "", cause: Throwable = null) extends Error(msg, cause)
 
-final case class ExceptionThrown(exc: Throwable) extends TransportError(cause = exc)
-
+final case class MaxConnectionsReached(n: Int)     extends TransportError(msg = s"Reached max connections: $n")
+final case class ExceptionThrown(exc: Throwable)   extends TransportError(cause = exc)
 final case class RequestTimeout(timeout: Duration) extends TransportError(msg = s"Request timeout $timeout.")
 
 final case class BindFailed(addr: SocketAddress, exc: Throwable)

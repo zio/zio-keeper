@@ -15,7 +15,7 @@ object TransportSpec
       // todo: actually find free port
       val freePort = ZIO.succeed(8010)
 
-      val withTransport = tcp.withTcpTransport(10.seconds, 10.seconds)
+      val withTransport = tcp.withTcpTransport(10, 10.seconds, 10.seconds)
 
       val environment =
         for {
