@@ -15,7 +15,7 @@ object TransportSpec
       // todo: actually find free port
       val freePort = ZIO.succeed(8010)
 
-      val withTransport = tcp.withTcpTransport(10, 10.seconds, 10.seconds)
+      val withTransport = tcp.withTcpTransport(10.seconds, 10.seconds)
 
       val environment =
         for {
@@ -34,7 +34,7 @@ object TransportSpec
                 trans  <- ZIO.environment[Transport[SocketAddress]].map(_.transport)
                 port   <- freePort
                 addr   <- SocketAddress.inetSocketAddress(port)
-                chunk  <- trans.bind(addr).take(1).runCollect.map(_.head).fork
+                chunk  <- trans.bind(addr).take(1).flatMap(_.receive.take(1)).runCollect.map(_.head).fork
                 _      <- trans.send(addr, payload).retry(Schedule.spaced(10.milliseconds))
                 result <- chunk.join
               } yield assert(result, equalTo(payload)))
@@ -48,7 +48,7 @@ object TransportSpec
             latch  <- Promise.make[Nothing, Unit]
             port   <- freePort.map(_ + 1)
             addr   <- SocketAddress.inetSocketAddress(port)
-            fiber  <- trans.bind(addr).take(2).tap(_ => latch.succeed(())).runDrain.fork
+            fiber  <- trans.bind(addr).take(1).flatMap(_.receive.take(2).tap(_ => latch.succeed(()))).runDrain.fork
             _      <- trans.send(addr, payload).retry(Schedule.spaced(10.milliseconds))
             result <- latch.await *> fiber.interrupt
           } yield assert(result, isInterrupted))

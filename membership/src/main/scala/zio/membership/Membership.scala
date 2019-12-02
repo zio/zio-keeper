@@ -35,17 +35,17 @@ object Membership {
     /**
      * Send a message to a node.
      */
-    def send[R1 <: R, A](to: T, payload: A)(implicit ev: ByteCodec[R1, A]): ZIO[R1, Error, Unit]
+    def send[R1 <: R, A: ByteCodec](to: T, payload: A): ZIO[R1, Error, Unit]
 
     /**
      * Send a message to all nodes.
      */
-    def receive: ZStream[R, Error, Message]
+    def broadcast[R1 <: R, A: ByteCodec](payload: A): ZIO[R1, Error, Unit]
 
     /**
      * Send a message to a node.
      */
-    def receive[R1 <: R, A](implicit ev: ByteCodec[R1, A]): ZStream[R1, Error, A]
+    def receive[R1 <: R, A: ByteCodec]: ZStream[R1, Error, A]
   }
 
 }

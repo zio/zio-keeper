@@ -10,12 +10,10 @@ trait Transport[T] {
 
 object Transport {
 
-  /**
-   * Our low level transport interface that allows sending messages.
-   * Also allows listening to messages sends from other nodes.
-   */
   trait Service[R, T] {
-    def send(to: T, data: Chunk[Byte]): ZIO[R, TransportError, Unit]
-    def bind(addr: T): ZStream[R, TransportError, Chunk[Byte]]
+    def send(to: T, data: Chunk[Byte]): ZIO[R, TransportError, Unit] =
+      connect(to).use(_.send(data))
+    def connect(to: T): ZManaged[R, TransportError, Connection[R, TransportError, Chunk[Byte]]]
+    def bind(addr: T): ZStream[R, TransportError, Connection[R, TransportError, Chunk[Byte]]]
   }
 }

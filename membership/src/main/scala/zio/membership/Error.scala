@@ -15,4 +15,5 @@ final case class RequestTimeout(timeout: Duration) extends TransportError(msg = 
 final case class BindFailed(addr: SocketAddress, exc: Throwable)
     extends TransportError(msg = s"Failed binding to address $addr.", cause = exc)
 
-final case class DeserializationError(msg: String) extends Error(msg = msg)
+final case class SerializationError(msg: String, cause: Throwable = null) extends Error(msg, cause)
+final case class DeserializationError(msg: String, cause: Throwable = null) extends Error(msg, cause)

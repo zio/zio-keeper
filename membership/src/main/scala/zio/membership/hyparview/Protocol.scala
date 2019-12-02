@@ -1,4 +1,6 @@
 package zio.membership.hyparview
+
+import upickle.default._
 import zio.membership.ByteCodec
 import zio._
 
@@ -21,6 +23,11 @@ object Protocol {
     alive: Boolean
   ) extends Protocol[T]
 
+  object Disconnect {
+    implicit def rw[T: ReadWriter]: ReadWriter[Disconnect[T]] = macroRW[Disconnect[T]]
+    implicit def codec[T](implicit ev: ReadWriter[Disconnect[T]]): ByteCodec[Disconnect[T]] = ByteCodec.fromReadWriter
+  }
+
   final case class Join[T](
     sender: T
   ) extends Protocol[T]
@@ -30,10 +37,6 @@ object Protocol {
     originalSender: T,
     ttl: TimeToLive
   ) extends Protocol[T]
-
-  object ForwardJoin {
-    implicit def codec[T]: ByteCodec[Any, ForwardJoin[T]] = ???
-  }
 
   final case class Shuffle[T](
     sender: T,
