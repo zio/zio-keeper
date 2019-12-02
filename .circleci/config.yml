@@ -79,8 +79,8 @@ mdoc: &mdoc
     - run:
         name: Generate documentation
         command: |
-          ./sbt doc
-          ./sbt ++${SCALA_VERSION}! docs/mdoc
+          ./sbt sbt keeper/doc membership/doc
+          ./sbt ++${SCALA_VERSION}! mdoc
     - <<: *clean_cache
     - <<: *save_cache
 
