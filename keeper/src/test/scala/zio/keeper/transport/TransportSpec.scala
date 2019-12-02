@@ -53,7 +53,7 @@ object TransportSpec
                 port         <- freePort
                 addr         <- SocketAddress.inetSocketAddress(port)
                 startPromise <- Promise.make[Nothing, Unit]
-                chunk        <- bindAndWaitForValue(addr, startPromise).fork
+                  chunk        <- bindAndWaitForValue(addr, startPromise).fork
                 _            <- startPromise.await
                 _            <- connect(addr).use(_.send(payload).retry(Schedule.spaced(10.milliseconds)))
                 result       <- chunk.join
@@ -64,9 +64,10 @@ object TransportSpec
           environment >>> Live.live(for {
             port <- freePort.map(_ + 2)
             addr <- SocketAddress.inetSocketAddress(port)
-            result <- bind(addr)(channel => channel.close.ignore).use_(
-                       connect(addr).use(client => client.read).either
-                     )
+            result <- bind(addr)(channel => channel.close.ignore.forever).use_(
+              connect(addr).use(client => client.read.ignore) *>
+                connect(addr).use(client => client.read).either
+            )
           } yield (result match {
             case Right(_) =>
               assert(false, equalTo(true))

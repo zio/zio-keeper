@@ -5,7 +5,9 @@ import zio.nio.SocketAddress
 
 import scala.reflect.ClassTag
 
-sealed abstract class Error(val msg: String = "")
+sealed abstract class Error(val msg: String = "") {
+  override def toString: String = msg
+}
 
 sealed abstract class SerializationError(msg: String = "") extends Error(msg = msg)
 
@@ -35,6 +37,8 @@ object ClusterError {
       extends ClusterError(msg = s"Connection handshake for $addr failed with ${error.msg}")
 
   final case class UnexpectedMessage(message: Message) extends ClusterError
+
+  final case class UnknownNode(nodeId: NodeId) extends ClusterError(msg = nodeId + " is not in cluster")
 }
 
 sealed abstract class TransportError(msg: String = "") extends Error(msg = msg)

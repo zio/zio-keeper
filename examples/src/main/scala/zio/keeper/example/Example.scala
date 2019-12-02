@@ -7,11 +7,11 @@ import zio.console._
 import zio.duration._
 import zio.keeper.Cluster.Credentials
 import zio.keeper.discovery.Discovery
-import zio.keeper.{ Cluster, Error, transport }
+import zio.keeper.{Cluster, Error, transport}
 import zio.macros.delegate._
-import zio.nio.{ InetAddress, SocketAddress }
+import zio.nio.{InetAddress, SocketAddress}
 import zio.random.Random
-import zio.{ Chunk, IO, Schedule, ZIO }
+import zio.{Chunk, IO, Schedule, ZIO, ZManaged}
 
 object Node1 extends zio.ManagedApp {
 
@@ -33,7 +33,7 @@ object Node1 extends zio.ManagedApp {
     .flatMap(
       c =>
         (zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS)) *>
-          c.broadcast(Chunk.fromArray("foo".getBytes)).map(_ => c)).toManaged_
+          c.broadcast(Chunk.fromArray("Node1".getBytes)).map(_ => c)).toManaged_
     )
     .flatMap(
       c =>
@@ -51,7 +51,7 @@ object Node1 extends zio.ManagedApp {
     env.toManaged_
       .flatMap(e => appLogic.provide(e))
       .fold(ex => {
-        println(ex)
+        println("eeee: " + ex.msg)
         1
       }, _ => 0)
 
@@ -80,7 +80,7 @@ object Node2 extends zio.ManagedApp {
     .flatMap(
       c =>
         (zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS)) *>
-          c.broadcast(Chunk.fromArray("bar".getBytes)).as(c)).toManaged_
+          c.broadcast(Chunk.fromArray("Node2".getBytes)).as(c)).toManaged_
     )
     .flatMap(
       c =>
@@ -114,7 +114,7 @@ object Node3 extends zio.ManagedApp {
 
         override val discover: IO[Error, Set[SocketAddress]] =
           InetAddress.localHost
-            .flatMap(addr => SocketAddress.inetSocketAddress(addr, 5558))
+            .flatMap(addr => SocketAddress.inetSocketAddress(addr, 5557))
             .map(Set(_: SocketAddress))
             .orDie
       }
@@ -126,7 +126,7 @@ object Node3 extends zio.ManagedApp {
     .flatMap(
       c =>
         (zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS)) *>
-          c.broadcast(Chunk.fromArray("bar1".getBytes)).as(c)).toManaged_
+          c.broadcast(Chunk.fromArray("Node3".getBytes)).as(c)).toManaged_
     )
     .flatMap(
       c =>
@@ -175,12 +175,11 @@ object Server extends zio.App {
 
       _ <- putStrLn("public address: " + publicAddress.toString())
       //TODO useForever caused dead code so we should find other way to block this from exit.
-      _ <- bind(publicAddress)(handler)
+      x <- bind(publicAddress)(handler)
             .provide(tcp)
-            .useForever
-            .fork
+          .use(ch => ZIO.never.ensuring(ch.close.ignore))
 
-    } yield ()).as(0)
+    } yield ()).ignore.as(0)
 }
 
 object Client extends zio.App {
@@ -199,4 +198,11 @@ object Client extends zio.App {
             .provide(tcp)
             .use(_.send(Chunk.fromArray("message from client".getBytes)).repeat(Schedule.recurs(100)))
     } yield ()).ignore.as(0)
+}
+
+object ToRemove extends zio.App {
+  override def run(args: List[String]) =
+    ZManaged.make(putStrLn("action"))(_ => putStrLn("close")).flatMap(
+      _ => ZManaged.make(putStrLn("action1"))(_ => putStrLn("close1")).withEarlyRelease.map(_._1)
+    ).use(close => close *> ZIO.never).as(0)
 }
