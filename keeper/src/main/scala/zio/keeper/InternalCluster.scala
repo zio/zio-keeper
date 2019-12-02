@@ -245,7 +245,7 @@ final class InternalCluster(
       .catchAll { ex =>
         putStrLn(s"read message error: $ex")
       }
-    loop.repeat(Schedule.doUntilM(_ => channel.isOpen.catchAll[Any, Nothing, Boolean](_ => ZIO.succeed(false))))
+    loop.repeat(Schedule.doWhileM(_ => channel.isOpen.catchAll[Any, Nothing, Boolean](_ => ZIO.succeed(false))))
   }
 
   private def handleClusterMessages(stream: Stream[Nothing, Message]) =
