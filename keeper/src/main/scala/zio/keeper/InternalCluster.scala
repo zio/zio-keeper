@@ -54,12 +54,16 @@ final class InternalCluster(
           }
     } yield ()
 
-  private def sendInternalMessage(to: ChannelOut, msg: InternalProtocol) =
+
+  private def sendInternalMessage(to: ChannelOut, msg: InternalProtocol) = {
     for {
       payload <- msg.serialize
       msg     <- serializeMessage(localMember, payload, 1)
-      _       <- to.send(msg)
+      _       <- to.send(msg).ignore
     } yield ()
+  }.catchAll { ex =>
+    putStrLn(s"error during sending message: $ex")
+  }
 
   private def expects[R, A](
     channel: ChannelOut
@@ -239,9 +243,9 @@ final class InternalCluster(
           }
       }
       .catchAll { ex =>
-        putStrLn(s"channel close because of: $ex") //*> channel.close
+        putStrLn(s"read message error: $ex")
       }
-    loop.whenM(channel.isOpen.catchAll[Any, Nothing, Boolean](_ => ZIO.succeed(false))).forever
+    loop.repeat(Schedule.doUntilM(_ => channel.isOpen.catchAll[Any, Nothing, Boolean](_ => ZIO.succeed(false))))
   }
 
   private def handleClusterMessages(stream: Stream[Nothing, Message]) =

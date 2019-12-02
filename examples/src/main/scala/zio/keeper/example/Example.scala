@@ -33,7 +33,7 @@ object Node1 extends zio.ManagedApp {
     .flatMap(
       c =>
         (zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS)) *>
-          c.broadcast(Chunk.fromArray("Node1".getBytes)).map(_ => c)).toManaged_
+          c.broadcast(Chunk.fromArray("Node1".getBytes)).ignore.as(c)).toManaged_
     )
     .flatMap(
       c =>
@@ -41,7 +41,7 @@ object Node1 extends zio.ManagedApp {
           .foreach(
             n =>
               putStrLn(new String(n.payload.toArray))
-                *> c.send(n.payload, n.sender)
+                *> c.send(n.payload, n.sender).ignore
                 *> zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS))
           )
           .toManaged_
@@ -80,7 +80,7 @@ object Node2 extends zio.ManagedApp {
     .flatMap(
       c =>
         (zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS)) *>
-          c.broadcast(Chunk.fromArray("Node2".getBytes)).as(c)).toManaged_
+          c.broadcast(Chunk.fromArray("Node2".getBytes)).ignore.as(c)).toManaged_
     )
     .flatMap(
       c =>
@@ -88,7 +88,7 @@ object Node2 extends zio.ManagedApp {
           .foreach(
             n =>
               putStrLn(new String(n.payload.toArray))
-                *> c.send(n.payload, n.sender)
+                *> c.send(n.payload, n.sender).ignore
                 *> zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS))
           )
           .toManaged_
@@ -126,7 +126,7 @@ object Node3 extends zio.ManagedApp {
     .flatMap(
       c =>
         (zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS)) *>
-          c.broadcast(Chunk.fromArray("Node3".getBytes)).as(c)).toManaged_
+          c.broadcast(Chunk.fromArray("Node3".getBytes)).ignore.as(c)).toManaged_
     )
     .flatMap(
       c =>
@@ -134,7 +134,7 @@ object Node3 extends zio.ManagedApp {
           .foreach(
             n =>
               putStrLn(new String(n.payload.toArray))
-                *> c.send(n.payload, n.sender)
+                *> c.send(n.payload, n.sender).ignore
                 *> zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS))
           )
           .toManaged_
@@ -175,7 +175,7 @@ object Server extends zio.App {
 
       _ <- putStrLn("public address: " + publicAddress.toString())
       //TODO useForever caused dead code so we should find other way to block this from exit.
-      x <- bind(publicAddress)(handler)
+      _ <- bind(publicAddress)(handler)
             .provide(tcp)
           .use(ch => ZIO.never.ensuring(ch.close.ignore))
 
