@@ -24,7 +24,7 @@ object Protocol {
   ) extends Protocol[T]
 
   object Disconnect {
-    implicit def rw[T: ReadWriter]: ReadWriter[Disconnect[T]] = macroRW[Disconnect[T]]
+    implicit def rw[T: ReadWriter]: ReadWriter[Disconnect[T]]                               = macroRW[Disconnect[T]]
     implicit def codec[T](implicit ev: ReadWriter[Disconnect[T]]): ByteCodec[Disconnect[T]] = ByteCodec.fromReadWriter
   }
 
