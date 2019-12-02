@@ -7,8 +7,8 @@
   "resources-sidebar": {
     "Resources": [
       "resources/resources_index",
-      "resources/resources_publications",
-      "resources/resources_talks"
+      "resources/resources_gossip",
+      "resources/resources_crdts"
     ]
   }
 }
