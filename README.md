@@ -1,7 +1,6 @@
 # ZIO keeper
 
 [![CircleCI][badge-ci]][link-ci]
-[![Gitter][badge-gitter]][link-gitter]
 
 ZIO keeper is a purely-functional, type-safe library for managing distributed state in a strong
 eventually consistent manner, backed by [Conflict-free Replicated Data Types][link-crdts-wiki] and
@@ -49,11 +48,9 @@ Production experiences:
 - [Lifeguard: Local Health Awareness for More Accurate Failure Detection][link-lifeguard]
 
 [badge-ci]: https://circleci.com/gh/zio/zio-keeper/tree/master.svg?style=svg
-[badge-gitter]: https://badges.gitter.im/zio/zio-keeper.svg
 [link-crdts-wiki]: https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type
 [link-zio]: https://zio.dev
 [link-ci]: https://circleci.com/gh/zio/zio-keeper/tree/master
-[link-gitter]: https://gitter.im/zio/zio-keeper?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge
 [link-dsffap]: http://book.mixu.net/distsys/single-page.html
 [link-crdts-paper]: https://hal.inria.fr/hal-00932836/file/CRDTs_SSS-2011.pdf
 [link-crdts-in-practice]: https://www.youtube.com/watch?v=xxjHC3yLDqw
