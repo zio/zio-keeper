@@ -1,15 +1,14 @@
 {
-  "essentials-sidebar": {
-    "Essentials": [
-      "essentials/essentials_index",
-      "essentials/essentials_files",
-      "essentials/essentials_sockets"
+  "overview-sidebar": {
+    "Overview": [
+      "overview/overview_index"
     ]
   },
-  "usecases-sidebar": {
-    "Use Cases": [
-      "usecases/usecases_index",
-      "usecases/usecases_client_server"
+  "resources-sidebar": {
+    "Resources": [
+      "resources/resources_index",
+      "resources/resources_publications",
+      "resources/resources_talks"
     ]
   }
 }
