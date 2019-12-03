@@ -1,5 +1,5 @@
 ---
-id: resources_gossip
+id: library_gossip
 title: "Gossip protocols"
 ---
 

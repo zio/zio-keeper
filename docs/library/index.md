@@ -1,5 +1,5 @@
 ---
-id: resources_index
+id: library_index
 title: "Summary"
 ---
 

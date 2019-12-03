@@ -1,5 +1,5 @@
 ---
-id: resources_crdts
+id: library_crdts
 title: "Conflict-free Replicated Data Types"
 ---
 
