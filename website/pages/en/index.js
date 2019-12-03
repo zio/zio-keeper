@@ -93,15 +93,15 @@ class Index extends React.Component {
       <Block layout="threeColumn">
         {[
           {
-            content: '',
+            content: 'Design complex systems by composing the available building blocks',
             title: 'Composable',
           },
           {
-            content: '',
+            content: 'Build apps with automated failure recovery',
             title: 'Resilient',
           },
           {
-            content: '',
+            content: 'Benefit from security guarantees built into the library core',
             title: 'Secure',
           },
         ]}
