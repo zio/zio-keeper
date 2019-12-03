@@ -8,6 +8,8 @@ import zio.stream.Stream
 import zio.keeper.SerializationError._
 
 trait Cluster {
+  def localMember: Member
+
   def nodes: UIO[List[NodeId]]
 
   def send(data: Chunk[Byte], receipt: NodeId): IO[Error, Unit]

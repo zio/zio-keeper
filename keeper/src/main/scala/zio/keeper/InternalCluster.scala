@@ -17,7 +17,7 @@ import zio.stream.{ Stream, ZStream }
 import scala.collection.immutable.SortedSet
 
 final class InternalCluster(
-  localMember: Member,
+  override val localMember: Member,
   nodeChannels: Ref[Map[NodeId, ChannelOut]],
   gossipStateRef: Ref[GossipState],
   userMessageQueue: zio.Queue[Message],

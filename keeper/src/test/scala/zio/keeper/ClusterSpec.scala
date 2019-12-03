@@ -1,33 +1,50 @@
 package zio.keeper
 
-import zio.ZIO
-import zio.clock.Clock
-import zio.console.Console
-import zio.keeper.transport.tcp
-import zio.macros.delegate.enrichWith
-import zio.test.DefaultRunnableSpec
-import zio.test.environment.{Live, TestClock, TestConsole}
 import zio.duration._
-import zio.test._
+import zio.keeper.Cluster.Credentials
+import zio.keeper.discovery.Discovery
+import zio.keeper.transport.tcp
+import zio.macros.delegate.{enrichWith, _}
+import zio.nio.SocketAddress
 import zio.test.Assertion._
-import zio.macros.delegate._
+import zio.test.environment.{TestClock, TestConsole, TestRandom}
+import zio.test.{DefaultRunnableSpec, _}
+import zio.{IO, Promise, Ref, ZIO}
 
 object ClusterSpec extends DefaultRunnableSpec({
 
-  val freePort = ZIO.succeed(8010)
-
   val withTransport = tcp.withTcpTransport(10.seconds, 10.seconds)
 
-  val environment =
+  def environment(clusterMembers: Ref[Set[Member]]) =
     for {
-      test <- (ZIO.environment[TestClock with TestConsole] @@ withTransport)
-      live <- (Live.live(ZIO.environment[Clock with Console]) @@ withTransport).flatMap(Live.make)
-      env  <- ZIO.succeed(live) @@ enrichWith(test)
-    } yield env
+      transport <- (ZIO.environment[TestClock with TestConsole with TestRandom] @@ withTransport)
+      config: Credentials with Discovery = new Credentials with Discovery {
+        override val discover: IO[Error, Set[SocketAddress]] =
+          for {
+            members <- clusterMembers.get
+            addrs <- ZIO.collectAll(members.map(_.addr.socketAddress))
+          } yield addrs.toSet
+      }
+      result <- ZIO.succeed(config) @@ enrichWith(transport)
+//      live <- (Live.live(ZIO.environment[Clock with Console with Discovery with Credentials]) @@ enrichWith(result)).flatMap(Live.make)
+//      env  <- ZIO.succeed(result) @@ enrichWith(result)
+    } yield result
 
+  def createCluster = Cluster
+    .join(0)
 
 
   testM("blah"){
-    assertM(ZIO.unit, equalTo("a"))
+    Ref.make(Set.empty[Member]).flatMap(membersRef =>
+      environment(membersRef) >>>
+        (for {
+          shutdown <- Promise.make[Nothing, Unit]
+          _ <- createCluster.use(c => membersRef.update(_ + c.localMember) *> shutdown.await)
+          _ <- shutdown.succeed(())
+        } yield assert("ZIO.unit", equalTo("a")))
+
+    )
+
+//    assertM(ZIO.unit, equalTo("ss"))
   }
 })
