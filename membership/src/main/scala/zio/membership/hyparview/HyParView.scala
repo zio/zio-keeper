@@ -5,6 +5,7 @@ import zio.stm._
 import zio.membership.transport.{ ChunkConnection, Transport }
 import zio.random.Random
 import zio.macros.delegate._
+import com.github.ghik.silencer.silent
 import zio.console.Console
 import zio.membership.Membership
 import zio.membership.ByteCodec
@@ -13,6 +14,7 @@ import zio.clock.Clock
 
 object HyParView {
 
+  @silent("deprecated")
   def apply[R <: Transport[T] with Random with Console with Clock, T](
     localAddr: T,
     activeViewCapactiy: Int,
