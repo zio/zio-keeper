@@ -40,13 +40,14 @@ object Protocol {
 
   final case class Shuffle[T](
     sender: T,
+    originalSender: T,
     activeNodes: List[T],
     passiveNodes: List[T],
     ttl: TimeToLive
   ) extends Protocol[T]
 
   final case class ShuffleReply[T](
-    sender: T,
-    passiveNodes: List[T]
+    passiveNodes: List[T],
+    sentOriginally: List[T]
   ) extends Protocol[T]
 }

@@ -75,15 +75,16 @@ object tcp {
 
             for {
               overCapacity <- finalizer.get.map(_.size >= maxConnections) // it's fine to go over maximum for a short time
-              connection <- if (overCapacity) ZIO.fail(MaxConnectionsReached(maxConnections)) else {
-                ZIO.uninterruptibleMask { restore =>
-                  for {
-                    res        <- managed.reserve
-                    connection <- restore(res.acquire).onError(c => res.release(Exit.halt(c)))
-                    _          <- finalizer.update(_ + (id -> res.release))
-                  } yield connection
-                }
-              }
+              connection <- if (overCapacity) ZIO.fail(MaxConnectionsReached(maxConnections))
+                           else {
+                             ZIO.uninterruptibleMask { restore =>
+                               for {
+                                 res        <- managed.reserve
+                                 connection <- restore(res.acquire).onError(c => res.release(Exit.halt(c)))
+                                 _          <- finalizer.update(_ + (id -> res.release))
+                               } yield connection
+                             }
+                           }
             } yield connection
           }).flatten
 

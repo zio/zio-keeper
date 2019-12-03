@@ -63,28 +63,29 @@ object TransportSpec
           }
         },
         testM("can receive messages after bind stream is closed") {
-          checkM(Gen.listOf(Gen.anyByte)) { bytes =>
-            val payload = Chunk.fromIterable(bytes)
+          checkM(Gen.listOf(Gen.anyByte)) {
+            bytes =>
+              val payload = Chunk.fromIterable(bytes)
 
-            environment.use {
-              env =>
-                env.live.provide {
-                  for {
-                    trans <- ZIO.environment[Transport[SocketAddress]].map(_.transport)
-                    port  <- freePort.map(_ + 2)
-                    addr  <- SocketAddress.inetSocketAddress(port)
-                    fiber <- trans
-                              .bind(addr)
-                              .take(1)
-                              .runHead
-                              .map(_.get)
-                              .flatMap(_.receive.take(1).runCollect.map(_.head))
-                              .fork
-                    _      <- trans.send(addr, payload).retry(Schedule.spaced(10.milliseconds))
-                    result <- fiber.join
-                  } yield assert(result, equalTo(payload))
-                }
-            }
+              environment.use {
+                env =>
+                  env.live.provide {
+                    for {
+                      trans <- ZIO.environment[Transport[SocketAddress]].map(_.transport)
+                      port  <- freePort.map(_ + 2)
+                      addr  <- SocketAddress.inetSocketAddress(port)
+                      fiber <- trans
+                                .bind(addr)
+                                .take(1)
+                                .runHead
+                                .map(_.get)
+                                .flatMap(_.receive.take(1).runCollect.map(_.head))
+                                .fork
+                      _      <- trans.send(addr, payload).retry(Schedule.spaced(10.milliseconds))
+                      result <- fiber.join
+                    } yield assert(result, equalTo(payload))
+                  }
+              }
           }
         }
       )
