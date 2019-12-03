@@ -13,26 +13,32 @@ import upickle.default._
 sealed trait Protocol[T]
 
 object Protocol {
-  def tagged[T](implicit
-  c1: ByteCodec[Disconnect[T]],
-  c2: ByteCodec[ForwardJoin[T]],
-  c3: ByteCodec[Shuffle[T]]
-): Tagged[Protocol[T]] =
-  Tagged.instance({
-    case _: Disconnect[T] => 10
-    case _: ForwardJoin[T] => 11
-    case _: Shuffle[T] => 12
-  }, {
-    case 10 => c1.asInstanceOf[ByteCodec[Protocol[T]]]
-    case 11 => c2.asInstanceOf[ByteCodec[Protocol[T]]]
-    case 12 => c3.asInstanceOf[ByteCodec[Protocol[T]]]
-  })
+
+  def tagged[T](
+    implicit
+    c1: ByteCodec[Disconnect[T]],
+    c2: ByteCodec[ForwardJoin[T]],
+    c3: ByteCodec[Shuffle[T]]
+  ): Tagged[Protocol[T]] =
+    Tagged.instance(
+      {
+        case _: Disconnect[T]  => 10
+        case _: ForwardJoin[T] => 11
+        case _: Shuffle[T]     => 12
+      }, {
+        case 10 => c1.asInstanceOf[ByteCodec[Protocol[T]]]
+        case 11 => c2.asInstanceOf[ByteCodec[Protocol[T]]]
+        case 12 => c3.asInstanceOf[ByteCodec[Protocol[T]]]
+      }
+    )
 
   final case class Disconnect[T](
     sender: T,
     alive: Boolean
   ) extends Protocol[T]
+
   object Disconnect {
+
     def codec[T: ReadWriter]: ByteCodec[Disconnect[T]] =
       ByteCodec.fromReadWriter(macroRW[Disconnect[T]])
   }
@@ -44,6 +50,7 @@ object Protocol {
   ) extends Protocol[T]
 
   object ForwardJoin {
+
     def codec[T: ReadWriter]: ByteCodec[ForwardJoin[T]] =
       ByteCodec.fromReadWriter(macroRW[ForwardJoin[T]])
   }
@@ -55,7 +62,9 @@ object Protocol {
     passiveNodes: List[T],
     ttl: TimeToLive
   ) extends Protocol[T]
+
   object Shuffle {
+
     def codec[T: ReadWriter]: ByteCodec[Shuffle[T]] =
       ByteCodec.fromReadWriter(macroRW[Shuffle[T]])
   }
@@ -64,13 +73,8 @@ object Protocol {
     con: ChunkConnection
   )(
     implicit
-    ev1: ByteCodec[Protocol.Disconnect[T]],
-    ev2: ByteCodec[Protocol.ForwardJoin[T]],
-    ev3: ByteCodec[Protocol.Shuffle[T]],
-    ev4: ByteCodec[InitialProtocol.ForwardJoinReply[T]],
-    ev5: ByteCodec[InitialProtocol.ShuffleReply[T]],
-    ev6: Tagged[Protocol[T]],
-    ev7: Tagged[InitialProtocol[T]]
+    ev1: Tagged[Protocol[T]],
+    ev2: Tagged[InitialProtocol[T]]
   ): ZIO[Console with Env[T] with Transport[T], Nothing, Handler] =
     con.receive
       .foreach { msg =>
@@ -101,13 +105,8 @@ object Protocol {
     msg: Protocol.ForwardJoin[T]
   )(
     implicit
-    ev1: ByteCodec[Protocol.Disconnect[T]],
-    ev2: ByteCodec[Protocol.ForwardJoin[T]],
-    ev3: ByteCodec[Protocol.Shuffle[T]],
-    ev4: ByteCodec[InitialProtocol.ForwardJoinReply[T]],
-    ev5: ByteCodec[InitialProtocol.ShuffleReply[T]],
-    ev6: Tagged[Protocol[T]],
-    ev7: Tagged[InitialProtocol[T]]
+    ev1: Tagged[Protocol[T]],
+    ev2: Tagged[InitialProtocol[T]]
   ) =
     ZIO.environment[Env[T]].map(_.env).flatMap { env =>
       val accept = for {
@@ -149,7 +148,8 @@ object Protocol {
               sentNodes  = msg.originalSender :: (msg.activeNodes ++ msg.passiveNodes)
               replyNodes <- env.selectN(passive, env.cfg.shuffleNActive + env.cfg.shuffleNPassive)
               _          <- env.addAllToPassiveView(sentNodes)
-            } yield Tagged.write[InitialProtocol[T]](InitialProtocol.ShuffleReply(replyNodes, sentNodes))
+            } yield Tagged
+              .write[InitialProtocol[T]](InitialProtocol.ShuffleReply(replyNodes, sentNodes))
               .flatMap(m => ZIO.accessM[Transport[T]](_.transport.send(msg.originalSender, m)))
           case (_, Some(ttl)) =>
             for {

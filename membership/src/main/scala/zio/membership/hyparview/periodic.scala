@@ -1,7 +1,6 @@
 package zio.membership.hyparview
 
 import zio._
-import zio.membership.ByteCodec
 import zio.membership.transport.Transport
 import zio.stm._
 import zio.console.Console
@@ -10,13 +9,8 @@ object periodic {
 
   private[hyparview] def doNeighbor[T](
     implicit
-    ev1: ByteCodec[Protocol.Disconnect[T]],
-    ev2: ByteCodec[Protocol.ForwardJoin[T]],
-    ev3: ByteCodec[Protocol.Shuffle[T]],
-    ev4: ByteCodec[InitialProtocol.ForwardJoinReply[T]],
-    ev5: ByteCodec[InitialProtocol.ShuffleReply[T]],
-    ev6: Tagged[Protocol[T]],
-    ev7: Tagged[InitialProtocol[T]]
+    ev1: Tagged[Protocol[T]],
+    ev2: Tagged[InitialProtocol[T]]
   ): ZIO[Console with Env[T] with Transport[T], Nothing, Unit] =
     ZIO.environment[Env[T]].map(_.env).flatMap { env =>
       for {

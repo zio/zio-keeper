@@ -13,13 +13,8 @@ package object hyparview {
     con: ChunkConnection
   )(
     implicit
-    ev1: ByteCodec[Protocol.Disconnect[T]],
-    ev2: ByteCodec[Protocol.ForwardJoin[T]],
-    ev3: ByteCodec[Protocol.Shuffle[T]],
-    ev4: ByteCodec[InitialProtocol.ForwardJoinReply[T]],
-    ev5: ByteCodec[InitialProtocol.ShuffleReply[T]],
-    ev6: Tagged[Protocol[T]],
-    ev7: Tagged[InitialProtocol[T]]
+    ev1: Tagged[Protocol[T]],
+    ev2: Tagged[InitialProtocol[T]]
   ) =
     for {
       dropped <- Env.addNodeToActiveView(to, con)
@@ -50,7 +45,11 @@ package object hyparview {
                      _ <- env.activeView.delete(node)
                      _ <- env.addNodeToPassiveView(node)
                    } yield for {
-                     _ <- Tagged.write[Protocol[T]](Protocol.Disconnect(env.myself, shutDown)).flatMap(con.send).ignore.unit
+                     _ <- Tagged
+                           .write[Protocol[T]](Protocol.Disconnect(env.myself, shutDown))
+                           .flatMap(con.send)
+                           .ignore
+                           .unit
                      _ <- con.close
                    } yield ()
                  case None => STM.succeed(ZIO.unit)

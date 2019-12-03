@@ -14,8 +14,9 @@ object Tagged {
   def apply[A](implicit ev: Tagged[A]) = ev
 
   def instance[A](f: A => Byte, g: PartialFunction[Byte, ByteCodec[A]]): Tagged[A] =
-    new Tagged[A]  {
+    new Tagged[A] {
       def tagOf(a: A) = f(a)
+
       def codecFor(tag: Byte) =
         if (g.isDefinedAt(tag)) ZIO.succeed(g(tag))
         else ZIO.fail(DeserializationError(s"Unknown tag '$tag'."))
@@ -23,7 +24,8 @@ object Tagged {
 
   private[hyparview] def read[A](
     from: Chunk[Byte]
-  )( implicit
+  )(
+    implicit
     tagged: Tagged[A]
   ) =
     if (from.isEmpty) ZIO.fail(DeserializationError("Empty chunk."))
@@ -37,7 +39,8 @@ object Tagged {
 
   private[hyparview] def write[A](
     data: A
-  ) ( implicit
+  )(
+    implicit
     tagged: Tagged[A]
   ) = {
     val tag = tagged.tagOf(data)
