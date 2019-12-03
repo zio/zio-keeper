@@ -18,13 +18,13 @@ object tcp {
     maxConnections: Int,
     connectionTimeout: Duration,
     sendTimeout: Duration
-  ) = enrichWithManaged[Transport[SocketAddress]](tcpTransport(maxConnections, connectionTimeout, sendTimeout))
+  ) = enrichWithManaged[Transport[InetSocketAddress]](tcpTransport(maxConnections, connectionTimeout, sendTimeout))
 
   def tcpTransport(
     maxConnections: Int,
     connectionTimeout: Duration,
     sendTimeout: Duration
-  ): ZManaged[Clock, Nothing, Transport[SocketAddress]] =
+  ): ZManaged[Clock, Nothing, Transport[InetSocketAddress]] =
     ZManaged {
       for {
         env       <- ZIO.environment[Clock]
@@ -90,13 +90,13 @@ object tcp {
 
         Reservation(
           ZIO.succeed {
-            new Transport[SocketAddress] {
-              val transport = new Transport.Service[Any, SocketAddress] {
+            new Transport[InetSocketAddress] {
+              val transport = new Transport.Service[Any, InetSocketAddress] {
 
-                override def connect(to: SocketAddress) =
+                override def connect(to: InetSocketAddress) =
                   toConnection(AsynchronousSocketChannel().tapM(_.connect(to)).mapError(ExceptionThrown(_)))
 
-                override def bind(addr: SocketAddress) =
+                override def bind(addr: InetSocketAddress) =
                   ZStream
                     .unwrapManaged {
                       AsynchronousServerSocketChannel()

@@ -3,6 +3,7 @@ package zio.membership.hyparview
 import zio._
 import zio.membership.transport.ChunkConnection
 import zio._
+import zio.membership.Error
 import zio.membership.ByteCodec
 import zio.membership.transport.Transport
 import zio.stm._
@@ -14,7 +15,7 @@ sealed trait Protocol[T]
 
 object Protocol {
 
-  def tagged[T](
+  implicit def tagged[T](
     implicit
     c1: ByteCodec[Disconnect[T]],
     c2: ByteCodec[ForwardJoin[T]],
@@ -39,7 +40,7 @@ object Protocol {
 
   object Disconnect {
 
-    def codec[T: ReadWriter]: ByteCodec[Disconnect[T]] =
+    implicit def codec[T: ReadWriter]: ByteCodec[Disconnect[T]] =
       ByteCodec.fromReadWriter(macroRW[Disconnect[T]])
   }
 
@@ -51,7 +52,7 @@ object Protocol {
 
   object ForwardJoin {
 
-    def codec[T: ReadWriter]: ByteCodec[ForwardJoin[T]] =
+    implicit def codec[T: ReadWriter]: ByteCodec[ForwardJoin[T]] =
       ByteCodec.fromReadWriter(macroRW[ForwardJoin[T]])
   }
 
@@ -65,7 +66,7 @@ object Protocol {
 
   object Shuffle {
 
-    def codec[T: ReadWriter]: ByteCodec[Shuffle[T]] =
+    implicit def codec[T: ReadWriter]: ByteCodec[Shuffle[T]] =
       ByteCodec.fromReadWriter(macroRW[Shuffle[T]])
   }
 
@@ -75,7 +76,7 @@ object Protocol {
     implicit
     ev1: Tagged[Protocol[T]],
     ev2: Tagged[InitialProtocol[T]]
-  ): ZIO[Console with Env[T] with Transport[T], Nothing, Handler] =
+  ): ZIO[Console with Env[T] with Transport[T], Error, Unit] =
     con.receive
       .foreach { msg =>
         Tagged.read[Protocol[T]](msg).flatMap {
@@ -85,7 +86,6 @@ object Protocol {
         }
       }
       .onError(e => putStrLn(s"Handler failed with ${e}") *> con.close)
-      .fork
 
   private[hyparview] def handleDisconnect[T](
     msg: Protocol.Disconnect[T]
@@ -110,10 +110,10 @@ object Protocol {
   ) =
     ZIO.environment[Env[T]].map(_.env).flatMap { env =>
       val accept = for {
-        con   <- ZIO.accessM[Transport[T]](_.transport.connect(msg.sender))
+        con   <- ZIO.accessM[Transport[T]](_.transport.connect(msg.originalSender))
         reply <- Tagged.write[InitialProtocol[T]](InitialProtocol.ForwardJoinReply(env.myself))
         _     <- con.send(reply)
-        _     <- addConnection(msg.sender, con)
+        _     <- addConnection(msg.originalSender, con)
       } yield ()
 
       val process = env.activeView.keys.map(ks => (ks.size, msg.ttl.step)).flatMap {
@@ -123,9 +123,9 @@ object Protocol {
           STM.succeed(accept)
         case (_, Some(ttl)) =>
           for {
-            list <- env.activeView.keys.map(_.filterNot(_ == msg.sender))
+            list <- env.activeView.keys.map(_.filterNot(n => n == msg.sender || n == msg.originalSender))
             next <- env.selectOne(list)
-            _    <- if (ttl.count == env.cfg.prwl) env.addNodeToPassiveView(msg.sender) else STM.unit
+            _    <- if (ttl.count == env.cfg.prwl) env.addNodeToPassiveView(msg.originalSender) else STM.unit
           } yield ZIO.foreach(next)(send[T, Protocol[T]](_, msg.copy(sender = env.myself, ttl = ttl)))
       }
       process.commit.flatten

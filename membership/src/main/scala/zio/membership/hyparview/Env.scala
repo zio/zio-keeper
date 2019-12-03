@@ -20,16 +20,6 @@ private[hyparview] object Env {
   def addNodeToPassiveView[T](node: T) = ZIO.accessM[Env[T]](_.env.addNodeToPassiveView(node).commit)
   def promoteRandom[T]                 = ZIO.accessM[Env[T]](_.env.promoteRandom.commit)
 
-  final case class Config(
-    activeViewCapactiy: Int,
-    passiveViewCapacity: Int,
-    arwl: Int,
-    prwl: Int,
-    shuffleNActive: Int,
-    shuffleNPassive: Int,
-    shuffleTTL: Int
-  )
-
   trait Service[T] {
     val myself: T
     val activeView: TMap[T, ChunkConnection]
@@ -37,13 +27,13 @@ private[hyparview] object Env {
     val pickRandom: Int => STM[Nothing, Int]
     val cfg: Config
 
-    val isActiveViewFull =
+    lazy val isActiveViewFull =
       activeView.keys.map(_.size >= cfg.activeViewCapactiy)
 
-    val isPassiveViewFull =
+    lazy val isPassiveViewFull =
       passiveView.size.map(_ >= cfg.passiveViewCapacity)
 
-    val dropOneActiveToPassive =
+    lazy val dropOneActiveToPassive =
       for {
         active  <- activeView.keys
         dropped <- selectOne(active)
@@ -83,7 +73,7 @@ private[hyparview] object Env {
         }
       }
 
-    val promoteRandom =
+    lazy val promoteRandom =
       for {
         activeFull <- activeView.keys.map(_.size >= cfg.activeViewCapactiy)
         promoted <- if (activeFull) STM.succeed(None)
@@ -99,7 +89,7 @@ private[hyparview] object Env {
       if (values.isEmpty) STM.succeed(None)
       else {
         for {
-          index    <- pickRandom(values.size - 1)
+          index    <- pickRandom(values.size)
           selected = values(index)
         } yield Some(selected)
       }
@@ -111,7 +101,7 @@ private[hyparview] object Env {
           (remaining, toPick) match {
             case (Nil, _) | (_, 0) => STM.succeed(acc)
             case _ =>
-              pickRandom(remaining.size - 1).flatMap { index =>
+              pickRandom(remaining.size).flatMap { index =>
                 val x  = values(index)
                 val xs = values.drop(index)
                 go(xs, toPick - 1, x :: acc)

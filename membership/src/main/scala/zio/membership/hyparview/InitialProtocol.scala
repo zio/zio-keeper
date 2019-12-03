@@ -14,7 +14,7 @@ sealed trait InitialProtocol[T]
 
 object InitialProtocol {
 
-  def tagged[T](
+  implicit def tagged[T](
     implicit
     c1: ByteCodec[Neighbor[T]],
     c2: ByteCodec[Join[T]],
@@ -31,7 +31,7 @@ object InitialProtocol {
         case 0 => c1.asInstanceOf[ByteCodec[InitialProtocol[T]]]
         case 1 => c2.asInstanceOf[ByteCodec[InitialProtocol[T]]]
         case 2 => c3.asInstanceOf[ByteCodec[InitialProtocol[T]]]
-        case 4 => c4.asInstanceOf[ByteCodec[InitialProtocol[T]]]
+        case 3 => c4.asInstanceOf[ByteCodec[InitialProtocol[T]]]
       }
     )
 
@@ -42,7 +42,7 @@ object InitialProtocol {
 
   object Neighbor {
 
-    def codec[T: ReadWriter]: ByteCodec[Neighbor[T]] =
+    implicit def codec[T: ReadWriter]: ByteCodec[Neighbor[T]] =
       ByteCodec.fromReadWriter(macroRW[Neighbor[T]])
   }
 
@@ -52,7 +52,7 @@ object InitialProtocol {
 
   object Join {
 
-    def codec[T: ReadWriter]: ByteCodec[Join[T]] =
+    implicit def codec[T: ReadWriter]: ByteCodec[Join[T]] =
       ByteCodec.fromReadWriter(macroRW[Join[T]])
   }
 
@@ -62,7 +62,7 @@ object InitialProtocol {
 
   object ForwardJoinReply {
 
-    def codec[T: ReadWriter]: ByteCodec[ForwardJoinReply[T]] =
+    implicit def codec[T: ReadWriter]: ByteCodec[ForwardJoinReply[T]] =
       ByteCodec.fromReadWriter(macroRW[ForwardJoinReply[T]])
   }
 
@@ -73,7 +73,7 @@ object InitialProtocol {
 
   object ShuffleReply {
 
-    def codec[T: ReadWriter]: ByteCodec[ShuffleReply[T]] =
+    implicit def codec[T: ReadWriter]: ByteCodec[ShuffleReply[T]] =
       ByteCodec.fromReadWriter(macroRW[ShuffleReply[T]])
   }
 

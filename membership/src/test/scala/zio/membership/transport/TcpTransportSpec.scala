@@ -4,11 +4,9 @@ import zio._
 import zio.clock.Clock
 import zio.duration._
 import zio.macros.delegate._
-import zio.macros.delegate.syntax._
-import zio.nio.SocketAddress
-import zio.test.Assertion._
-import zio.test._
-import zio.test.environment.{ Live, TestClock }
+import zio.nio._
+import zio.test.environment.TestClock
+import zio.test.environment.Live
 
 object TransportSpec
     extends DefaultRunnableSpec({
@@ -30,17 +28,18 @@ object TransportSpec
             bytes =>
               val payload = Chunk.fromIterable(bytes)
 
-              environment.use { env =>
-                env.live.provide {
-                  for {
-                    trans  <- ZIO.environment[Transport[SocketAddress]].map(_.transport)
-                    port   <- freePort
-                    addr   <- SocketAddress.inetSocketAddress(port)
-                    chunk  <- trans.bind(addr).take(1).flatMap(_.receive.take(1)).runCollect.map(_.head).fork
-                    _      <- trans.send(addr, payload).retry(Schedule.spaced(10.milliseconds))
-                    result <- chunk.join
-                  } yield assert(result, equalTo(payload))
-                }
+              environment.use {
+                env =>
+                  env.live.provide {
+                    for {
+                      trans  <- ZIO.environment[Transport[InetSocketAddress]].map(_.transport)
+                      port   <- freePort
+                      addr   <- SocketAddress.inetSocketAddress(port)
+                      chunk  <- trans.bind(addr).take(1).flatMap(_.receive.take(1)).runCollect.map(_.head).fork
+                      _      <- trans.send(addr, payload).retry(Schedule.spaced(10.milliseconds))
+                      result <- chunk.join
+                    } yield assert(result, equalTo(payload))
+                  }
               }
           }
         },
@@ -51,7 +50,7 @@ object TransportSpec
             env =>
               env.live.provide {
                 for {
-                  trans  <- ZIO.environment[Transport[SocketAddress]].map(_.transport)
+                  trans  <- ZIO.environment[Transport[InetSocketAddress]].map(_.transport)
                   latch  <- Promise.make[Nothing, Unit]
                   port   <- freePort.map(_ + 1)
                   addr   <- SocketAddress.inetSocketAddress(port)
@@ -71,7 +70,7 @@ object TransportSpec
                 env =>
                   env.live.provide {
                     for {
-                      trans <- ZIO.environment[Transport[SocketAddress]].map(_.transport)
+                      trans <- ZIO.environment[Transport[InetSocketAddress]].map(_.transport)
                       port  <- freePort.map(_ + 2)
                       addr  <- SocketAddress.inetSocketAddress(port)
                       fiber <- trans

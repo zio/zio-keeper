@@ -11,7 +11,7 @@ object periodic {
     implicit
     ev1: Tagged[Protocol[T]],
     ev2: Tagged[InitialProtocol[T]]
-  ): ZIO[Console with Env[T] with Transport[T], Nothing, Unit] =
+  ): ZIO[Console with Env[T] with Transport[T], Nothing, Int] =
     ZIO.environment[Env[T]].map(_.env).flatMap { env =>
       for {
         promoted <- env.promoteRandom.commit
@@ -25,7 +25,8 @@ object periodic {
                     }
               } yield ()).orElse(env.passiveView.delete(node).commit *> doNeighbor)
             }
-      } yield ()
+        active <- env.activeView.keys.map(_.size).commit
+      } yield active
     }
 
   private[hyparview] def doShuffle[T](
@@ -47,7 +48,7 @@ object periodic {
                      Protocol.Shuffle(env.myself, env.myself, active, passive, TimeToLive(env.cfg.shuffleTTL))
                    )
                }
-      } yield task).commit.flatten
+      } yield task.as(nodes.size)).commit.flatten
     }
 
 }

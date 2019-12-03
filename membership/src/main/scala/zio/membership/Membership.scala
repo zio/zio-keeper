@@ -32,20 +32,22 @@ object Membership {
      */
     val nodes: ZIO[R, Nothing, List[T]]
 
+    def connect(to: T): ZIO[R, Error, Unit]
+
     /**
      * Send a message to a node.
      */
-    def send[R1 <: R, A: ByteCodec](to: T, payload: A): ZIO[R1, Error, Unit]
+    def send[A: ByteCodec](to: T, payload: A): ZIO[R, Error, Unit]
 
     /**
      * Send a message to all nodes.
      */
-    def broadcast[R1 <: R, A: ByteCodec](payload: A): ZIO[R1, Error, Unit]
+    def broadcast[A: ByteCodec](payload: A): ZIO[R, Error, Unit]
 
     /**
      * Send a message to a node.
      */
-    def receive[R1 <: R, A: ByteCodec]: ZStream[R1, Error, A]
+    def receive[A: ByteCodec]: ZStream[R, Error, A]
   }
 
 }

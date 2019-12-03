@@ -22,11 +22,17 @@ package object hyparview {
       _       <- Protocol.protocolHandler(con)
     } yield ()
 
-  private[hyparview] def send[T, M <: Protocol[T]: Tagged](to: T, msg: M) =
+  private[hyparview] def send[T, M <: Protocol[T]: Tagged](
+    to: T,
+    msg: M
+  )(
+    implicit
+    ev: Tagged[Protocol[T]]
+  ) =
     for {
       chunk <- Tagged.write(msg)
       con   <- Env.activeView[T].flatMap(_.get(to).commit)
-      _     <- ZIO.foreach(con)(_.send(chunk))
+      _     <- ZIO.foreach(con)(_.send(chunk).orElse(disconnect(to)))
     } yield ()
 
   private[hyparview] def disconnect[T](

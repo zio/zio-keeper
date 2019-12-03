@@ -9,7 +9,7 @@ import zio.nio.SocketAddress
 import upickle.default._
 import zio.nio.InetSocketAddress
 
-object Main extends zio.App {
+object Main2 extends zio.App {
 
   override def run(args: List[String]) = {
     val env =
@@ -23,7 +23,7 @@ object Main extends zio.App {
         )
 
     SocketAddress
-      .inetSocketAddress(8000)
+      .inetSocketAddress(8020)
       .flatMap { addr =>
         (env >>> HyParView(
           addr,
@@ -36,7 +36,13 @@ object Main extends zio.App {
           3,
           Schedule.spaced(200.millis),
           Schedule.spaced(200.millis)
-        )).useForever
+        )).use { mem =>
+          for {
+            target <- SocketAddress.inetSocketAddress(8000)
+            _      <- mem.membership.connect(target)
+            out    <- ZIO.never.as(0)
+          } yield out
+        }
       }
       .catchAll(e => console.putStr(e.toString()).as(1))
   }
