@@ -46,15 +46,12 @@ object tcp {
               .mapError(BindFailed(addr, _))
               .withEarlyRelease
               .onExit { _ =>
-                putStrLn("on close server")
+                putStrLn("shutting down server")
               }
               .mapM {
                 case (close, server) =>
                   (for {
                     cur <- server.accept.withEarlyRelease
-                            .onExit { ex =>
-                              putStrLn("on close connection " + ex)
-                            }
                             .mapError(ExceptionWrapper)
                             .mapM {
                               case (close, socket) =>
@@ -73,7 +70,8 @@ object tcp {
                     _ <- cur.use(connectionHandler).fork
                   } yield ()).forever.fork
                     .as(new NioChannelIn(server, close))
-              }.provide(env)
+              }
+              .provide(env)
         }
       }
     }
@@ -90,7 +88,6 @@ class NioChannelOut(
   override def send(data: Chunk[Byte]): ZIO[Any, TransportError, Unit] = {
     val size = data.size
     (for {
-//      _ <- validateConnection
       _ <- socket
             .write(Chunk((size >>> 24).toByte, (size >>> 16).toByte, (size >>> 8).toByte, size.toByte))
             .mapError(ExceptionWrapper(_))
@@ -106,7 +103,6 @@ class NioChannelOut(
 
   override def read: ZIO[Any, TransportError, Chunk[Byte]] =
     (for {
-//      _ <- validateConnection
       length <- socket
                  .read(4)
                  .flatMap(c => ZIO.effect(new BigInteger(c.toArray).intValue()))
@@ -118,8 +114,6 @@ class NioChannelOut(
           close *> ZIO.fail(ExceptionWrapper(ex))
       }
 
-  private def validateConnection =
-    isOpen.flatMap(isOpen => if (isOpen) ZIO.unit else ZIO.fail(ChannelClosed(remoteAddress)))
 
   override def isOpen: ZIO[Any, TransportError, Boolean] =
     socket.isOpen

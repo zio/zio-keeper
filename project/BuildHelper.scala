@@ -28,7 +28,7 @@ object BuildHelper {
     "-Ywarn-numeric-widen",
     "-Ywarn-value-discard",
     "-unchecked",
-    "-deprecation",
+    "-deprecation"
     //"-Xfatal-warnings"
   )
 

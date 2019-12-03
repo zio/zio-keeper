@@ -38,6 +38,8 @@ object ClusterError {
 
   final case class UnexpectedMessage(message: Message) extends ClusterError
 
+  final case class AckMessageFail() extends ClusterError
+
   final case class UnknownNode(nodeId: NodeId) extends ClusterError(msg = nodeId + " is not in cluster")
 }
 

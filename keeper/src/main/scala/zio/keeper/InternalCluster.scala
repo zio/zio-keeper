@@ -21,10 +21,11 @@ final class InternalCluster(
   nodeChannels: Ref[Map[NodeId, ChannelOut]],
   gossipStateRef: Ref[GossipState],
   userMessageQueue: zio.Queue[Message],
+  clusterMessageQueue: zio.Queue[Message],
   subscribeToBroadcast: UIO[Stream[Nothing, Chunk[Byte]]],
   publishToBroadcast: Chunk[Byte] => UIO[Unit],
   msgOffset: Ref[Long],
-  acks: TMap[Long, Promise[Nothing, Unit]]
+  acks: TMap[Long, Promise[Error, Unit]]
 ) extends Cluster {
 
   private def removeMember(member: Member) =
@@ -54,16 +55,27 @@ final class InternalCluster(
           }
     } yield ()
 
-
   private def sendInternalMessage(to: ChannelOut, msg: InternalProtocol) = {
     for {
       payload <- msg.serialize
       msg     <- serializeMessage(localMember, payload, 1)
-      _       <- to.send(msg).ignore
+      _       <- to.send(msg)
     } yield ()
   }.catchAll { ex =>
     putStrLn(s"error during sending message: $ex")
   }
+
+  private def sendInternalMessageWithAck(to: NodeId, timeout: Duration)(fn: Long => InternalProtocol) =
+    for {
+      offset <- msgOffset.update(_ + 1)
+      prom   <- Promise.make[Error, Unit]
+      _      <- acks.put(offset, prom).commit
+      bytes  <- fn(offset).serialize //.catchAll(prom.fail)
+      _      <- sendMessage(to, 1, bytes).catchAll(prom.fail)
+      _ <- prom.await
+            .ensuring(acks.delete(offset).commit)
+            .timeoutFail(AckMessageFail())(timeout)
+    } yield ()
 
   private def expects[R, A](
     channel: ChannelOut
@@ -77,7 +89,7 @@ final class InternalCluster(
   private def ackMessage(timeout: Duration) =
     for {
       offset <- msgOffset.update(_ + 1)
-      prom   <- Promise.make[Nothing, Unit]
+      prom   <- Promise.make[Error, Unit]
       _      <- acks.put(offset, prom).commit
     } yield (
       offset,
@@ -94,7 +106,7 @@ final class InternalCluster(
       promOpt <- acks
                   .get(id)
                   .flatMap(
-                    _.fold(STM.succeed[Option[Promise[Nothing, Unit]]](None))(prom => acks.delete(id).as(Some(prom)))
+                    _.fold(STM.succeed[Option[Promise[Error, Unit]]](None))(prom => acks.delete(id).as(Some(prom)))
                   )
                   .commit
       _ <- promOpt.fold(ZIO.unit)(_.succeed(()).unit)
@@ -105,36 +117,40 @@ final class InternalCluster(
       val loop = gossipStateRef.get.map(_.members.filterNot(_ == localMember).toIndexedSeq).flatMap { nodes =>
         if (nodes.nonEmpty) {
           for {
-            next           <- roundRobinOffset.update(old => if (old < nodes.size - 1) old + 1 else 0)
-            state          <- gossipStateRef.get
-            target         = nodes(next) // todo: insert in random position and keep going in round robin version
-            ack            <- ackMessage(10.seconds)
-            (ackId, await) = ack
-            _              <- Ping(ackId, state).serialize.flatMap(sendMessage(target.nodeId, 1, _))
-            _ <- await
-                  .timeoutFail(())(10.seconds)
+            next   <- roundRobinOffset.update(old => if (old < nodes.size - 1) old + 1 else 0)
+            state  <- gossipStateRef.get
+            target = nodes(next) // todo: insert in random position and keep going in round robin version
+            _ <- sendInternalMessageWithAck(target.nodeId, 10.seconds)(ackId => Ping(ackId, state))
                   .foldM(
                     _ => // attempt req messages
+                    {
+                      val nodesWithoutTarget = nodes.filter(_ != target)
                       for {
-                        jumps <- ZIO.collectAll(List.fill(3)(zio.random.nextInt(nodes.size).map(nodes(_))))
-                        pingReqs = jumps.map { jump =>
-                          for {
-                            ack            <- ackMessage(10.seconds)
-                            (ackId, await) = ack
-                            _              <- PingReq(target, ackId, state).serialize.flatMap(sendMessage(jump.nodeId, 1, _))
-                            _              <- await
-                          } yield ()
-                        }
-                        _ <- ZIO
-                              .raceAll(ZIO.never, pingReqs)
-                              .foldM(
-                                _ => removeMember(target),
-                                _ =>
-                                  putStrLn(
-                                    s"SWIM: Successful ping req to [ ${target.nodeId} ] through [ ${jumps.map(_.nodeId).mkString(", ")} ]"
+                        jumps <- ZIO.collectAll(
+                                  List.fill(Math.min(3, nodesWithoutTarget.size))(
+                                    zio.random.nextInt(nodesWithoutTarget.size).map(nodesWithoutTarget(_))
                                   )
-                              )
-                      } yield (),
+                                )
+                        pingReqs = jumps.map { jump =>
+                          sendInternalMessageWithAck(jump.nodeId, 10.seconds)(ackId => PingReq(target, ackId, state))
+                        }
+
+                        _ <- if (pingReqs.nonEmpty) {
+                              ZIO
+                                .raceAll(pingReqs.head, pingReqs.tail)
+                                .foldM(
+                                  _ => removeMember(target),
+                                  _ =>
+                                    putStrLn(
+                                      s"SWIM: Successful ping req to [ ${target.nodeId} ] through [ ${jumps.map(_.nodeId).mkString(", ")} ]"
+                                    )
+                                )
+                            } else {
+                              removeMember(target)
+                            }
+                      } yield ()
+
+                    },
                     _ => putStrLn(s"SWIM: Successful ping to [ ${target.nodeId} ]")
                   )
           } yield ()
@@ -148,6 +164,7 @@ final class InternalCluster(
   private def acceptConnectionRequests =
     for {
       env          <- ZManaged.environment[Console with Transport with Clock]
+      _            <- handleClusterMessages(ZStream.fromQueue(clusterMessageQueue)).fork.toManaged_
       localAddress <- localMember.addr.socketAddress.toManaged_
       server <- transport.bind(localAddress) { channelOut =>
                  (for {
@@ -217,12 +234,11 @@ final class InternalCluster(
       }.runDrain
 
     (for {
-      _                   <- putStrLn(s"Setting up connection with [ ${partner.nodeId} ]")
-      clusterMessageQueue <- Queue.bounded[Message](1000)
-      _                   <- routeMessages(channel, clusterMessageQueue, userMessageQueue).fork
-      broadcasted         <- subscribeToBroadcast
-      _                   <- handleSends(broadcasted).fork
-    } yield ZStream.fromQueue(clusterMessageQueue)) >>= handleClusterMessages
+      _           <- putStrLn(s"Setting up connection with [ ${partner.nodeId} ]")
+      broadcasted <- subscribeToBroadcast
+      _           <- handleSends(broadcasted).fork
+      _           <- routeMessages(channel, clusterMessageQueue, userMessageQueue)
+    } yield ())
   }
 
   private def routeMessages(
@@ -302,15 +318,16 @@ object InternalCluster {
 
   private[keeper] def initCluster(port: Int) =
     for {
-      localHost         <- InetAddress.localHost.toManaged_.orDie
-      localMember       = Member(NodeId.generateNew, NodeAddress(localHost.address, port))
-      _                 <- putStrLn(s"Starting node [ ${localMember.nodeId} ]").toManaged_
-      nodes             <- zio.Ref.make(Map.empty[NodeId, ChannelOut]).toManaged_
-      seeds             <- ZManaged.environment[Discovery with Console].flatMap(d => ZManaged.fromEffect(d.discover))
-      _                 <- putStrLn("seeds: " + seeds).toManaged_
-      userMessagesQueue <- zio.Queue.bounded[Message](1000).toManaged_
-      gossipState       <- Ref.make(GossipState(SortedSet(localMember))).toManaged_
-      broadcastQueue    <- zio.Queue.bounded[Chunk[Byte]](1000).toManaged_
+      localHost            <- InetAddress.localHost.toManaged_.orDie
+      localMember          = Member(NodeId.generateNew, NodeAddress(localHost.address, port))
+      _                    <- putStrLn(s"Starting node [ ${localMember.nodeId} ]").toManaged_
+      nodes                <- zio.Ref.make(Map.empty[NodeId, ChannelOut]).toManaged_
+      seeds                <- ZManaged.environment[Discovery with Console].flatMap(d => ZManaged.fromEffect(d.discover))
+      _                    <- putStrLn("seeds: " + seeds).toManaged_
+      userMessagesQueue    <- ZManaged.make(zio.Queue.bounded[Message](1000))(_.shutdown)
+      clusterMessagesQueue <- ZManaged.make(zio.Queue.bounded[Message](1000))(_.shutdown)
+      gossipState          <- Ref.make(GossipState(SortedSet(localMember))).toManaged_
+      broadcastQueue       <- ZManaged.make(zio.Queue.bounded[Chunk[Byte]](1000))(_.shutdown)
       subscriberBroadcast <- ZStream
                               .fromQueue(broadcastQueue)
                               .distributedWithDynamic[Nothing, Chunk[Byte]](
@@ -321,17 +338,18 @@ object InternalCluster {
                               .map(_.map(_._2))
                               .map(_.map(ZStream.fromQueue(_).unTake))
       msgOffSet <- Ref.make(0L).toManaged_
-      ackMap    <- TMap.empty[Long, Promise[Nothing, Unit]].commit.toManaged_
+      ackMap    <- TMap.empty[Long, Promise[Error, Unit]].commit.toManaged_
 
       cluster = new InternalCluster(
-        localMember,
-        nodes,
-        gossipState,
-        userMessagesQueue,
-        subscriberBroadcast,
-        (c: Chunk[Byte]) => broadcastQueue.offer(c).unit,
-        msgOffSet,
-        ackMap
+        localMember = localMember,
+        nodeChannels = nodes,
+        gossipStateRef = gossipState,
+        userMessageQueue = userMessagesQueue,
+        clusterMessageQueue = clusterMessagesQueue,
+        subscribeToBroadcast = subscriberBroadcast,
+        publishToBroadcast = (c: Chunk[Byte]) => broadcastQueue.offer(c).unit,
+        msgOffset = msgOffSet,
+        acks = ackMap
       )
 
       _ <- putStrLn("Connecting to seed nodes: " + seeds).toManaged_

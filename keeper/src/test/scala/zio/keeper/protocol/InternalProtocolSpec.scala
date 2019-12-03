@@ -1,7 +1,7 @@
 package zio.keeper.protocol
 
 import zio.Chunk
-import zio.keeper.SerializationError.{DeserializationTypeError, SerializationTypeError}
+import zio.keeper.SerializationError.DeserializationTypeError
 import zio.keeper.{GossipState, Member, NodeAddress, NodeId}
 import zio.test.Assertion._
 import zio.test._
@@ -75,7 +75,9 @@ object InternalProtocolSpec
         testM("Malformed bytes") {
           assertM(
             InternalProtocol.deserialize(Chunk.single(Byte.MaxValue)).either,
-            isLeft(equalTo(DeserializationTypeError[InternalProtocol](upickle.core.Abort("expected dictionary got int32"))))
+            isLeft(
+              equalTo(DeserializationTypeError[InternalProtocol](upickle.core.Abort("expected dictionary got int32")))
+            )
           )
         }
       )

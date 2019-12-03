@@ -11,7 +11,7 @@ import zio.keeper.{Cluster, Error, transport}
 import zio.macros.delegate._
 import zio.nio.{InetAddress, SocketAddress}
 import zio.random.Random
-import zio.{Chunk, IO, Schedule, ZIO, ZManaged}
+import zio.{Chunk, IO, Schedule, ZIO}
 
 object Node1 extends zio.ManagedApp {
 
@@ -174,10 +174,9 @@ object Server extends zio.App {
         .provide(console)
 
       _ <- putStrLn("public address: " + publicAddress.toString())
-      //TODO useForever caused dead code so we should find other way to block this from exit.
       _ <- bind(publicAddress)(handler)
             .provide(tcp)
-          .use(ch => ZIO.never.ensuring(ch.close.ignore))
+            .use(ch => ZIO.never.ensuring(ch.close.ignore)).fork
 
     } yield ()).ignore.as(0)
 }
@@ -200,9 +199,4 @@ object Client extends zio.App {
     } yield ()).ignore.as(0)
 }
 
-object ToRemove extends zio.App {
-  override def run(args: List[String]) =
-    ZManaged.make(putStrLn("action"))(_ => putStrLn("close")).flatMap(
-      _ => ZManaged.make(putStrLn("action1"))(_ => putStrLn("close1")).withEarlyRelease.map(_._1)
-    ).use(close => close *> ZIO.never).as(0)
-}
+
