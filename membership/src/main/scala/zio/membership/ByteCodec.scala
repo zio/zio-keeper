@@ -10,23 +10,16 @@ trait ByteCodec[A] {
 
 object ByteCodec {
 
-  def apply[R, A](implicit ev: ByteCodec[A]): ByteCodec[A] =
+  def apply[A](implicit ev: ByteCodec[A]): ByteCodec[A] =
     ev
 
-  def fromReadWriter[A](implicit ev: ReadWriter[A]): ByteCodec[A] =
+  def fromReadWriter[A](rw: ReadWriter[A]): ByteCodec[A] =
     new ByteCodec[A] {
 
       def toChunk(a: A) =
-        ZIO.effect(Chunk.fromArray(writeBinary(a))).mapError(SerializationError("Failed serializing to chunk.", _))
+        ZIO.effect(Chunk.fromArray(writeBinary(a)(rw))).mapError(SerializationError("Failed serializing to chunk.", _))
 
       def fromChunk(chunk: Chunk[Byte]) =
-        ZIO.effect(readBinary[A](chunk.toArray)).mapError(DeserializationError("Failed deserializing chunk.", _))
+        ZIO.effect(readBinary[A](chunk.toArray)(rw)).mapError(DeserializationError("Failed deserializing chunk.", _))
     }
-
-  def encode[A](data: A)(implicit ev: ByteCodec[A]): IO[SerializationError, Chunk[Byte]] =
-    ev.toChunk(data)
-
-  def decode[A](chunk: Chunk[Byte])(implicit ev: ByteCodec[A]): IO[DeserializationError, A] =
-    ev.fromChunk(chunk)
-
 }

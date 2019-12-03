@@ -4,34 +4,66 @@ import zio._
 import zio.membership.transport.ChunkConnection
 import zio._
 import zio.membership.ByteCodec
-import zio.membership.ByteCodec._
 import zio.membership.transport.Transport
 import zio.membership.Error
 import zio.stm._
 import zio.console.Console
+import upickle.default._
 
 sealed trait InitialProtocol[T]
 
 object InitialProtocol {
-  def decodeChunk[T](chunk: Chunk[Byte]): UIO[InitialProtocol[T]] = ???
+  def tagged[T](implicit
+    c1: ByteCodec[Neighbor[T]],
+    c2: ByteCodec[Join[T]],
+    c3: ByteCodec[ForwardJoinReply[T]],
+    c4: ByteCodec[ShuffleReply[T]],
+  ): Tagged[InitialProtocol[T]] =
+    Tagged.instance({
+      case _: Neighbor[T] => 0
+      case _: Join[T] => 1
+      case _: ForwardJoinReply[T] => 2
+      case _: ShuffleReply[T] => 3
+    }, {
+      case 0 => c1.asInstanceOf[ByteCodec[InitialProtocol[T]]]
+      case 1 => c2.asInstanceOf[ByteCodec[InitialProtocol[T]]]
+      case 2 => c3.asInstanceOf[ByteCodec[InitialProtocol[T]]]
+      case 4 => c4.asInstanceOf[ByteCodec[InitialProtocol[T]]]
+    })
 
   final case class Neighbor[T](
     sender: T,
     isHighPriority: Boolean
   ) extends InitialProtocol[T]
+  object Neighbor {
+    def codec[T: ReadWriter]: ByteCodec[Neighbor[T]] =
+      ByteCodec.fromReadWriter(macroRW[Neighbor[T]])
+  }
 
   final case class Join[T](
     sender: T
   ) extends InitialProtocol[T]
+  object Join {
+    def codec[T: ReadWriter]: ByteCodec[Join[T]] =
+      ByteCodec.fromReadWriter(macroRW[Join[T]])
+  }
 
   final case class ForwardJoinReply[T](
     sender: T
   ) extends InitialProtocol[T]
+  object ForwardJoinReply {
+    def codec[T: ReadWriter]: ByteCodec[ForwardJoinReply[T]] =
+      ByteCodec.fromReadWriter(macroRW[ForwardJoinReply[T]])
+  }
 
   final case class ShuffleReply[T](
     passiveNodes: List[T],
     sentOriginally: List[T]
   ) extends InitialProtocol[T]
+  object ShuffleReply {
+    def codec[T: ReadWriter]: ByteCodec[ShuffleReply[T]] =
+      ByteCodec.fromReadWriter(macroRW[ShuffleReply[T]])
+  }
 
   private[hyparview] def initialProtocolHandler[T](
     con: ChunkConnection
@@ -41,17 +73,18 @@ object InitialProtocol {
     ev2: ByteCodec[Protocol.ForwardJoin[T]],
     ev3: ByteCodec[Protocol.Shuffle[T]],
     ev4: ByteCodec[InitialProtocol.ForwardJoinReply[T]],
-    ev5: ByteCodec[InitialProtocol.ShuffleReply[T]]
+    ev5: ByteCodec[InitialProtocol.ShuffleReply[T]],
+    ev6: Tagged[InitialProtocol[T]],
+    ev7: Tagged[Protocol[T]]
   ): ZIO[Console with Env[T] with Transport[T], Error, Unit] =
-    con
-      .receive
+    con.receive
       .take(1)
       .foreach { msg =>
-        InitialProtocol.decodeChunk[T](msg).flatMap {
-          case m: InitialProtocol.Neighbor[T] => handleNeighbor(m, con)
-          case m: InitialProtocol.Join[T] => handleJoin(m, con)
+        Tagged.read[InitialProtocol[T]](msg).flatMap {
+          case m: InitialProtocol.Neighbor[T]         => handleNeighbor(m, con)
+          case m: InitialProtocol.Join[T]             => handleJoin(m, con)
           case m: InitialProtocol.ForwardJoinReply[T] => handleForwardJoinReply(m, con)
-          case m: InitialProtocol.ShuffleReply[T] => handleShuffleReply(m)
+          case m: InitialProtocol.ShuffleReply[T]     => handleShuffleReply(m)
         }
       }
       .ensuring(con.close)
@@ -65,17 +98,19 @@ object InitialProtocol {
     ev2: ByteCodec[Protocol.ForwardJoin[T]],
     ev3: ByteCodec[Protocol.Shuffle[T]],
     ev4: ByteCodec[InitialProtocol.ForwardJoinReply[T]],
-    ev5: ByteCodec[InitialProtocol.ShuffleReply[T]]
+    ev5: ByteCodec[InitialProtocol.ShuffleReply[T]],
+    ev6: Tagged[Protocol[T]],
+    ev7: Tagged[InitialProtocol[T]]
   ) =
     ZIO.environment[Env[T]].map(_.env).flatMap { env =>
       val accept = for {
-        reply <- encode(NeighborProtocol.Accept)
+        reply <- Tagged.write[NeighborProtocol](NeighborProtocol.Accept)
         _     <- con.send(reply)
         _     <- addConnection(msg.sender, con)
       } yield ()
 
       val reject = for {
-        reply <- encode(NeighborProtocol.Reject)
+        reply <- Tagged.write[NeighborProtocol](NeighborProtocol.Reject)
         _     <- con.send(reply)
       } yield ()
 
@@ -106,13 +141,15 @@ object InitialProtocol {
     ev2: ByteCodec[Protocol.ForwardJoin[T]],
     ev3: ByteCodec[Protocol.Shuffle[T]],
     ev4: ByteCodec[InitialProtocol.ForwardJoinReply[T]],
-    ev5: ByteCodec[InitialProtocol.ShuffleReply[T]]
+    ev5: ByteCodec[InitialProtocol.ShuffleReply[T]],
+    ev6: Tagged[Protocol[T]],
+    ev7: Tagged[InitialProtocol[T]]
   ) =
     ZIO.environment[Env[T]].map(_.env).flatMap { env =>
       for {
-        others  <- env.activeView.keys.map(_.filterNot(_ == msg.sender)).commit
+        others <- env.activeView.keys.map(_.filterNot(_ == msg.sender)).commit
         _ <- ZIO.foreachPar_(others)(
-              node => send(node, Protocol.ForwardJoin(env.myself, msg.sender, TimeToLive(env.cfg.arwl))).ignore
+              node => send[T, Protocol[T]](node, Protocol.ForwardJoin(env.myself, msg.sender, TimeToLive(env.cfg.arwl))).ignore
             )
         _ <- addConnection(msg.sender, con)
       } yield ()
@@ -121,12 +158,15 @@ object InitialProtocol {
   private[hyparview] def handleForwardJoinReply[T](
     msg: InitialProtocol.ForwardJoinReply[T],
     con: ChunkConnection
-  )( implicit
+  )(
+    implicit
     ev1: ByteCodec[Protocol.Disconnect[T]],
     ev2: ByteCodec[Protocol.ForwardJoin[T]],
     ev3: ByteCodec[Protocol.Shuffle[T]],
     ev4: ByteCodec[InitialProtocol.ForwardJoinReply[T]],
-    ev5: ByteCodec[InitialProtocol.ShuffleReply[T]]
+    ev5: ByteCodec[InitialProtocol.ShuffleReply[T]],
+    ev6: Tagged[Protocol[T]],
+    ev7: Tagged[InitialProtocol[T]]
   ) = addConnection(msg.sender, con)
 
   private[hyparview] def handleShuffleReply[T](
@@ -141,7 +181,5 @@ object InitialProtocol {
         _         <- env.addAllToPassiveView(sentOriginally.take(remaining).toList)
       } yield ()).commit
     }
-
-
 
 }

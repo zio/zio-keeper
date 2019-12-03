@@ -2,7 +2,6 @@ package zio.membership
 
 import zio.membership.transport.ChunkConnection
 import zio._
-import zio.membership.ByteCodec._
 import zio.stm._
 
 package object hyparview {
@@ -12,22 +11,25 @@ package object hyparview {
   private[hyparview] def addConnection[T](
     to: T,
     con: ChunkConnection
-  )(implicit
+  )(
+    implicit
     ev1: ByteCodec[Protocol.Disconnect[T]],
     ev2: ByteCodec[Protocol.ForwardJoin[T]],
     ev3: ByteCodec[Protocol.Shuffle[T]],
     ev4: ByteCodec[InitialProtocol.ForwardJoinReply[T]],
-    ev5: ByteCodec[InitialProtocol.ShuffleReply[T]]
+    ev5: ByteCodec[InitialProtocol.ShuffleReply[T]],
+    ev6: Tagged[Protocol[T]],
+    ev7: Tagged[InitialProtocol[T]]
   ) =
-  for {
-    dropped <- Env.addNodeToActiveView(to, con)
-    _       <- ZIO.foreach(dropped)(disconnect(_))
-    _       <- Protocol.protocolHandler(con)
-  } yield ()
-
-  private[hyparview] def send[T, M <: Protocol[T]: ByteCodec](to: T, msg: M) =
     for {
-      chunk <- encode(msg)
+      dropped <- Env.addNodeToActiveView(to, con)
+      _       <- ZIO.foreach(dropped)(disconnect(_))
+      _       <- Protocol.protocolHandler(con)
+    } yield ()
+
+  private[hyparview] def send[T, M <: Protocol[T]: Tagged](to: T, msg: M) =
+    for {
+      chunk <- Tagged.write(msg)
       con   <- Env.activeView[T].flatMap(_.get(to).commit)
       _     <- ZIO.foreach(con)(_.send(chunk))
     } yield ()
@@ -37,7 +39,7 @@ package object hyparview {
     shutDown: Boolean = false
   )(
     implicit
-    ev1: ByteCodec[Protocol.Disconnect[T]]
+    ev: Tagged[Protocol[T]]
   ) =
     ZIO.environment[Env[T]].map(_.env).flatMap { env =>
       (for {
@@ -48,7 +50,7 @@ package object hyparview {
                      _ <- env.activeView.delete(node)
                      _ <- env.addNodeToPassiveView(node)
                    } yield for {
-                     _ <- encode(Protocol.Disconnect(env.myself, shutDown)).flatMap(con.send).ignore.unit
+                     _ <- Tagged.write[Protocol[T]](Protocol.Disconnect(env.myself, shutDown)).flatMap(con.send).ignore.unit
                      _ <- con.close
                    } yield ()
                  case None => STM.succeed(ZIO.unit)
