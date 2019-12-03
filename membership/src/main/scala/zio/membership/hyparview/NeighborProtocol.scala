@@ -30,9 +30,4 @@ object NeighborProtocol {
       ByteCodec.fromReadWriter(macroRW[Accept.type])
   }
 
-  object tags {
-    val Reject = 20
-    val Accept = 21
-  }
-
 }
