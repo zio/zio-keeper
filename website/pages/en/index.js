@@ -90,15 +90,19 @@ class Index extends React.Component {
     );
 
     const Features = () => (
-      <Block layout="fourColumn">
+      <Block layout="threeColumn">
         {[
           {
-            content: 'Moving away from blocking streams waiting on input',
-            title: 'Non-blocking',
+            content: '',
+            title: 'Composable',
           },
           {
-            content: 'Contrary to stream-like processing - buffers make it possible to move on received content without external capture',
-            title: 'Buffer oriented',
+            content: '',
+            title: 'Resilient',
+          },
+          {
+            content: '',
+            title: 'Secure',
           },
         ]}
       </Block>

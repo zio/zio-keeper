@@ -4,11 +4,16 @@
       "overview/overview_index"
     ]
   },
-  "resources-sidebar": {
-    "Resources": [
-      "resources/resources_index",
-      "resources/resources_gossip",
-      "resources/resources_crdts"
+  "meetings-sidebar": {
+    "Meetings": [
+      "meetings/meetings_index"
+    ]
+  },
+  "library-sidebar": {
+    "Library": [
+      "library/library_index",
+      "library/library_gossip",
+      "library/library_crdts"
     ]
   }
 }
