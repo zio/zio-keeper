@@ -1,6 +1,7 @@
 package zio.keeper
 
 import zio.duration.Duration
+import zio.keeper.protocol.InternalProtocol
 import zio.nio.SocketAddress
 
 import scala.reflect.ClassTag
@@ -38,9 +39,10 @@ object ClusterError {
 
   final case class UnexpectedMessage(message: Message) extends ClusterError
 
-  final case class AckMessageFail() extends ClusterError
+  final case class AckMessageFail(ackId: Long, message: InternalProtocol, to: NodeId)
+      extends ClusterError(msg = s"message [$message] with ack id: $ackId sent to: $to overdue timeout ")
 
-  final case class UnknownNode(nodeId: NodeId) extends ClusterError(msg = nodeId + " is not in cluster")
+  final case class UnknownNode(nodeId: NodeId) extends ClusterError(msg = nodeId.toString + " is not in cluster")
 }
 
 sealed abstract class TransportError(msg: String = "") extends Error(msg = msg)

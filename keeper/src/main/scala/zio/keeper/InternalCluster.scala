@@ -69,11 +69,12 @@ final class InternalCluster(
       offset <- msgOffset.update(_ + 1)
       prom   <- Promise.make[Error, Unit]
       _      <- acks.put(offset, prom).commit
+      msg    = fn(offset)
       bytes  <- fn(offset).serialize //.catchAll(prom.fail)
       _      <- sendMessage(to, 1, bytes).catchAll(prom.fail)
       _ <- prom.await
             .ensuring(acks.delete(offset).commit)
-            .timeoutFail(AckMessageFail())(timeout)
+            .timeoutFail(AckMessageFail(offset, msg, to))(timeout)
     } yield ()
 
   private def expects[R, A](
@@ -171,7 +172,7 @@ final class InternalCluster(
                    _     <- sendInternalMessage(channelOut, NewConnection(state, localMember))
                    _ <- expects(channelOut) {
                          case JoinCluster(remoteState, remoteMember) =>
-                           putStrLn(remoteMember + " joined cluster") *>
+                           putStrLn(remoteMember.toString + " joined cluster") *>
                              addMember(remoteMember, channelOut) *>
                              updateState(remoteState) *>
                              listenOnChannel(channelOut, remoteMember)
@@ -317,12 +318,8 @@ object InternalCluster {
 
   private[keeper] def initCluster(port: Int) =
     for {
-      localHost <- InetAddress.localHost.toManaged_.orDie
-      socketAddress <- SocketAddress
-                        .inetSocketAddress(localHost, port)
-                        .toManaged_
-                        .orDie //this is hack to get random port
-      localMember          = Member(NodeId.generateNew, NodeAddress(localHost.address, socketAddress.port))
+      localHost            <- InetAddress.localHost.toManaged_.orDie
+      localMember          = Member(NodeId.generateNew, NodeAddress(localHost.address, port))
       _                    <- putStrLn(s"Starting node [ ${localMember.nodeId} ]").toManaged_
       nodes                <- zio.Ref.make(Map.empty[NodeId, ChannelOut]).toManaged_
       seeds                <- discovery.discoverNodes.toManaged_
