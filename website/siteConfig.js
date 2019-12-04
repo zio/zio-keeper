@@ -22,7 +22,7 @@ const users = [
 
 const siteConfig = {
   title: 'ZIO Keeper',
-  tagline: 'A functional library for consistent replication of metadata across dynamic clusters',
+  tagline: 'Purely-functional, type-safe library for building distributed systems',
   url: 'https://zio.github.io',
   baseUrl: '/zio-keeper/', // Base URL for your project */
 
