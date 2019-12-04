@@ -38,11 +38,11 @@ final class InternalCluster(
       nodeChannels.update(_ + (member.nodeId -> send)) *>
       putStrLn("add member: " + member)
 
-  private def updateState(newState: GossipState) =
+  private def updateState(newState: GossipState): ZIO[Transport with Console with Clock, Error, Unit] =
     for {
       current <- gossipStateRef.get
       diff    = newState.diff(current)
-//      _       <- ZIO.foreach(diff.local)(n => n.addr.socketAddress >>= connect)
+      _       <- ZIO.foreach(diff.local)(n => n.addr.socketAddress >>= connect)
     } yield ()
 
   private def sendMessage(to: NodeId, msgType: Int, payload: Chunk[Byte]) =
@@ -173,8 +173,8 @@ final class InternalCluster(
                    _ <- expects(channelOut) {
                          case JoinCluster(remoteState, remoteMember) =>
                            putStrLn(remoteMember + " joined cluster") *>
-                             updateState(remoteState) *>
                              addMember(remoteMember, channelOut) *>
+                             updateState(remoteState) *>
                              listenOnChannel(channelOut, remoteMember)
                        }
                  } yield ())
@@ -207,8 +207,8 @@ final class InternalCluster(
                     (for {
                       state    <- gossipStateRef.get
                       newState = state.merge(remoteState)
-                      _        <- updateState(newState)
                       _        <- addMember(remoteMember, channel)
+                      _        <- updateState(newState)
                     } yield ()) *> connectionInit.succeed((remoteMember, channel)) *> listenOnChannel(
                       channel,
                       remoteMember
@@ -319,7 +319,8 @@ object InternalCluster {
   private[keeper] def initCluster(port: Int) =
     for {
       localHost            <- InetAddress.localHost.toManaged_.orDie
-      localMember          = Member(NodeId.generateNew, NodeAddress(localHost.address, port))
+      socketAddress        <- SocketAddress.inetSocketAddress(localHost, port).toManaged_.orDie //this is hack to get random port
+      localMember          = Member(NodeId.generateNew, NodeAddress(localHost.address, socketAddress.port))
       _                    <- putStrLn(s"Starting node [ ${localMember.nodeId} ]").toManaged_
       nodes                <- zio.Ref.make(Map.empty[NodeId, ChannelOut]).toManaged_
       seeds                <- ZManaged.environment[Discovery with Console].flatMap(d => ZManaged.fromEffect(d.discover))
