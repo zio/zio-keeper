@@ -3,7 +3,7 @@ id: meetings_index
 title: "Summary"
 ---
 
-This section contains the notes collected by ZIO keeper's team obtained during
+This section contains the notes collected by ZIO Keeper's team obtained during
 their design sessions. To emphasize recent activities, notes will be sorted in
 a descending order.
 

@@ -1,9 +1,9 @@
-# ZIO keeper
+# ZIO Keeper
 
 | CI                                       | Issues                                                      | Discord                                   |
 | [![CircleCI][badge-circle]][link-circle] | [![Is it maintained?][badge-maintenance]][link-maintenance] | [![Discord][badge-discord]][link-discord] |
 
-ZIO keeper is a purely-functional, type-safe library for building distributed
+ZIO Keeper is a purely-functional, type-safe library for building distributed
 systems. 
 
 It provides numerous primitives for tackling the common problems in distributed
@@ -15,7 +15,7 @@ performant, type and resource-safe APIs.
 - **Resilient**. Build apps with automated failure recovery.
 - **Secure**. Benefit from security guarantees built into the library core.
 
-To learn more about ZIO keeper, check out the following references:
+To learn more about ZIO Keeper, check out the following references:
 
 - [Homepage](https://zio.github.io/zio-keeper/)
 - [Contributor's guide](./.github/CONTRIBUTING.md)
