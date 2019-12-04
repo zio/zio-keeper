@@ -1,6 +1,7 @@
 # ZIO Keeper
 
 | CI                                       | Issues                                                      | Discord                                   |
+|------------------------------------------|-------------------------------------------------------------|-------------------------------------------|
 | [![CircleCI][badge-circle]][link-circle] | [![Is it maintained?][badge-maintenance]][link-maintenance] | [![Discord][badge-discord]][link-discord] |
 
 ZIO Keeper is a purely-functional, type-safe library for building distributed
