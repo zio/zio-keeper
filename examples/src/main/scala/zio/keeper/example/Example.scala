@@ -5,13 +5,12 @@ import java.util.concurrent.TimeUnit
 import zio.clock.Clock
 import zio.console._
 import zio.duration._
-import zio.keeper.Cluster.Credentials
 import zio.keeper.discovery.Discovery
-import zio.keeper.{Cluster, Error, transport}
+import zio.keeper.{ Cluster, transport }
 import zio.macros.delegate._
-import zio.nio.{InetAddress, SocketAddress}
+import zio.nio.{ InetAddress, SocketAddress }
 import zio.random.Random
-import zio.{Chunk, IO, Schedule, ZIO}
+import zio.{ Chunk, Schedule, ZIO }
 
 object Node1 extends zio.ManagedApp {
 
@@ -20,12 +19,8 @@ object Node1 extends zio.ManagedApp {
   val env =
     for {
       transport <- (ZIO.environment[Clock with Console with Random] @@ withTransport)
-      config: Credentials with Discovery = new Credentials with Discovery {
-
-        override val discover: IO[Error, Set[SocketAddress]] =
-          IO.succeed(Set.empty)
-      }
-      result <- ZIO.succeed(config) @@ enrichWith(transport)
+      config    = Discovery.staticList(Set.empty)
+      result    <- ZIO.succeed(config) @@ enrichWith(transport)
     } yield result
 
   val appLogic = Cluster
@@ -64,14 +59,11 @@ object Node2 extends zio.ManagedApp {
   val env =
     for {
       transport <- (ZIO.environment[Clock with Console with Random] @@ withTransport)
-      config: Credentials with Discovery = new Credentials with Discovery {
-
-        override val discover: IO[Error, Set[SocketAddress]] =
-          InetAddress.localHost
-            .flatMap(addr => SocketAddress.inetSocketAddress(addr, 5557))
-            .map(Set(_: SocketAddress))
-            .orDie
-      }
+      addr <- InetAddress.localHost
+               .flatMap(addr => SocketAddress.inetSocketAddress(addr, 5557))
+               .map(Set(_: SocketAddress))
+               .orDie
+      config = Discovery.staticList(addr)
       result <- ZIO.succeed(config) @@ enrichWith(transport)
     } yield result
 
@@ -110,14 +102,11 @@ object Node3 extends zio.ManagedApp {
   val env =
     for {
       transport <- (ZIO.environment[Clock with Console with Random] @@ withTransport)
-      config: Credentials with Discovery = new Credentials with Discovery {
-
-        override val discover: IO[Error, Set[SocketAddress]] =
-          InetAddress.localHost
-            .flatMap(addr => SocketAddress.inetSocketAddress(addr, 5557))
-            .map(Set(_: SocketAddress))
-            .orDie
-      }
+      addr <- InetAddress.localHost
+               .flatMap(addr => SocketAddress.inetSocketAddress(addr, 5557))
+               .map(Set(_: SocketAddress))
+               .orDie
+      config = Discovery.staticList(addr)
       result <- ZIO.succeed(config) @@ enrichWith(transport)
     } yield result
 
@@ -176,7 +165,8 @@ object Server extends zio.App {
       _ <- putStrLn("public address: " + publicAddress.toString())
       _ <- bind(publicAddress)(handler)
             .provide(tcp)
-            .use(ch => ZIO.never.ensuring(ch.close.ignore)).fork
+            .use(ch => ZIO.never.ensuring(ch.close.ignore))
+            .fork
 
     } yield ()).ignore.as(0)
 }
@@ -198,5 +188,3 @@ object Client extends zio.App {
             .use(_.send(Chunk.fromArray("message from client".getBytes)).repeat(Schedule.recurs(100)))
     } yield ()).ignore.as(0)
 }
-
-

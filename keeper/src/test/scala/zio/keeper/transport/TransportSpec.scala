@@ -15,7 +15,7 @@ import zio.test.environment.{ Live, TestClock, TestConsole }
 object TransportSpec
     extends DefaultRunnableSpec({
       // todo: actually find free port
-      val freePort = ZIO.succeed(8010)
+      val freePort = ZIO.succeed(9010)
 
       val withTransport = tcp.withTcpTransport(10.seconds, 10.seconds)
 

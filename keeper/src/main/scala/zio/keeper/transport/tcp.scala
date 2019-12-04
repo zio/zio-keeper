@@ -114,7 +114,6 @@ class NioChannelOut(
           close *> ZIO.fail(ExceptionWrapper(ex))
       }
 
-
   override def isOpen: ZIO[Any, TransportError, Boolean] =
     socket.isOpen
 

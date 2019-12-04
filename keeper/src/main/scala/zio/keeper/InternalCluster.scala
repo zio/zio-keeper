@@ -6,7 +6,6 @@ import zio.console.{ Console, putStrLn }
 import zio.duration._
 import zio.keeper.Cluster.{ readMessage, serializeMessage }
 import zio.keeper.ClusterError._
-import zio.keeper.discovery.Discovery
 import zio.keeper.protocol.InternalProtocol
 import zio.keeper.protocol.InternalProtocol._
 import zio.keeper.transport.{ ChannelOut, Transport }
@@ -318,12 +317,15 @@ object InternalCluster {
 
   private[keeper] def initCluster(port: Int) =
     for {
-      localHost            <- InetAddress.localHost.toManaged_.orDie
-      socketAddress        <- SocketAddress.inetSocketAddress(localHost, port).toManaged_.orDie //this is hack to get random port
+      localHost <- InetAddress.localHost.toManaged_.orDie
+      socketAddress <- SocketAddress
+                        .inetSocketAddress(localHost, port)
+                        .toManaged_
+                        .orDie //this is hack to get random port
       localMember          = Member(NodeId.generateNew, NodeAddress(localHost.address, socketAddress.port))
       _                    <- putStrLn(s"Starting node [ ${localMember.nodeId} ]").toManaged_
       nodes                <- zio.Ref.make(Map.empty[NodeId, ChannelOut]).toManaged_
-      seeds                <- ZManaged.environment[Discovery with Console].flatMap(d => ZManaged.fromEffect(d.discover))
+      seeds                <- discovery.discoverNodes.toManaged_
       _                    <- putStrLn("seeds: " + seeds).toManaged_
       userMessagesQueue    <- ZManaged.make(zio.Queue.bounded[Message](1000))(_.shutdown)
       clusterMessagesQueue <- ZManaged.make(zio.Queue.bounded[Message](1000))(_.shutdown)
