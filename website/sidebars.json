@@ -6,7 +6,8 @@
   },
   "meetings-sidebar": {
     "Meetings": [
-      "meetings/meetings_index"
+      "meetings/meetings_index",
+      "meetings/meetings_20191122"
     ]
   },
   "library-sidebar": {

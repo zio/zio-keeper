@@ -22,7 +22,7 @@ const users = [
 
 const siteConfig = {
   title: 'ZIO Keeper',
-  tagline: 'A functional library for consistent replication of metadata across dynamic clusters',
+  tagline: 'Purely-functional, type-safe library for building distributed systems',
   url: 'https://zio.github.io',
   baseUrl: '/zio-keeper/', // Base URL for your project */
 
@@ -49,7 +49,7 @@ const siteConfig = {
   /* Colors for website */
   colors: {
     primaryColor: '#000000',
-    secondaryColor: '#000000',
+    secondaryColor: '#121020',
   },
 
   // This copyright info is used in /core/Footer.js and blog RSS/Atom feeds.
