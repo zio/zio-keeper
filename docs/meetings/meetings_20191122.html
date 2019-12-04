@@ -4,7 +4,63 @@
             {"zIndex":100,"cornerOffset":100}
           )
         });
-        </script><script src="/zio-keeper/js/scrollSpy.js"></script><link rel="stylesheet" href="/zio-keeper/css/main.css"/><script src="/zio-keeper/js/codetabs.js"></script></head><body class="sideNavVisible separateOnPageNav"><div class="fixedHeaderContainer"><div class="headerWrapper wrapper"><header><a href="/zio-keeper/"><img class="logo" src="/zio-keeper/img/navbar_brand2x.png" alt="ZIO Keeper"/><h2 class="headerTitleWithLogo">ZIO Keeper</h2></a><div class="navigationWrapper navigationSlider"><nav class="slidingNav"><ul class="nav-site nav-site-internal"><li class=""><a href="/zio-keeper/docs/overview/overview_index" target="_self">Overview</a></li><li class=""><a href="/zio-keeper/docs/meetings/meetings_index" target="_self">Meetings</a></li><li class=""><a href="/zio-keeper/docs/library/library_index" target="_self">Library</a></li></ul></nav></div></header></div></div><div class="navPusher"><div class="docMainWrapper wrapper"><div class="container mainContainer docsContainer"><div class="wrapper"><div class="post"><header class="postHeader"><h1 id="__docusaurus" class="postHeaderTitle">2019-11-22</h1></header><article><div><span><p><strong>Participants:</strong></p>
+        </script><script src="/zio-keeper/js/scrollSpy.js"></script><link rel="stylesheet" href="/zio-keeper/css/main.css"/><script src="/zio-keeper/js/codetabs.js"></script></head><body class="sideNavVisible separateOnPageNav"><div class="fixedHeaderContainer"><div class="headerWrapper wrapper"><header><a href="/zio-keeper/"><img class="logo" src="/zio-keeper/img/navbar_brand2x.png" alt="ZIO Keeper"/><h2 class="headerTitleWithLogo">ZIO Keeper</h2></a><div class="navigationWrapper navigationSlider"><nav class="slidingNav"><ul class="nav-site nav-site-internal"><li class=""><a href="/zio-keeper/docs/overview/overview_index" target="_self">Overview</a></li><li class="siteNavGroupActive"><a href="/zio-keeper/docs/meetings/meetings_index" target="_self">Meetings</a></li><li class=""><a href="/zio-keeper/docs/library/library_index" target="_self">Library</a></li></ul></nav></div></header></div></div><div class="navPusher"><div class="docMainWrapper wrapper"><div class="docsNavContainer" id="docsNav"><nav class="toc"><div class="toggleNav"><section class="navWrapper wrapper"><div class="navBreadcrumb wrapper"><div class="navToggle" id="navToggler"><div class="hamburger-menu"><div class="line1"></div><div class="line2"></div><div class="line3"></div></div></div><h2><i>›</i><span>Meetings</span></h2><div class="tocToggler" id="tocToggler"><i class="icon-toc"></i></div></div><div class="navGroups"><div class="navGroup"><h3 class="navGroupCategoryTitle">Meetings</h3><ul class=""><li class="navListItem"><a class="navItem" href="/zio-keeper/docs/meetings/meetings_index">Summary</a></li><li class="navListItem navListItemActive"><a class="navItem" href="/zio-keeper/docs/meetings/meetings_20191122">2019-11-22</a></li></ul></div></div></section></div><script>
+            var coll = document.getElementsByClassName('collapsible');
+            var checkActiveCategory = true;
+            for (var i = 0; i < coll.length; i++) {
+              var links = coll[i].nextElementSibling.getElementsByTagName('*');
+              if (checkActiveCategory){
+                for (var j = 0; j < links.length; j++) {
+                  if (links[j].classList.contains('navListItemActive')){
+                    coll[i].nextElementSibling.classList.toggle('hide');
+                    coll[i].childNodes[1].classList.toggle('rotate');
+                    checkActiveCategory = false;
+                    break;
+                  }
+                }
+              }
+
+              coll[i].addEventListener('click', function() {
+                var arrow = this.childNodes[1];
+                arrow.classList.toggle('rotate');
+                var content = this.nextElementSibling;
+                content.classList.toggle('hide');
+              });
+            }
+
+            document.addEventListener('DOMContentLoaded', function() {
+              createToggler('#navToggler', '#docsNav', 'docsSliderActive');
+              createToggler('#tocToggler', 'body', 'tocActive');
+
+              var headings = document.querySelector('.toc-headings');
+              headings && headings.addEventListener('click', function(event) {
+                var el = event.target;
+                while(el !== headings){
+                  if (el.tagName === 'A') {
+                    document.body.classList.remove('tocActive');
+                    break;
+                  } else{
+                    el = el.parentNode;
+                  }
+                }
+              }, false);
+
+              function createToggler(togglerSelector, targetSelector, className) {
+                var toggler = document.querySelector(togglerSelector);
+                var target = document.querySelector(targetSelector);
+
+                if (!toggler) {
+                  return;
+                }
+
+                toggler.onclick = function(event) {
+                  event.preventDefault();
+
+                  target.classList.toggle(className);
+                };
+              }
+            });
+        </script></nav></div><div class="container mainContainer docsContainer"><div class="wrapper"><div class="post"><header class="postHeader"><h1 id="__docusaurus" class="postHeaderTitle">2019-11-22</h1></header><article><div><span><p><strong>Participants:</strong></p>
 <ul>
 <li>Maxim Schuwalow (@mschuwalow)</li>
 <li>Peter Rowlands</li>
@@ -61,4 +117,4 @@ Protocols like raft tend to not scale well with the number of nodes in a cluster
 <li>If one of the nodes in the inner circle goes down it will be immediately replaced by a successor.</li>
 <li>Possibly, we have an active-passive setup with a group that will immediately take over leadership if the first group fails.</li>
 </ol>
-</span></div></article></div><div class="docLastUpdate"><em>Last updated on 12/4/2019 by Dejan Mijić</em></div><div class="docs-prevnext"></div></div></div><nav class="onPageNav"><ul class="toc-headings"><li><a href="#notes">Notes</a><ul class="toc-headings"><li><a href="#membership">Membership</a></li><li><a href="#crdts">CRDTs</a></li><li><a href="#consensus">Consensus</a></li></ul></li></ul></nav></div><footer class="nav-footer" id="footer"><section class="sitemap"><a href="/zio-keeper/" class="nav-home"><img src="/zio-keeper/img/sidebar_brand2x.png" alt="ZIO Keeper"/></a><div><h5>GitHub</h5><a class="github-button" href="https://github.com/zio/zio-keeper" data-icon="octicon-star" data-count-href="/zio/zio-keeper/stargazers" data-show-count="true" data-count-aria-label="# stargazers on GitHub" aria-label="Star this project on GitHub">Star</a></div><div><h5>Chat with us on Discord</h5><a href="https://discord.gg/2ccFBr4"><img src="/img/discord.png" width="120" alt="discord"/></a></div></section><section class="copyright">Copyright © 2019 ZIO Maintainers</section></footer></div></body></html>
+</span></div></article></div><div class="docLastUpdate"><em>Last updated on 12/4/2019 by Dejan Mijić</em></div><div class="docs-prevnext"><a class="docs-prev button" href="/zio-keeper/docs/meetings/meetings_index"><span class="arrow-prev">← </span><span>Summary</span></a></div></div></div><nav class="onPageNav"><ul class="toc-headings"><li><a href="#notes">Notes</a><ul class="toc-headings"><li><a href="#membership">Membership</a></li><li><a href="#crdts">CRDTs</a></li><li><a href="#consensus">Consensus</a></li></ul></li></ul></nav></div><footer class="nav-footer" id="footer"><section class="sitemap"><a href="/zio-keeper/" class="nav-home"><img src="/zio-keeper/img/sidebar_brand2x.png" alt="ZIO Keeper"/></a><div><h5>GitHub</h5><a class="github-button" href="https://github.com/zio/zio-keeper" data-icon="octicon-star" data-count-href="/zio/zio-keeper/stargazers" data-show-count="true" data-count-aria-label="# stargazers on GitHub" aria-label="Star this project on GitHub">Star</a></div><div><h5>Chat with us on Discord</h5><a href="https://discord.gg/2ccFBr4"><img src="/zio-keeper/img/discord.png" width="120" alt="discord"/></a></div></section><section class="copyright">Copyright © 2019 ZIO Maintainers</section></footer></div></body></html>
