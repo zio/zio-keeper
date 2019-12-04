@@ -1,0 +1,64 @@
+<!DOCTYPE html><html lang="en"><head><meta charSet="utf-8"/><meta http-equiv="X-UA-Compatible" content="IE=edge"/><title>2019-11-22 · ZIO Keeper</title><meta name="viewport" content="width=device-width"/><meta name="generator" content="Docusaurus"/><meta name="description" content="**Participants:**"/><meta name="docsearch:language" content="en"/><meta property="og:title" content="2019-11-22 · ZIO Keeper"/><meta property="og:type" content="website"/><meta property="og:url" content="https://zio.github.io/zio-keeper/"/><meta property="og:description" content="**Participants:**"/><meta name="twitter:card" content="summary"/><link rel="shortcut icon" href="/zio-keeper/img/favicon.png"/><link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/default.min.css"/><script type="text/javascript" src="https://buttons.github.io/buttons.js"></script><script src="https://unpkg.com/vanilla-back-to-top@7.1.14/dist/vanilla-back-to-top.min.js"></script><script>
+        document.addEventListener('DOMContentLoaded', function() {
+          addBackToTop(
+            {"zIndex":100,"cornerOffset":100}
+          )
+        });
+        </script><script src="/zio-keeper/js/scrollSpy.js"></script><link rel="stylesheet" href="/zio-keeper/css/main.css"/><script src="/zio-keeper/js/codetabs.js"></script></head><body class="sideNavVisible separateOnPageNav"><div class="fixedHeaderContainer"><div class="headerWrapper wrapper"><header><a href="/zio-keeper/"><img class="logo" src="/zio-keeper/img/navbar_brand2x.png" alt="ZIO Keeper"/><h2 class="headerTitleWithLogo">ZIO Keeper</h2></a><div class="navigationWrapper navigationSlider"><nav class="slidingNav"><ul class="nav-site nav-site-internal"><li class=""><a href="/zio-keeper/docs/overview/overview_index" target="_self">Overview</a></li><li class=""><a href="/zio-keeper/docs/meetings/meetings_index" target="_self">Meetings</a></li><li class=""><a href="/zio-keeper/docs/library/library_index" target="_self">Library</a></li></ul></nav></div></header></div></div><div class="navPusher"><div class="docMainWrapper wrapper"><div class="container mainContainer docsContainer"><div class="wrapper"><div class="post"><header class="postHeader"><h1 id="__docusaurus" class="postHeaderTitle">2019-11-22</h1></header><article><div><span><p><strong>Participants:</strong></p>
+<ul>
+<li>Maxim Schuwalow (@mschuwalow)</li>
+<li>Peter Rowlands</li>
+<li>Dejan Mijic (@mijicd)</li>
+</ul>
+<p><strong>Agenda:</strong></p>
+<ul>
+<li>Discuss Peter's design proposal.</li>
+</ul>
+<h2><a class="anchor" aria-hidden="true" id="notes"></a><a href="#notes" aria-hidden="true" class="hash-link"><svg class="hash-link-icon" aria-hidden="true" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Notes</h2>
+<p>We discussed a few things yesterday, but the high level idea we agree on is still &quot;95% CRDTs, 5% strongly consistent mutable data&quot;.
+We want to stay with our seperate pluggable layers for membership/crdts and started compiling requirements and possible designs.</p>
+<h3><a class="anchor" aria-hidden="true" id="membership"></a><a href="#membership" aria-hidden="true" class="hash-link"><svg class="hash-link-icon" aria-hidden="true" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Membership</h3>
+<p>Here we agreed on the following requirements:</p>
+<ol>
+<li>We need to suppport a (possibly hierarchical) topic model for membership and broadcast.</li>
+<li>We need an algorithm that can operate in different environments depending on tunable parameters. The main axis we want to consider
+is reliability of nodes.</li>
+<li>We need to support a broadcast strategy that reaches all nodes in the cluster very quickly (for example through high fanout values) and optimally
+supporting acknowledgement. This will be necessary for the consensus protocols.</li>
+<li>We should support some sort of immutable facts that can be spread across the cluster such as certificate revocation.</li>
+<li>For all of { CRDTs, strongly consistent mutable data, immutable facts } we want to support a time to live.</li>
+<li>We want to have encryption and cryptographic signing built in from the beginning. Peter started posting about that.</li>
+</ol>
+<p>I believe this gives us enough requirements to begin creating a short list of possible protocol that we could use for this.
+As a fist step it is probably a good idea to create a long list of all well known ones.</p>
+<h3><a class="anchor" aria-hidden="true" id="crdts"></a><a href="#crdts" aria-hidden="true" class="hash-link"><svg class="hash-link-icon" aria-hidden="true" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>CRDTs</h3>
+<p>We decided to go with operation-based CRDTs by default, but not overly specialize any parts of the code for them.
+We will need to support some sort of GC for them, Peter drafted a system of how this might look like</p>
+<ol>
+<li>We have periodic snapshots running that are signed and agreed on by the cluster using a consensus mechanism.
+These snapshots will compact the metadata of a CRDT, but not change their current value. One example could be
+removal of tombstones.</li>
+<li>We defined two periods related to GC:
+<ol>
+<li>T1 the amount of time for which a snapshot is considered 'fresh'</li>
+<li>T2 the amount of time for which a snapshot is retained, this should be significantly larger than the longest expected continous
+downtime of a node.</li>
+</ol></li>
+<li>Each update to an CRDT is signed with the current snapshot. If a node sends an update one of three situations can occur:
+<ol>
+<li>The age of the snapshot is &lt; T1 -&gt; It is accepted without any further measures</li>
+<li>The age of the snapshot is &gt; T1, &lt; T2 -&gt; Member is required to update to a newer snapshot</li>
+<li>The age of the snapshot is &gt; T2 -&gt; The member is forced to discard its own state a do a full sync with another member.
+This should only happpen if a node has been down for a considerable amount of time.</li>
+</ol></li>
+</ol>
+<h3><a class="anchor" aria-hidden="true" id="consensus"></a><a href="#consensus" aria-hidden="true" class="hash-link"><svg class="hash-link-icon" aria-hidden="true" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Consensus</h3>
+<p>We will require some sort of consensus mechanism for both GC and any form of strongly consistent key-value store.
+Protocols like raft tend to not scale well with the number of nodes in a cluster, proposition is therefore the following:</p>
+<ol>
+<li>We have one consensus protocol running that scales well with number of nodes and elects a smaller group.</li>
+<li>This smaller group runs something like RAFT and becomes the source of truth for consensus in the cluster.</li>
+<li>If one of the nodes in the inner circle goes down it will be immediately replaced by a successor.</li>
+<li>Possibly, we have an active-passive setup with a group that will immediately take over leadership if the first group fails.</li>
+</ol>
+</span></div></article></div><div class="docLastUpdate"><em>Last updated on 12/4/2019 by Dejan Mijić</em></div><div class="docs-prevnext"></div></div></div><nav class="onPageNav"><ul class="toc-headings"><li><a href="#notes">Notes</a><ul class="toc-headings"><li><a href="#membership">Membership</a></li><li><a href="#crdts">CRDTs</a></li><li><a href="#consensus">Consensus</a></li></ul></li></ul></nav></div><footer class="nav-footer" id="footer"><section class="sitemap"><a href="/zio-keeper/" class="nav-home"><img src="/zio-keeper/img/sidebar_brand2x.png" alt="ZIO Keeper"/></a><div><h5>GitHub</h5><a class="github-button" href="https://github.com/zio/zio-keeper" data-icon="octicon-star" data-count-href="/zio/zio-keeper/stargazers" data-show-count="true" data-count-aria-label="# stargazers on GitHub" aria-label="Star this project on GitHub">Star</a></div><div><h5>Chat with us on Discord</h5><a href="https://discord.gg/2ccFBr4"><img src="/img/discord.png" width="120" alt="discord"/></a></div></section><section class="copyright">Copyright © 2019 ZIO Maintainers</section></footer></div></body></html>
