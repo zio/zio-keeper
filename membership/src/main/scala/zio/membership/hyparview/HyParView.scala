@@ -14,7 +14,6 @@ import zio.clock.Clock
 
 object HyParView {
 
-  @silent("deprecated")
   def apply[R <: Transport[T] with Random with Console with Clock, T](
     localAddr: T,
     activeViewCapactiy: Int,
@@ -89,6 +88,7 @@ object HyParView {
     }
   }
 
+  @silent("deprecated")
   private[hyparview] val makePickRandom: ZIO[Random, Nothing, Int => STM[Nothing, Int]] =
     for {
       seed    <- random.nextInt
