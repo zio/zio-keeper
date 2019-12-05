@@ -88,8 +88,9 @@ object TransportSpec
             port   <- freePort.map(_ + 1)
             addr   <- SocketAddress.inetSocketAddress(port)
             fiber  <- bindAndWaitForValue(addr, latch, _ => ZIO.never).fork
-            _      <- connect(addr).use(_.send(payload).retry(Schedule.spaced(10.milliseconds)))
-            result <- latch.await *> fiber.interrupt
+            _      <- latch.await
+            _      <- connect(addr).use(_.send(payload)).retry(Schedule.spaced(10.milliseconds))
+            result <- fiber.interrupt
           } yield assert(result, isInterrupted))
         }
       )
