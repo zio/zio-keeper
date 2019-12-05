@@ -44,13 +44,7 @@ object HyParView {
       r            <- ZManaged.environment[R]
       activeView0  <- TMap.empty[T, ChunkConnection].commit.toManaged_
       passiveView0 <- TSet.empty[T].commit.toManaged_
-      pickRandom0 <- {
-        for {
-          seed    <- random.nextInt.toManaged_
-          sRandom = new scala.util.Random(seed)
-          ref     <- TRef.make(Stream.continually((i: Int) => sRandom.nextInt(i))).commit.toManaged_
-        } yield (i: Int) => ref.modify(s => (s.head(i), s.tail))
-      }
+      pickRandom0  <- makePickRandom.toManaged_
       env <- ZManaged.environment[Transport[T] with zio.console.Console] @@ enrichWith[Env[T]] {
               new Env[T] {
                 val env = new Env.Service[T] {
@@ -94,4 +88,11 @@ object HyParView {
       }
     }
   }
+
+  private[hyparview] val makePickRandom: ZIO[Random, Nothing, Int => STM[Nothing, Int]] =
+    for {
+      seed    <- random.nextInt
+      sRandom = new scala.util.Random(seed)
+      ref     <- TRef.make(Stream.continually((i: Int) => sRandom.nextInt(i))).commit
+    } yield (i: Int) => ref.modify(s => (s.head(i), s.tail))
 }

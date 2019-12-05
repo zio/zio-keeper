@@ -77,7 +77,6 @@ lazy val membership = project
       "dev.zio"                %% "zio-test"                % ZioVersion % Test,
       "dev.zio"                %% "zio-test-sbt"            % ZioVersion % Test,
       ("com.github.ghik" % "silencer-lib" % "1.4.4" % Provided).cross(CrossVersion.full),
-      compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1"),
       compilerPlugin(("com.github.ghik" % "silencer-plugin" % "1.4.4").cross(CrossVersion.full))
     ),
     testFrameworks := Seq(new TestFramework("zio.test.sbt.ZTestFramework"))
