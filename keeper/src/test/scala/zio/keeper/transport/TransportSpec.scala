@@ -64,7 +64,7 @@ object TransportSpec
           environment >>> Live.live(for {
             port <- freePort.map(_ + 2)
             addr <- SocketAddress.inetSocketAddress(port)
-            result <- bind(addr)(channel => channel.close.ignore.forever).use_(
+            result <- bind(addr)(channel => channel.close.ignore).use_(
                        connect(addr).use(client => client.read.ignore) *>
                          connect(addr).use(client => client.read).either
                      )

@@ -56,7 +56,7 @@ final class InternalCluster(
 
   private def sendInternalMessage(to: ChannelOut, msg: InternalProtocol): ZIO[Console, Error, Unit] = {
     for {
-      _ <- putStrLn(s"sending $msg")
+      _       <- putStrLn(s"sending $msg")
       payload <- msg.serialize
       msg     <- serializeMessage(localMember, payload, 1)
       _       <- to.send(msg)
@@ -69,25 +69,24 @@ final class InternalCluster(
     for {
       node <- nodeChannels.get.map(_.get(to))
       _ <- node match {
-        case Some(channel) =>
-          sendInternalMessage(channel, msg)
-        case None => ZIO.fail(UnknownNode(to))
-      }
+            case Some(channel) =>
+              sendInternalMessage(channel, msg)
+            case None => ZIO.fail(UnknownNode(to))
+          }
     } yield ()
 
-  private def sendInternalMessageWithAck(to: NodeId, timeout: Duration)(fn: Long => InternalProtocol) = {
+  private def sendInternalMessageWithAck(to: NodeId, timeout: Duration)(fn: Long => InternalProtocol) =
     for {
       offset <- msgOffset.update(_ + 1)
       prom   <- Promise.make[Error, Unit]
       _      <- acks.put(offset, prom).commit
       msg    = fn(offset)
-      _ <- putStrLn(s"sending $msg with ack and timeout: ${timeout.asScala.toSeconds} seconds")
+      _      <- putStrLn(s"sending $msg with ack and timeout: ${timeout.asScala.toSeconds} seconds")
       _      <- sendInternalMessage(to, fn(offset))
       _ <- prom.await
             .ensuring(acks.delete(offset).commit)
             .timeoutFail(AckMessageFail(offset, msg, to))(timeout)
     } yield ()
-  }
 
   private def expects[R, A](
     channel: ChannelOut
@@ -97,7 +96,6 @@ final class InternalCluster(
       msg    <- InternalProtocol.deserialize(bytes._2.payload)
       result <- pf.lift(msg).getOrElse(ZIO.fail(UnexpectedMessage(bytes._2)))
     } yield result
-
 
   private def ack(id: Long) =
     for {
@@ -215,7 +213,9 @@ final class InternalCluster(
                 }
             }
             .mapError(HandshakeError(addr, _))
-            .catchAll(ex => connectionInit.fail(ex) *> putStrLn(s"Failed initiating connection with node [ ${addr} ]: $ex"))
+            .catchAll(
+              ex => connectionInit.fail(ex) *> putStrLn(s"Failed initiating connection with node [ ${addr} ]: $ex")
+            )
             .fork
       _ <- connectionInit.await
     } yield ()
@@ -267,7 +267,7 @@ final class InternalCluster(
     stream.tap { message =>
       for {
         payload <- InternalProtocol.deserialize(message.payload)
-        _ <- putStrLn(s"receive message: $payload")
+        _       <- putStrLn(s"receive message: $payload")
         _ <- payload match {
               case Ack(ackId, state) =>
                 updateState(state) *>
@@ -280,16 +280,16 @@ final class InternalCluster(
                 } yield ()
               case PingReq(target, originalAckId, state) =>
                 for {
-                  _              <- updateState(state)
-                  state          <- gossipStateRef.get
-                  _ <- sendInternalMessageWithAck(target.nodeId, 10.seconds) (ackId =>
-                    Ping(ackId, state)
-                  ).foldM(
-                    _ => ZIO.unit,
-                    _ =>
-                      gossipStateRef.get
-                        .flatMap(state => sendInternalMessage( message.sender, Ack(originalAckId, state)))
-                  ).fork
+                  _     <- updateState(state)
+                  state <- gossipStateRef.get
+                  _ <- sendInternalMessageWithAck(target.nodeId, 10.seconds)(ackId => Ping(ackId, state))
+                        .foldM(
+                          _ => ZIO.unit,
+                          _ =>
+                            gossipStateRef.get
+                              .flatMap(state => sendInternalMessage(message.sender, Ack(originalAckId, state)))
+                        )
+                        .fork
                 } yield ()
               case _ => putStrLn("unknown message: " + payload)
             }

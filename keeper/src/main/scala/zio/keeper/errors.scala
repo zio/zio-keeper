@@ -48,8 +48,9 @@ object ClusterError {
 sealed abstract class TransportError(msg: String = "") extends Error(msg = msg)
 
 object TransportError {
+
   final case class ExceptionWrapper(throwable: Throwable)
-    extends TransportError(msg = if(throwable.getMessage == null) throwable.toString else throwable.getMessage)
+      extends TransportError(msg = if (throwable.getMessage == null) throwable.toString else throwable.getMessage)
 
   final case class RequestTimeout(addr: SocketAddress, timeout: Duration)
       extends TransportError(msg = s"Request timeout $timeout for connection [$addr].")

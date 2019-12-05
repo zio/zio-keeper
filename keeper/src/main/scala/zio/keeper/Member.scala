@@ -16,7 +16,7 @@ object NodeId {
 }
 
 final case class Member(nodeId: NodeId, addr: NodeAddress) {
-  override def toString: String = s"${nodeId.value}: ${addr.ip.mkString(".")}: ${addr.port}"
+  override def toString: String = s"nodeId: ${nodeId.value}, ip: ${addr.ip.mkString(".")}, port: ${addr.port}"
 }
 
 object Member {

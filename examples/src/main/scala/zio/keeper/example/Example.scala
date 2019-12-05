@@ -6,6 +6,7 @@ import zio.clock.Clock
 import zio.console._
 import zio.duration._
 import zio.keeper.discovery.Discovery
+import zio.keeper.transport.tcp
 import zio.keeper.{ Cluster, transport }
 import zio.macros.delegate._
 import zio.nio.{ InetAddress, SocketAddress }
@@ -13,20 +14,22 @@ import zio.random.Random
 import zio.{ Chunk, Schedule, ZIO }
 
 object Node1 extends zio.ManagedApp {
+
   def run(args: List[String]) =
     TestNode.start(5557, "Node1", Set.empty)
 }
 
 object Node2 extends zio.ManagedApp {
+
   def run(args: List[String]) =
     TestNode.start(5558, "Node2", Set(5557))
 }
 
 object Node3 extends zio.ManagedApp {
+
   def run(args: List[String]) =
     TestNode.start(5559, "Node3", Set(5558))
 }
-
 
 object TestNode {
 

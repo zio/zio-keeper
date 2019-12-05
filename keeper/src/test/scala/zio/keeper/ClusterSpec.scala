@@ -93,6 +93,7 @@ object ClusterSpec
                   node1  = c1.instance.localMember.nodeId
                   node2  = c2.instance.localMember.nodeId
                   node3  = c3.instance.localMember.nodeId
+                  _      <- c1.stop *> c2.stop *> c3.stop
                 } yield assert(nodes1, equalTo(List(node2, node3))) &&
                   assert(nodes2, equalTo(List(node1, node3))) &&
                   assert(nodes3, equalTo(List(node1, node2)))
