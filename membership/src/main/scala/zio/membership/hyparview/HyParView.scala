@@ -69,7 +69,7 @@ object HyParView {
           } yield ()).repeat(Schedule.spaced(1.second)).toManaged_.fork
       _ <- env.transport
             .bind(localAddr)
-            .foreach(InitialProtocol.initialProtocolHandler(_).fork)
+            .foreach(InitialProtocol.handleInitialProtocol(_).fork)
             .provide(env)
             .toManaged_
             .fork
@@ -85,7 +85,7 @@ object HyParView {
             con <- env.transport.connect(to)
             msg <- Tagged.write[InitialProtocol[T]](InitialProtocol.Join(localAddr))
             _   <- con.send(msg)
-            _   <- addConnection(to, con).provide(env)
+            _   <- addConnection(to, con).fork.provide(env)
           } yield ()
 
         override def send[A: ByteCodec](to: T, payload: A) = ???
@@ -94,5 +94,4 @@ object HyParView {
       }
     }
   }
-
 }

@@ -3,9 +3,9 @@ package zio.membership.hyparview
 import zio.membership.ByteCodec
 import upickle.default._
 
-sealed trait NeighborProtocol
+sealed private[hyparview] trait NeighborProtocol
 
-object NeighborProtocol {
+private[hyparview] object NeighborProtocol {
 
   implicit val tagged: Tagged[NeighborProtocol] =
     Tagged.instance(

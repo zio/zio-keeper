@@ -10,9 +10,9 @@ import zio.stm._
 import zio.console.Console
 import upickle.default._
 
-sealed trait InitialProtocol[T]
+sealed private[hyparview] trait InitialProtocol[T]
 
-object InitialProtocol {
+private[hyparview] object InitialProtocol {
 
   implicit def tagged[T](
     implicit
@@ -77,7 +77,7 @@ object InitialProtocol {
       ByteCodec.fromReadWriter(macroRW[ShuffleReply[T]])
   }
 
-  private[hyparview] def initialProtocolHandler[T](
+  def handleInitialProtocol[T](
     con: ChunkConnection
   )(
     implicit
@@ -96,7 +96,9 @@ object InitialProtocol {
       }
       .ensuring(con.close)
 
-  private[hyparview] def handleNeighbor[T](
+  // individual message handlers --------------------------------------------------------------------
+
+  def handleNeighbor[T](
     msg: InitialProtocol.Neighbor[T],
     con: ChunkConnection
   )(
@@ -134,7 +136,7 @@ object InitialProtocol {
       }
     }
 
-  private[hyparview] def handleJoin[T](
+  def handleJoin[T](
     msg: InitialProtocol.Join[T],
     con: ChunkConnection
   )(
@@ -153,7 +155,7 @@ object InitialProtocol {
       } yield ()
     }
 
-  private[hyparview] def handleForwardJoinReply[T](
+  def handleForwardJoinReply[T](
     msg: InitialProtocol.ForwardJoinReply[T],
     con: ChunkConnection
   )(
@@ -162,7 +164,7 @@ object InitialProtocol {
     ev2: Tagged[InitialProtocol[T]]
   ) = addConnection(msg.sender, con)
 
-  private[hyparview] def handleShuffleReply[T](
+  def handleShuffleReply[T](
     msg: InitialProtocol.ShuffleReply[T]
   ) =
     ZIO.environment[Env[T]].map(_.env).flatMap { env =>

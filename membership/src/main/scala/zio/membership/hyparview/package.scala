@@ -6,8 +6,6 @@ import zio.stm._
 
 package object hyparview {
 
-  private[hyparview] type Handler = Fiber[Error, Unit]
-
   private[hyparview] def addConnection[T](
     to: T,
     con: ChunkConnection
@@ -19,7 +17,7 @@ package object hyparview {
     for {
       dropped <- Env.addNodeToActiveView(to, con)
       _       <- ZIO.foreach(dropped)(disconnect(_))
-      _       <- Protocol.protocolHandler(con)
+      _       <- Protocol.handleProtocol(con)
     } yield ()
 
   private[hyparview] def send[T, M <: Protocol[T]: Tagged](
@@ -29,11 +27,16 @@ package object hyparview {
     implicit
     ev: Tagged[Protocol[T]]
   ) =
-    for {
-      chunk <- Tagged.write(msg)
-      con   <- Env.activeView[T].flatMap(_.get(to).commit)
-      _     <- ZIO.foreach(con)(_.send(chunk).orElse(disconnect(to)))
-    } yield ()
+    Tagged
+      .write[M](msg)
+      .foldM(
+        e => console.putStrLn(s"Failed serializing message. Not sending: $e"),
+        chunk =>
+          for {
+            con <- Env.activeView[T].flatMap(_.get(to).commit)
+            _   <- ZIO.foreach(con)(_.send(chunk).orElse(disconnect(to)))
+          } yield ()
+      )
 
   private[hyparview] def disconnect[T](
     node: T,

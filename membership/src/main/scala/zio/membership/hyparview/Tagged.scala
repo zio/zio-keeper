@@ -4,12 +4,12 @@ import zio._
 import zio.membership.ByteCodec
 import zio.membership.DeserializationError
 
-trait Tagged[A] {
+private[hyparview] trait Tagged[A] {
   def tagOf(a: A): Byte
   def codecFor(tag: Byte): IO[DeserializationError, ByteCodec[A]]
 }
 
-object Tagged {
+private[hyparview] object Tagged {
 
   def apply[A](implicit ev: Tagged[A]) = ev
 
@@ -22,7 +22,7 @@ object Tagged {
         else ZIO.fail(DeserializationError(s"Unknown tag '$tag'."))
     }
 
-  private[hyparview] def read[A](
+  def read[A](
     from: Chunk[Byte]
   )(
     implicit
@@ -37,7 +37,7 @@ object Tagged {
       } yield data
     }
 
-  private[hyparview] def write[A](
+  def write[A](
     data: A
   )(
     implicit

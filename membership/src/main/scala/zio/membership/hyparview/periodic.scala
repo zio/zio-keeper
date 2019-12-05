@@ -5,9 +5,12 @@ import zio.membership.transport.Transport
 import zio.stm._
 import zio.console.Console
 
-object periodic {
+/**
+ * Collection of periodic tasks that are part of hyparview protocol.
+ */
+private[hyparview] object periodic {
 
-  private[hyparview] def doNeighbor[T](
+  def doNeighbor[T](
     implicit
     ev1: Tagged[Protocol[T]],
     ev2: Tagged[InitialProtocol[T]]
@@ -29,10 +32,10 @@ object periodic {
       } yield active
     }
 
-  private[hyparview] def doShuffle[T](
+  def doShuffle[T](
     implicit
     ev: Tagged[Protocol[T]]
-  ) =
+  ): ZIO[Console with Env[T] with Transport[T], Nothing, Int] =
     ZIO.environment[Env[T]].map(_.env).flatMap { env =>
       (for {
         nodes  <- env.activeView.keys

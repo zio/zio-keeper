@@ -11,9 +11,9 @@ import zio.console.Console
 import zio.console.putStrLn
 import upickle.default._
 
-sealed trait Protocol[T]
+sealed private[hyparview] trait Protocol[T]
 
-object Protocol {
+private[hyparview] object Protocol {
 
   implicit def tagged[T](
     implicit
@@ -70,7 +70,7 @@ object Protocol {
       ByteCodec.fromReadWriter(macroRW[Shuffle[T]])
   }
 
-  private[hyparview] def protocolHandler[T](
+  def handleProtocol[T](
     con: ChunkConnection
   )(
     implicit
@@ -87,7 +87,9 @@ object Protocol {
       }
       .onError(e => putStrLn(s"Handler failed with ${e}") *> con.close)
 
-  private[hyparview] def handleDisconnect[T](
+  // individual message handlers --------------------------------------------------------------------
+
+  def handleDisconnect[T](
     msg: Protocol.Disconnect[T]
   ) =
     ZIO.environment[Env[T]].map(_.env).flatMap { env =>
@@ -101,7 +103,7 @@ object Protocol {
         }
     }
 
-  private[hyparview] def handleForwardJoin[T](
+  def handleForwardJoin[T](
     msg: Protocol.ForwardJoin[T]
   )(
     implicit
@@ -131,7 +133,7 @@ object Protocol {
       process.commit.flatten
     }
 
-  private[hyparview] def handleShuffle[T](
+  def handleShuffle[T](
     msg: Protocol.Shuffle[T]
   )(
     implicit
