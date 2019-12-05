@@ -1,11 +1,14 @@
 package zio.keeper
 
 import zio.duration.Duration
+import zio.keeper.protocol.InternalProtocol
 import zio.nio.SocketAddress
 
 import scala.reflect.ClassTag
 
-sealed abstract class Error(val msg: String = "")
+sealed abstract class Error(val msg: String = "") {
+  override def toString: String = msg
+}
 
 sealed abstract class SerializationError(msg: String = "") extends Error(msg = msg)
 
@@ -35,12 +38,19 @@ object ClusterError {
       extends ClusterError(msg = s"Connection handshake for $addr failed with ${error.msg}")
 
   final case class UnexpectedMessage(message: Message) extends ClusterError
+
+  final case class AckMessageFail(ackId: Long, message: InternalProtocol, to: NodeId)
+      extends ClusterError(msg = s"message [$message] with ack id: $ackId sent to: $to overdue timeout ")
+
+  final case class UnknownNode(nodeId: NodeId) extends ClusterError(msg = nodeId.toString + " is not in cluster")
 }
 
 sealed abstract class TransportError(msg: String = "") extends Error(msg = msg)
 
 object TransportError {
-  final case class ExceptionWrapper(throwable: Throwable) extends TransportError(msg = throwable.getMessage)
+
+  final case class ExceptionWrapper(throwable: Throwable)
+      extends TransportError(msg = if (throwable.getMessage == null) throwable.toString else throwable.getMessage)
 
   final case class RequestTimeout(addr: SocketAddress, timeout: Duration)
       extends TransportError(msg = s"Request timeout $timeout for connection [$addr].")

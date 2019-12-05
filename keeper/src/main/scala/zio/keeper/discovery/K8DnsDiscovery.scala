@@ -17,18 +17,19 @@ import zio.{ IO, ZIO, keeper }
  * Headless service is a service of type ClusterIP with the clusterIP property set to None.
  *
  */
-trait K8DnsDiscovery extends Discovery {
+abstract class K8DnsDiscovery(console: Console) extends Discovery.Service[Any] {
 
-  final override val discover: ZIO[Console, keeper.Error, Set[SocketAddress]] = {
+  final override val discoverNodes: ZIO[Any, keeper.Error, Set[SocketAddress]] = {
     for {
       addresses <- K8DnsDiscovery.lookup(serviceDns, serviceDnsTimeout)
       nodes     <- ZIO.foreach(addresses)(addr => zio.nio.SocketAddress.inetSocketAddress(addr, servicePort))
     } yield nodes.toSet: Set[zio.nio.SocketAddress]
   }.catchAll(
-    ex =>
-      putStrLn("discovery strategy " + this.getClass.getSimpleName + " failed.") *>
-        ZIO.fail(ServiceDiscoveryError(ex.getMessage))
-  )
+      ex =>
+        putStrLn("discovery strategy " + this.getClass.getSimpleName + " failed.") *>
+          ZIO.fail(ServiceDiscoveryError(ex.getMessage))
+    )
+    .provide(console)
 
   def serviceDns: zio.nio.InetAddress
 

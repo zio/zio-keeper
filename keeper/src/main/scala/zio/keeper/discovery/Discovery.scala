@@ -1,9 +1,25 @@
 package zio.keeper.discovery
 
 import zio.ZIO
-import zio.console.Console
 import zio.keeper.Error
+import zio.nio.SocketAddress
 
 trait Discovery {
-  val discover: ZIO[Console, Error, Set[zio.nio.SocketAddress]]
+  def discover: Discovery.Service[Any]
+}
+
+object Discovery {
+
+  trait Service[R] {
+    def discoverNodes: ZIO[R, Error, Set[zio.nio.SocketAddress]]
+  }
+
+  def staticList(addresses: Set[SocketAddress]): Discovery = new Discovery {
+
+    override def discover: Service[Any] = new Service[Any] {
+
+      override def discoverNodes: ZIO[Any, Error, Set[SocketAddress]] =
+        ZIO.succeed(addresses)
+    }
+  }
 }

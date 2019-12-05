@@ -8,6 +8,8 @@ import zio.stream.Stream
 import zio.keeper.SerializationError._
 
 trait Cluster {
+  def localMember: Member
+
   def nodes: UIO[List[NodeId]]
 
   def send(data: Chunk[Byte], receipt: NodeId): IO[Error, Unit]
@@ -24,7 +26,7 @@ object Cluster {
   def join[A](
     port: Int
   ): ZManaged[
-    Credentials with Discovery with Transport with zio.console.Console with zio.clock.Clock with zio.random.Random,
+    Discovery with Transport with zio.console.Console with zio.clock.Clock with zio.random.Random,
     Error,
     Cluster
   ] =
@@ -55,8 +57,4 @@ object Cluster {
       bytes      <- byteBuffer.getChunk()
     } yield bytes
   }.mapError(ex => SerializationTypeError[Message](ex))
-
-  trait Credentials {
-    // TODO: ways to obtain auth data
-  }
 }

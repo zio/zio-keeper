@@ -20,6 +20,8 @@ case class GossipState(members: SortedSet[Member]) extends AnyVal {
       this.members.diff(other.members),
       other.members.diff(this.members)
     )
+
+  override def toString: String = s"GossipState[${members.mkString(",")}] "
 }
 
 object GossipState {
