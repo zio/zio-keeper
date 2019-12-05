@@ -63,14 +63,14 @@ object ClusterSpec
           shutdown      <- Promise.make[Nothing, Unit]
           discoveryTest <- ZIO.environment[TestDiscovery]
           fiber <- Cluster
-                .join(port)
-                .use(
-                  cluster =>
-                    discoveryTest.discover.addMember(cluster.localMember) *>
-                      start.succeed(cluster) *>
-                      shutdown.await
-                )
-                .fork
+                    .join(port)
+                    .use(
+                      cluster =>
+                        discoveryTest.discover.addMember(cluster.localMember) *>
+                          start.succeed(cluster) *>
+                          shutdown.await
+                    )
+                    .fork
           cluster <- start.await
         } yield new ClusterHolder {
           def instance = cluster
