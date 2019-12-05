@@ -1,0 +1,20 @@
+{
+  "overview-sidebar": {
+    "Overview": [
+      "overview/overview_index"
+    ]
+  },
+  "meetings-sidebar": {
+    "Meetings": [
+      "meetings/meetings_index",
+      "meetings/meetings_20191122"
+    ]
+  },
+  "library-sidebar": {
+    "Library": [
+      "library/library_index",
+      "library/library_gossip",
+      "library/library_crdts"
+    ]
+  }
+}
