@@ -62,7 +62,7 @@ object ClusterSpec
           start         <- Promise.make[Nothing, Cluster]
           shutdown      <- Promise.make[Nothing, Unit]
           discoveryTest <- ZIO.environment[TestDiscovery]
-          _ <- Cluster
+          fiber <- Cluster
                 .join(port)
                 .use(
                   cluster =>
@@ -74,7 +74,7 @@ object ClusterSpec
           cluster <- start.await
         } yield new ClusterHolder {
           def instance = cluster
-          def stop     = shutdown.succeed(()).unit
+          def stop     = shutdown.succeed(()) *> fiber.interrupt.unit
         }
 
       suite("cluster")(

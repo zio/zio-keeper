@@ -352,7 +352,7 @@ object InternalCluster {
       _ <- putStrLn("Connecting to seed nodes: " + seeds).toManaged_
       _ <- cluster.connectToSeeds(seeds).toManaged_
       _ <- putStrLn("Beginning to accept connections").toManaged_
-      _ <- cluster.acceptConnectionRequests.use(channel => ZIO.never.ensuring(channel.close.ignore)).toManaged_.fork
+      _ <- cluster.acceptConnectionRequests.use(channel => ZIO.never.ensuring(channel.close.ignore)).fork.toManaged_
       _ <- putStrLn("Starting SWIM membership protocol").toManaged_
       _ <- cluster.runSwim.fork.toManaged_
     } yield cluster
