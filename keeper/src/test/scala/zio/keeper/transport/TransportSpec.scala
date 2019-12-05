@@ -62,11 +62,13 @@ object TransportSpec
         },
         testM("we should be able to close the client connection") {
           environment >>> Live.live(for {
-            port <- freePort.map(_ + 2)
-            addr <- SocketAddress.inetSocketAddress(port)
-            result <- bind(addr)(channel => channel.close.ignore).use_(
+            port    <- freePort.map(_ + 2)
+            addr    <- SocketAddress.inetSocketAddress(port)
+            promise <- Promise.make[Nothing, Unit]
+            result <- bind(addr)(channel => channel.close.ignore.repeat(Schedule.doUntilM(_ => promise.isDone))).use_(
                        connect(addr).use(client => client.read.ignore) *>
-                         connect(addr).use(client => client.read).either
+                         connect(addr).use(client => client.read).either <*
+                         promise.succeed(())
                      )
           } yield (result match {
             case Right(_) =>
