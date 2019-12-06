@@ -8,8 +8,7 @@ import zio.clock.Clock
 import zio.duration._
 import zio.keeper.TransportError
 import zio.keeper.TransportError._
-import zio.logging.slf4j.Logging
-import zio.logging.slf4j.Logging.Service
+import zio.logging.AbstractLogging
 import zio.macros.delegate._
 import zio.nio._
 import zio.nio.channels._
@@ -22,7 +21,7 @@ object tcp {
     val connectionTimeout: Duration
     val requestTimeout: Duration
 
-    val logger: Logging.Service[Any]
+    val logger: AbstractLogging.Service[Any, String]
 
     val transport = new Transport.Service[Any] {
       override def connect(to: SocketAddress) =
@@ -84,14 +83,14 @@ object tcp {
   def tcpTransport(
     connectionTimeout: Duration,
     requestTimeout: Duration
-  ): ZIO[Clock with Logging, Nothing, Transport] = {
+  ): ZIO[Clock with AbstractLogging[String], Nothing, Transport] = {
     val connectionTimeout_ = connectionTimeout
     val requestTimeout_ = requestTimeout
-    ZIO.environment[Clock with Logging].map { env =>
+    ZIO.environment[Clock with AbstractLogging[String]].map { env =>
       new Live with Clock {
         override val connectionTimeout: Duration = connectionTimeout_
         override val requestTimeout: Duration = requestTimeout_
-        override val logger: Service[Any] = env.logging
+        override val logger: AbstractLogging.Service[Any, String] = env.logging
         override val clock: Clock.Service[Any] = env.clock
       }
     }
