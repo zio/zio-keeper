@@ -7,10 +7,12 @@ import zio.keeper.discovery.Discovery
 import zio.keeper.membership.SWIM
 import zio.keeper.transport
 import zio.keeper.transport.Transport
+import zio.logging.AbstractLogging
+import zio.logging.slf4j.{Logging, LoggingFormat, Slf4jLogger}
 import zio.macros.delegate._
-import zio.nio.{ InetAddress, SocketAddress }
+import zio.nio.{InetAddress, SocketAddress}
 import zio.random.Random
-import zio.{ Chunk, Schedule, ZIO, ZManaged }
+import zio.{Chunk, Schedule, ZIO, ZManaged}
 
 object Node1 extends zio.ManagedApp {
 
@@ -31,26 +33,47 @@ object Node3 extends zio.ManagedApp {
 }
 
 object TestNode {
-  val withTransport = transport.tcp.withTcpTransport(10.seconds, 10.seconds)
-
   type Remainder = Console with Clock with Random
 
+  val loggingEnv = ZIO.environment[zio.ZEnv] @@ enrichWith[Logging](
+    new Logging {
+
+      override def logging: AbstractLogging.Service[Any, String] = new Slf4jLogger {
+
+        override val slf4jMessageFormat: LoggingFormat = new LoggingFormat {
+
+          override def format(message: String): ZIO[Any, Nothing, String] =
+            ZIO.succeed(message)
+        }
+      }
+    }
+  )
+
+  def discoveryEnv(others: Set[Int]) = ZIO.environment[zio.ZEnv] @@
+    enrichWithM[Discovery](
+    ZIO
+      .foreach(others)(
+        port => InetAddress.localHost.flatMap(addr => SocketAddress.inetSocketAddress(addr, port))
+      )
+      .orDie
+        .map(addrs => Discovery.staticList(addrs.toSet))
+  )
+
+
+  def membership(port: Int) =
+    ZManaged.environment[zio.ZEnv with Logging with Transport with Discovery] @@ enrichWithManaged(
+      SWIM.join(port)
+    )
+
+  val tcp =
+    loggingEnv >>> ZIO.environment[zio.ZEnv with Logging] @@ transport.tcp.withTcpTransport(10.seconds, 10.seconds)
+
   private def environment(port: Int, others: Set[Int]) =
-    for {
-      transport <- (ZManaged.environment[Remainder] @@ withTransport)
-      addr <- ZIO
-               .foreach(others)(
-                 port => InetAddress.localHost.flatMap(addr => SocketAddress.inetSocketAddress(addr, port))
-               )
-               .orDie
-               .toManaged_
-      config = Discovery.staticList(addr.toSet)
-      env <- ZManaged
-              .environment[Remainder]
-              .flatMap(r => ZManaged.succeed(r) @@ enrichWith(config) @@ enrichWith(transport))
-      swim <- (ZManaged.environment[Remainder with Discovery with Transport] @@ SWIM.withSWIM(port))
-               .provide(env)
-    } yield swim
+    (discoveryEnv(others).toManaged_ @@
+      enrichWithManaged(loggingEnv.toManaged_) @@
+      enrichWithManaged(tcp.toManaged_)) >>>
+      membership(port)
+
 
   import zio.clock._
   import zio.keeper.membership._
@@ -79,8 +102,22 @@ object TcpServer extends zio.App {
   import zio.duration._
   import zio.keeper.transport._
 
+  val localEnvironment = ZIO.environment[zio.ZEnv] @@ enrichWith[Logging](
+    new Logging {
+
+      override def logging: AbstractLogging.Service[Any, String] = new Slf4jLogger {
+
+        override val slf4jMessageFormat: LoggingFormat = new LoggingFormat {
+
+          override def format(message: String): ZIO[Any, Nothing, String] =
+            ZIO.succeed(message)
+        }
+      }
+    }
+  )
+
   override def run(args: List[String]) =
-    (for {
+    localEnvironment >>> (for {
       tcp       <- tcp.tcpTransport(10.seconds, 10.seconds)
       localHost <- InetAddress.localHost.orDie
       publicAddress <- SocketAddress
@@ -110,8 +147,18 @@ object TcpClient extends zio.App {
   import zio.duration._
   import zio.keeper.transport._
 
+  val localEnvironment = ZIO.environment[zio.ZEnv] @@ enrichWith[Logging](
+    new Logging {
+
+      override def logging: AbstractLogging.Service[Any, String] = new Slf4jLogger {
+
+        override val slf4jMessageFormat: LoggingFormat = (message: String) => ZIO.succeed(message)
+      }
+    }
+  )
+
   override def run(args: List[String]) =
-    (for {
+    localEnvironment >>> (for {
       tcp       <- tcp.tcpTransport(10.seconds, 10.seconds)
       localHost <- InetAddress.localHost.orDie
       publicAddress <- SocketAddress

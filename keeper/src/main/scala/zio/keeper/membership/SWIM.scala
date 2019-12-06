@@ -2,7 +2,6 @@ package zio.keeper.membership
 
 import zio._
 import zio.clock.Clock
-import zio.console.{ Console, putStrLn }
 import zio.duration._
 import zio.keeper.Message.{ readMessage, serializeMessage }
 import zio.keeper.ClusterError._
@@ -17,6 +16,7 @@ import zio.keeper._
 import zio.keeper.discovery.Discovery
 import zio.random.Random
 import zio.macros.delegate._
+import zio.logging.slf4j._
 
 import scala.collection.immutable.SortedSet
 
@@ -42,14 +42,14 @@ final class SWIM(
   private def removeMember(member: Member) =
     gossipStateRef.update(_.removeMember(member)) *>
       nodeChannels.update(_ - member.nodeId) *>
-      putStrLn("remove member: " + member)
+      logger.info("remove member: " + member)
 
   private def addMember(member: Member, send: ChannelOut) =
     gossipStateRef.update(_.addMember(member)) *>
       nodeChannels.update(_ + (member.nodeId -> send)) *>
-      putStrLn("add member: " + member)
+      logger.info("add member: " + member)
 
-  private def updateState(newState: GossipState): ZIO[Transport with Console with Clock, Error, Unit] =
+  private def updateState(newState: GossipState): ZIO[Transport with Logging with Clock, Error, Unit] =
     for {
       current <- gossipStateRef.get
       diff    = newState.diff(current)
@@ -66,18 +66,18 @@ final class SWIM(
           }
     } yield ()
 
-  private def sendInternalMessage(to: ChannelOut, msg: InternalProtocol): ZIO[Console, Error, Unit] = {
+  private def sendInternalMessage(to: ChannelOut, msg: InternalProtocol): ZIO[Logging, Error, Unit] = {
     for {
-      _       <- putStrLn(s"sending $msg")
+      _       <- logger.info(s"sending $msg")
       payload <- msg.serialize
       msg     <- serializeMessage(localMember_, payload, 1)
       _       <- to.send(msg)
     } yield ()
   }.catchAll { ex =>
-    putStrLn(s"error during sending message: $ex")
+    logger.info(s"error during sending message: $ex")
   }
 
-  private def sendInternalMessage(to: NodeId, msg: InternalProtocol): ZIO[Console, Error, Unit] =
+  private def sendInternalMessage(to: NodeId, msg: InternalProtocol): ZIO[Logging, Error, Unit] =
     for {
       node <- nodeChannels.get.map(_.get(to))
       _ <- node match {
@@ -93,7 +93,7 @@ final class SWIM(
       prom   <- Promise.make[Error, Unit]
       _      <- acks.put(offset, prom).commit
       msg    = fn(offset)
-      _      <- putStrLn(s"sending $msg with ack and timeout: ${timeout.asScala.toSeconds} seconds")
+      _      <- logger.info(s"sending $msg with ack and timeout: ${timeout.asScala.toSeconds} seconds")
       _      <- sendInternalMessage(to, fn(offset))
       _ <- prom.await
             .ensuring(acks.delete(offset).commit)
@@ -151,7 +151,7 @@ final class SWIM(
                                 .foldM(
                                   _ => removeMember(target),
                                   _ =>
-                                    putStrLn(
+                                    logger.info(
                                       s"SWIM: Successful ping req to [ ${target.nodeId} ] through [ ${jumps.map(_.nodeId).mkString(", ")} ]"
                                     )
                                 )
@@ -160,11 +160,11 @@ final class SWIM(
                             }
                       } yield ()
                     },
-                    _ => putStrLn(s"SWIM: Successful ping to [ ${target.nodeId} ]")
+                    _ => logger.info(s"SWIM: Successful ping to [ ${target.nodeId} ]")
                   )
           } yield ()
         } else {
-          putStrLn("SWIM: No nodes to spread gossip to")
+          logger.info("SWIM: No nodes to spread gossip to")
         }
       }
       loop.repeat(Schedule.spaced(30.seconds))
@@ -172,7 +172,7 @@ final class SWIM(
 
   private def acceptConnectionRequests =
     for {
-      env          <- ZManaged.environment[Console with Transport with Clock]
+      env          <- ZManaged.environment[Logging with Transport with Clock]
       _            <- handleClusterMessages(ZStream.fromQueue(clusterMessageQueue)).fork.toManaged_
       localAddress <- localMember.flatMap(_.addr.socketAddress).toManaged_
       server <- transport.bind(localAddress) { channelOut =>
@@ -181,13 +181,13 @@ final class SWIM(
                    _     <- sendInternalMessage(channelOut, NewConnection(state, localMember_))
                    _ <- expects(channelOut) {
                          case JoinCluster(remoteState, remoteMember) =>
-                           putStrLn(remoteMember.toString + " joined cluster") *>
+                           logger.info(remoteMember.toString + " joined cluster") *>
                              addMember(remoteMember, channelOut) *>
                              updateState(remoteState) *>
                              listenOnChannel(channelOut, remoteMember)
                        }
                  } yield ())
-                   .catchAll(ex => putStrLn(s"Connection failed: $ex"))
+                   .catchAll(ex => logger.error(s"Connection failed: $ex"))
                    .provide(env)
                }
     } yield server
@@ -210,7 +210,7 @@ final class SWIM(
       _ <- transport
             .connect(addr)
             .use { channel =>
-              putStrLn(s"Initiating handshake with node at ${addr}") *>
+              logger.info(s"Initiating handshake with node at ${addr}") *>
                 expects(channel) {
                   case NewConnection(remoteState, remoteMember) =>
                     (for {
@@ -226,7 +226,9 @@ final class SWIM(
             }
             .mapError(HandshakeError(addr, _))
             .catchAll(
-              ex => connectionInit.fail(ex) *> putStrLn(s"Failed initiating connection with node [ ${addr} ]: $ex")
+              ex =>
+                connectionInit.fail(ex) *>
+                  logger.error(s"Failed initiating connection with node [ ${addr} ]: $ex")
             )
             .fork
       _ <- connectionInit.await
@@ -235,7 +237,7 @@ final class SWIM(
   private def listenOnChannel(
     channel: ChannelOut,
     partner: Member
-  ): ZIO[Transport with Console with Clock, Error, Unit] = {
+  ): ZIO[Transport with Logging with Clock, Error, Unit] = {
 
     def handleSends(messages: Stream[Nothing, Chunk[Byte]]) =
       messages.tap { bytes =>
@@ -245,7 +247,7 @@ final class SWIM(
       }.runDrain
 
     (for {
-      _           <- putStrLn(s"Setting up connection with [ ${partner.nodeId} ]")
+      _           <- logger.info(s"Setting up connection with [ ${partner.nodeId} ]")
       broadcasted <- subscribeToBroadcast
       _           <- handleSends(broadcasted).fork
       _           <- routeMessages(channel, clusterMessageQueue, userMessageQueue)
@@ -266,11 +268,11 @@ final class SWIM(
             userMessageQueue.offer(msg).unit
           } else {
             //this should be dead letter
-            putStrLn("unsupported message type")
+            logger.error("unsupported message type")
           }
       }
       .catchAll { ex =>
-        putStrLn(s"read message error: $ex")
+        logger.error(s"read message error: $ex")
       }
     loop.repeat(Schedule.doWhileM(_ => channel.isOpen.catchAll[Any, Nothing, Boolean](_ => ZIO.succeed(false))))
   }
@@ -279,7 +281,7 @@ final class SWIM(
     stream.tap { message =>
       for {
         payload <- InternalProtocol.deserialize(message.payload)
-        _       <- putStrLn(s"receive message: $payload")
+        _       <- logger.info(s"receive message: $payload")
         _ <- payload match {
               case Ack(ackId, state) =>
                 updateState(state) *>
@@ -303,7 +305,7 @@ final class SWIM(
                         )
                         .fork
                 } yield ()
-              case _ => putStrLn("unknown message: " + payload)
+              case _ => logger.error("unknown message: " + payload)
             }
       } yield ()
     }.runDrain
@@ -325,16 +327,17 @@ final class SWIM(
 
 object SWIM {
 
-  def withSWIM(port: Int) = enrichWithManaged[Membership](join(port))
+  def withSWIM(port: Int) =
+    enrichWithManaged[Membership](join(port))
 
-  def join(port: Int): ZManaged[Console with Clock with Random with Transport with Discovery, Error, Membership] =
+  def join(port: Int): ZManaged[Logging with Clock with Random with Transport with Discovery, Error, Membership] =
     for {
       localHost            <- InetAddress.localHost.toManaged_.orDie
       localMember          = Member(NodeId.generateNew, NodeAddress(localHost.address, port))
-      _                    <- putStrLn(s"Starting node [ ${localMember.nodeId} ]").toManaged_
+      _                    <- logger.info(s"Starting node [ ${localMember.nodeId} ]").toManaged_
       nodes                <- zio.Ref.make(Map.empty[NodeId, ChannelOut]).toManaged_
       seeds                <- discovery.discoverNodes.toManaged_
-      _                    <- putStrLn("seeds: " + seeds).toManaged_
+      _                    <- logger.info("seeds: " + seeds).toManaged_
       userMessagesQueue    <- ZManaged.make(zio.Queue.bounded[Message](1000))(_.shutdown)
       clusterEventsQueue   <- ZManaged.make(zio.Queue.sliding[MembershipEvent](100))(_.shutdown)
       clusterMessagesQueue <- ZManaged.make(zio.Queue.bounded[Message](1000))(_.shutdown)
@@ -365,14 +368,14 @@ object SWIM {
         acks = ackMap
       )
 
-      _ <- putStrLn("Connecting to seed nodes: " + seeds).toManaged_
+      _ <- logger.info("Connecting to seed nodes: " + seeds).toManaged_
       _ <- swimMembership.connectToSeeds(seeds).toManaged_
-      _ <- putStrLn("Beginning to accept connections").toManaged_
+      _ <- logger.info("Beginning to accept connections").toManaged_
       _ <- swimMembership.acceptConnectionRequests
             .use(channel => ZIO.never.ensuring(channel.close.ignore))
             .toManaged_
             .fork
-      _ <- putStrLn("Starting SWIM membership protocol").toManaged_
+      _ <- logger.info("Starting SWIM membership protocol").toManaged_
       _ <- swimMembership.runSwim.fork.toManaged_
     } yield new Membership {
       override def membership: Membership.Service[Any] = swimMembership

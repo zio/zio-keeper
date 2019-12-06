@@ -5,76 +5,98 @@ import java.math.BigInteger
 
 import zio._
 import zio.clock.Clock
-import zio.console.{ Console, _ }
 import zio.duration._
 import zio.keeper.TransportError
 import zio.keeper.TransportError._
+import zio.logging.slf4j.Logging
+import zio.logging.slf4j.Logging.Service
 import zio.macros.delegate._
 import zio.nio._
 import zio.nio.channels._
 
+
 object tcp {
+
+  trait Live extends Transport {
+    self: Clock =>
+    val connectionTimeout: Duration
+    val requestTimeout: Duration
+
+    val logger: Logging.Service[Any]
+
+    val transport = new Transport.Service[Any] {
+      override def connect(to: SocketAddress) =
+        (for {
+          socketChannelAndClose  <- AsynchronousSocketChannel().withEarlyRelease.mapError(ExceptionWrapper)
+          (close, socketChannel) = socketChannelAndClose
+          _ <- socketChannel
+            .connect(to)
+            .mapError(ExceptionWrapper)
+            .timeoutFail(ConnectionTimeout(to, connectionTimeout))(connectionTimeout)
+            .toManaged_
+          _ <- logger.info("transport connected to " + to).toManaged_
+        } yield new NioChannelOut(socketChannel, to, requestTimeout, close, self))
+        .provide(self)
+
+
+      override def bind(addr: SocketAddress)(connectionHandler: ChannelOut => UIO[Unit]) =
+        AsynchronousServerSocketChannel()
+          .flatMap(s => s.bind(addr).toManaged_.as(s))
+          .mapError(BindFailed(addr, _))
+          .withEarlyRelease
+          .onExit { _ =>
+            logger.info("shutting down server")
+          }
+          .mapM {
+            case (close, server) =>
+              (for {
+                cur <- server.accept.withEarlyRelease
+                  .mapError(ExceptionWrapper)
+                  .mapM {
+                    case (close, socket) =>
+                      socket.remoteAddress.flatMap {
+                        case None =>
+                          // This is almost impossible here but still we need to handle it.
+                          ZIO.fail(ExceptionWrapper(new RuntimeException("cannot obtain address")))
+                        case Some(addr) =>
+                          logger.info("connection accepted from: " + addr).as(
+                            new NioChannelOut(socket, addr, connectionTimeout, close, self)
+                          )
+                      }
+                  }
+                  .preallocate
+
+                _ <- cur.use(connectionHandler).fork
+              } yield ()).forever.fork
+                .as(new NioChannelIn(server, close))
+          }
+
+    }
+
+  }
 
   def withTcpTransport(
     connectionTimeout: Duration,
     sendTimeout: Duration
-  ) = enrichWithM[Transport](tcpTransport(connectionTimeout, sendTimeout))
+  ) =
+    enrichWithM[Transport](tcpTransport(connectionTimeout, sendTimeout))
 
   def tcpTransport(
     connectionTimeout: Duration,
     requestTimeout: Duration
-  ): ZIO[Clock with Console, Nothing, Transport] =
-    ZIO.environment[Clock with Console].map { env =>
-      new Transport {
-        val transport = new Transport.Service[Any] {
-          override def connect(to: SocketAddress) =
-            (for {
-              socketChannelAndClose  <- AsynchronousSocketChannel().withEarlyRelease.mapError(ExceptionWrapper)
-              (close, socketChannel) = socketChannelAndClose
-              _ <- socketChannel
-                    .connect(to)
-                    .mapError(ExceptionWrapper)
-                    .timeoutFail(ConnectionTimeout(to, connectionTimeout))(connectionTimeout)
-                    .toManaged_
-              _ <- putStrLn("transport connected to " + to).toManaged_
-            } yield new NioChannelOut(socketChannel, to, requestTimeout, close, env))
-              .provide(env)
-
-          override def bind(addr: SocketAddress)(connectionHandler: ChannelOut => UIO[Unit]) =
-            AsynchronousServerSocketChannel()
-              .flatMap(s => s.bind(addr).toManaged_.as(s))
-              .mapError(BindFailed(addr, _))
-              .withEarlyRelease
-              .onExit { _ =>
-                putStrLn("shutting down server")
-              }
-              .mapM {
-                case (close, server) =>
-                  (for {
-                    cur <- server.accept.withEarlyRelease
-                            .mapError(ExceptionWrapper)
-                            .mapM {
-                              case (close, socket) =>
-                                socket.remoteAddress.flatMap {
-                                  case None =>
-                                    // This is almost impossible here but still we need to handle it.
-                                    ZIO.fail(ExceptionWrapper(new RuntimeException("cannot obtain address")))
-                                  case Some(addr) =>
-                                    putStrLn("connection accepted from: " + addr).as(
-                                      new NioChannelOut(socket, addr, connectionTimeout, close, env)
-                                    )
-                                }
-                            }
-                            .preallocate
-
-                    _ <- cur.use(connectionHandler).fork
-                  } yield ()).forever.fork
-                    .as(new NioChannelIn(server, close))
-              }
-              .provide(env)
-        }
+  ): ZIO[Clock with Logging, Nothing, Transport] = {
+    val connectionTimeout_ = connectionTimeout
+    val requestTimeout_ = requestTimeout
+    ZIO.environment[Clock with Logging].map { env =>
+      new Live with Clock {
+        override val connectionTimeout: Duration = connectionTimeout_
+        override val requestTimeout: Duration = requestTimeout_
+        override val logger: Service[Any] = env.logging
+        override val clock: Clock.Service[Any] = env.clock
       }
     }
+  }
+
 }
 
 class NioChannelOut(
