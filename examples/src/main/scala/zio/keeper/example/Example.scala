@@ -1,17 +1,16 @@
 package zio.keeper.example
 
-import java.util.concurrent.TimeUnit
-
 import zio.clock.Clock
 import zio.console._
 import zio.duration._
 import zio.keeper.discovery.Discovery
-import zio.keeper.transport.tcp
-import zio.keeper.{ Cluster, transport }
+import zio.keeper.membership.SWIM
+import zio.keeper.transport
+import zio.keeper.transport.Transport
 import zio.macros.delegate._
 import zio.nio.{ InetAddress, SocketAddress }
 import zio.random.Random
-import zio.{ Chunk, Schedule, ZIO }
+import zio.{ Chunk, Schedule, ZIO, ZManaged }
 
 object Node1 extends zio.ManagedApp {
 
@@ -32,40 +31,43 @@ object Node3 extends zio.ManagedApp {
 }
 
 object TestNode {
-
   val withTransport = transport.tcp.withTcpTransport(10.seconds, 10.seconds)
 
-  private def environment(others: Set[Int]) =
+  type Remainder = Console with Clock with Random
+
+  private def environment(port: Int, others: Set[Int]) =
     for {
-      transport <- (ZIO.environment[Clock with Console with Random] @@ withTransport)
+      transport <- (ZManaged.environment[Remainder] @@ withTransport)
       addr <- ZIO
                .foreach(others)(
                  port => InetAddress.localHost.flatMap(addr => SocketAddress.inetSocketAddress(addr, port))
                )
                .orDie
+               .toManaged_
       config = Discovery.staticList(addr.toSet)
-      result <- ZIO.succeed(config) @@ enrichWith(transport)
-    } yield result
+      env <- ZManaged
+              .environment[Remainder]
+              .flatMap(r => ZManaged.succeed(r) @@ enrichWith(config) @@ enrichWith(transport))
+      swim <- (ZManaged.environment[Remainder with Discovery with Transport] @@ SWIM.withSWIM(port))
+               .provide(env)
+    } yield swim
+
+  import zio.clock._
+  import zio.keeper.membership._
 
   def start(port: Int, nodeName: String, otherPorts: Set[Int]) =
-    environment(otherPorts).toManaged_ >>> Cluster
-      .join(port)
-      .flatMap(
-        c =>
-          (zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS)) *>
-            c.broadcast(Chunk.fromArray(nodeName.getBytes)).ignore.as(c)).toManaged_
-      )
-      .flatMap(
-        c =>
-          c.receive
+    (environment(port, otherPorts) >>> (for {
+      _ <- sleep(5.seconds).toManaged_
+      _ <- broadcast(Chunk.fromArray(nodeName.getBytes)).ignore.toManaged_
+      _ <- receive
             .foreach(
-              n =>
-                putStrLn(new String(n.payload.toArray))
-                  *> c.send(n.payload, n.sender).ignore
-                  *> zio.ZIO.sleep(zio.duration.Duration(5, TimeUnit.SECONDS))
+              message =>
+                putStrLn(new String(message.payload.toArray))
+                  *> send(message.payload, message.sender).ignore
+                  *> sleep(5.seconds)
             )
             .toManaged_
-      )
+    } yield ()))
       .fold(ex => {
         println(s"exit with error: $ex")
         1

@@ -1,6 +1,7 @@
 package zio.keeper
 
 import zio.duration.Duration
+import zio.keeper.membership.NodeId
 import zio.keeper.protocol.InternalProtocol
 import zio.nio.SocketAddress
 

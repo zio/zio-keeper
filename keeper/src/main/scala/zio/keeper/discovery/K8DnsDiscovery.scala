@@ -5,11 +5,12 @@ import java.util
 
 import javax.naming.directory.InitialDirContext
 import javax.naming.{ Context, NamingException }
-import zio.console._
+import zio.console.Console
 import zio.duration.Duration
 import zio.keeper.ServiceDiscoveryError
+import zio.macros.delegate._
 import zio.nio.{ InetAddress, SocketAddress }
-import zio.{ IO, ZIO, keeper }
+import zio.{ IO, URIO, ZIO, keeper }
 
 /**
  * This discovery strategy uses K8 service headless service dns to find other members of the cluster.
@@ -17,29 +18,22 @@ import zio.{ IO, ZIO, keeper }
  * Headless service is a service of type ClusterIP with the clusterIP property set to None.
  *
  */
-abstract class K8DnsDiscovery(console: Console) extends Discovery.Service[Any] {
+trait K8DnsDiscovery extends Discovery.Service[Any] {
+
+  val console: Console.Service[Any]
+
+  import console._
 
   final override val discoverNodes: ZIO[Any, keeper.Error, Set[SocketAddress]] = {
     for {
-      addresses <- K8DnsDiscovery.lookup(serviceDns, serviceDnsTimeout)
+      addresses <- lookup(serviceDns, serviceDnsTimeout)
       nodes     <- ZIO.foreach(addresses)(addr => zio.nio.SocketAddress.inetSocketAddress(addr, servicePort))
     } yield nodes.toSet: Set[zio.nio.SocketAddress]
   }.catchAll(
-      ex =>
-        putStrLn("discovery strategy " + this.getClass.getSimpleName + " failed.") *>
-          ZIO.fail(ServiceDiscoveryError(ex.getMessage))
-    )
-    .provide(console)
-
-  def serviceDns: zio.nio.InetAddress
-
-  def serviceDnsTimeout: Duration
-
-  def servicePort: Int
-
-}
-
-object K8DnsDiscovery {
+    ex =>
+      putStrLn("discovery strategy " + this.getClass.getSimpleName + " failed.") *>
+        ZIO.fail(ServiceDiscoveryError(ex.getMessage))
+  )
 
   def lookup(serviceDns: InetAddress, serviceDnsTimeout: Duration) = {
     import scala.jdk.CollectionConverters._
@@ -70,4 +64,42 @@ object K8DnsDiscovery {
         val host = server.split(" ")(3)
         host.replaceAll("\\\\.$", "")
       }
+
+  def serviceDns: zio.nio.InetAddress
+
+  def serviceDnsTimeout: Duration
+
+  def servicePort: Int
+
+}
+
+object K8DnsDiscovery {
+
+  def k8DnsDiscovery(
+    addr: zio.nio.InetAddress,
+    timeout: Duration,
+    port: Int
+  ): URIO[Console, Discovery] =
+    ZIO.access[Console](
+      env =>
+        new Discovery {
+
+          override def discover: Discovery.Service[Any] = new K8DnsDiscovery {
+            override val console: Console.Service[Any] = env.console
+
+            override def serviceDns: InetAddress = addr
+
+            override def serviceDnsTimeout: Duration = timeout
+
+            override def servicePort: Int = port
+          }
+        }
+    )
+
+  def withK8DnsDiscovery(
+    addr: zio.nio.InetAddress,
+    timeout: Duration,
+    port: Int
+  ) = enrichWithM[Discovery](k8DnsDiscovery(addr, timeout, port))
+
 }

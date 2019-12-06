@@ -1,31 +1,43 @@
-package zio.keeper
+package zio.keeper.membership
 
 import zio._
 import zio.clock.Clock
 import zio.console.{ Console, putStrLn }
 import zio.duration._
-import zio.keeper.Cluster.{ readMessage, serializeMessage }
+import zio.keeper.Message.{ readMessage, serializeMessage }
 import zio.keeper.ClusterError._
+import zio.keeper.Message
 import zio.keeper.protocol.InternalProtocol
 import zio.keeper.protocol.InternalProtocol._
 import zio.keeper.transport.{ ChannelOut, Transport }
 import zio.nio.{ InetAddress, SocketAddress }
 import zio.stm.{ STM, TMap }
 import zio.stream.{ Stream, ZStream }
+import zio.keeper._
+import zio.keeper.discovery.Discovery
+import zio.random.Random
+import zio.macros.delegate._
 
 import scala.collection.immutable.SortedSet
 
-final class InternalCluster(
-  override val localMember: Member,
+final class SWIM(
+  localMember_ : Member,
   nodeChannels: Ref[Map[NodeId, ChannelOut]],
   gossipStateRef: Ref[GossipState],
   userMessageQueue: zio.Queue[Message],
   clusterMessageQueue: zio.Queue[Message],
+  clusterEventsQueue: zio.Queue[MembershipEvent],
   subscribeToBroadcast: UIO[Stream[Nothing, Chunk[Byte]]],
   publishToBroadcast: Chunk[Byte] => UIO[Unit],
   msgOffset: Ref[Long],
   acks: TMap[Long, Promise[Error, Unit]]
-) extends Cluster {
+) extends Membership.Service[Any] {
+
+  override val events: ZStream[Any, Error, MembershipEvent] =
+    ZStream.fromQueue(clusterEventsQueue)
+
+  override val localMember: ZIO[Any, Nothing, Member] =
+    ZIO.succeed(localMember_)
 
   private def removeMember(member: Member) =
     gossipStateRef.update(_.removeMember(member)) *>
@@ -49,7 +61,7 @@ final class InternalCluster(
       node <- nodeChannels.get.map(_.get(to))
       _ <- node match {
             case Some(channel) =>
-              serializeMessage(localMember, payload, msgType) >>= channel.send
+              serializeMessage(localMember_, payload, msgType) >>= channel.send
             case None => ZIO.fail(UnknownNode(to))
           }
     } yield ()
@@ -58,7 +70,7 @@ final class InternalCluster(
     for {
       _       <- putStrLn(s"sending $msg")
       payload <- msg.serialize
-      msg     <- serializeMessage(localMember, payload, 1)
+      msg     <- serializeMessage(localMember_, payload, 1)
       _       <- to.send(msg)
     } yield ()
   }.catchAll { ex =>
@@ -110,7 +122,7 @@ final class InternalCluster(
 
   private def runSwim =
     Ref.make(0).flatMap { roundRobinOffset =>
-      val loop = gossipStateRef.get.map(_.members.filterNot(_ == localMember).toIndexedSeq).flatMap { nodes =>
+      val loop = gossipStateRef.get.map(_.members.filterNot(_ == localMember_).toIndexedSeq).flatMap { nodes =>
         if (nodes.nonEmpty) {
           for {
             next   <- roundRobinOffset.update(old => if (old < nodes.size - 1) old + 1 else 0)
@@ -162,11 +174,11 @@ final class InternalCluster(
     for {
       env          <- ZManaged.environment[Console with Transport with Clock]
       _            <- handleClusterMessages(ZStream.fromQueue(clusterMessageQueue)).fork.toManaged_
-      localAddress <- localMember.addr.socketAddress.toManaged_
+      localAddress <- localMember.flatMap(_.addr.socketAddress).toManaged_
       server <- transport.bind(localAddress) { channelOut =>
                  (for {
                    state <- gossipStateRef.get
-                   _     <- sendInternalMessage(channelOut, NewConnection(state, localMember))
+                   _     <- sendInternalMessage(channelOut, NewConnection(state, localMember_))
                    _ <- expects(channelOut) {
                          case JoinCluster(remoteState, remoteMember) =>
                            putStrLn(remoteMember.toString + " joined cluster") *>
@@ -186,7 +198,7 @@ final class InternalCluster(
       currentNodes <- nodeChannels.get
       currentState <- gossipStateRef.get
       _ <- ZIO.foreach(currentNodes.values)(
-            channel => sendInternalMessage(channel, JoinCluster(currentState, localMember))
+            channel => sendInternalMessage(channel, JoinCluster(currentState, localMember_))
           )
     } yield ()
 
@@ -296,7 +308,7 @@ final class InternalCluster(
       } yield ()
     }.runDrain
 
-  override def nodes =
+  override def nodes: ZIO[Any, Nothing, List[NodeId]] =
     nodeChannels.get
       .map(_.keys.toList)
 
@@ -304,16 +316,18 @@ final class InternalCluster(
     sendMessage(receipt, 2, data)
 
   override def broadcast(data: Chunk[Byte]): IO[Error, Unit] =
-    serializeMessage(localMember, data, 2).flatMap[Any, Error, Unit](publishToBroadcast).unit
+    serializeMessage(localMember_, data, 2).flatMap[Any, Error, Unit](publishToBroadcast).unit
 
   override def receive: Stream[Error, Message] =
     zio.stream.Stream.fromQueue(userMessageQueue)
 
 }
 
-object InternalCluster {
+object SWIM {
 
-  private[keeper] def initCluster(port: Int) =
+  def withSWIM(port: Int) = enrichWithManaged[Membership](join(port))
+
+  def join(port: Int): ZManaged[Console with Clock with Random with Transport with Discovery, Error, Membership] =
     for {
       localHost            <- InetAddress.localHost.toManaged_.orDie
       localMember          = Member(NodeId.generateNew, NodeAddress(localHost.address, port))
@@ -322,6 +336,7 @@ object InternalCluster {
       seeds                <- discovery.discoverNodes.toManaged_
       _                    <- putStrLn("seeds: " + seeds).toManaged_
       userMessagesQueue    <- ZManaged.make(zio.Queue.bounded[Message](1000))(_.shutdown)
+      clusterEventsQueue   <- ZManaged.make(zio.Queue.sliding[MembershipEvent](100))(_.shutdown)
       clusterMessagesQueue <- ZManaged.make(zio.Queue.bounded[Message](1000))(_.shutdown)
       gossipState          <- Ref.make(GossipState(SortedSet(localMember))).toManaged_
       broadcastQueue       <- ZManaged.make(zio.Queue.bounded[Chunk[Byte]](1000))(_.shutdown)
@@ -337,12 +352,13 @@ object InternalCluster {
       msgOffSet <- Ref.make(0L).toManaged_
       ackMap    <- TMap.empty[Long, Promise[Error, Unit]].commit.toManaged_
 
-      cluster = new InternalCluster(
-        localMember = localMember,
+      swimMembership = new SWIM(
+        localMember_ = localMember,
         nodeChannels = nodes,
         gossipStateRef = gossipState,
         userMessageQueue = userMessagesQueue,
         clusterMessageQueue = clusterMessagesQueue,
+        clusterEventsQueue = clusterEventsQueue,
         subscribeToBroadcast = subscriberBroadcast,
         publishToBroadcast = (c: Chunk[Byte]) => broadcastQueue.offer(c).unit,
         msgOffset = msgOffSet,
@@ -350,10 +366,16 @@ object InternalCluster {
       )
 
       _ <- putStrLn("Connecting to seed nodes: " + seeds).toManaged_
-      _ <- cluster.connectToSeeds(seeds).toManaged_
+      _ <- swimMembership.connectToSeeds(seeds).toManaged_
       _ <- putStrLn("Beginning to accept connections").toManaged_
-      _ <- cluster.acceptConnectionRequests.use(channel => ZIO.never.ensuring(channel.close.ignore)).fork.toManaged_
+      _ <- swimMembership.acceptConnectionRequests
+            .use(channel => ZIO.never.ensuring(channel.close.ignore))
+            .toManaged_
+            .fork
       _ <- putStrLn("Starting SWIM membership protocol").toManaged_
-      _ <- cluster.runSwim.fork.toManaged_
-    } yield cluster
+      _ <- swimMembership.runSwim.fork.toManaged_
+    } yield new Membership {
+      override def membership: Membership.Service[Any] = swimMembership
+    }
+
 }

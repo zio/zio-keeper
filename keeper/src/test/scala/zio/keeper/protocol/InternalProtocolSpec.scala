@@ -2,7 +2,8 @@ package zio.keeper.protocol
 
 import zio.Chunk
 import zio.keeper.SerializationError.DeserializationTypeError
-import zio.keeper.{ GossipState, Member, NodeAddress, NodeId }
+import zio.keeper.membership.{ GossipState, Member, NodeAddress, NodeId }
+import zio.keeper.membership.Member
 import zio.test.Assertion._
 import zio.test._
 
