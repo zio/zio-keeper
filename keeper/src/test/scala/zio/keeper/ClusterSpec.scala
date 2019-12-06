@@ -5,6 +5,7 @@ import zio.clock.Clock
 import zio.console.Console
 import zio.duration._
 import zio.keeper.discovery.Discovery
+import zio.keeper.membership.{ Member, Membership, SWIM }
 import zio.keeper.transport.tcp
 import zio.macros.delegate.{ enrichWith, _ }
 import zio.random.Random
@@ -53,46 +54,49 @@ object ClusterSpec
         } yield env
 
       trait ClusterHolder {
-        def instance: Cluster
+        def instance: Membership.Service[Any]
         def stop: UIO[Unit]
       }
 
       def cluster(port: Int) =
         for {
-          start         <- Promise.make[Nothing, Cluster]
+          start         <- Promise.make[Nothing, Membership.Service[Any]]
           shutdown      <- Promise.make[Nothing, Unit]
           discoveryTest <- ZIO.environment[TestDiscovery]
-          fiber <- Cluster
-                    .join(port)
-                    .use(
-                      cluster =>
-                        discoveryTest.discover.addMember(cluster.localMember) *>
-                          start.succeed(cluster) *>
+          _ <- SWIM
+                .join(port)
+                .use(
+                  cluster =>
+                    cluster.membership.localMember.flatMap(
+                      local =>
+                        discoveryTest.discover.addMember(local) *>
+                          start.succeed(cluster.membership) *>
                           shutdown.await
                     )
-                    .fork
+                )
+                .fork
           cluster <- start.await
         } yield new ClusterHolder {
           def instance = cluster
-          def stop     = shutdown.succeed(()) *> fiber.interrupt.unit
+          def stop     = shutdown.succeed(()).unit
         }
 
       suite("cluster")(
         testM("all nodes should have references to each other") {
-          Ref.make(Set.empty[Member]).flatMap {
+          RefM.make(Set.empty[Member]).flatMap {
             membersRef =>
               environment >>> Live.live(
                 for {
                   c1     <- cluster(3333)
                   c2     <- cluster(3331)
-                  _      <- membersRef.update(_ - c2.instance.localMember)
+                  _      <- membersRef.update(old => c2.instance.localMember.map(old - _))
                   c3     <- cluster(3332)
                   nodes1 <- c1.instance.nodes
                   nodes2 <- c2.instance.nodes
                   nodes3 <- c3.instance.nodes
-                  node1  = c1.instance.localMember.nodeId
-                  node2  = c2.instance.localMember.nodeId
-                  node3  = c3.instance.localMember.nodeId
+                  node1  <- c1.instance.localMember.map(_.nodeId)
+                  node2  <- c2.instance.localMember.map(_.nodeId)
+                  node3  <- c3.instance.localMember.map(_.nodeId)
                   _      <- c1.stop *> c2.stop *> c3.stop
                 } yield assert(nodes1, equalTo(List(node2, node3))) &&
                   assert(nodes2, equalTo(List(node1, node3))) &&

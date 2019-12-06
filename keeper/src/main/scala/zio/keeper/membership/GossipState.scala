@@ -1,6 +1,6 @@
-package zio.keeper
+package zio.keeper.membership
 
-import zio.keeper.GossipState.StateDiff
+import zio.keeper.membership.GossipState.StateDiff
 
 import scala.collection.immutable.SortedSet
 

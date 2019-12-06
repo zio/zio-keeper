@@ -1,10 +1,11 @@
-package zio.keeper
+package zio.keeper.membership
 
 import java.util.UUID
 
 import zio.ZIO
-import zio.nio.{ InetAddress, InetSocketAddress, SocketAddress }
+import zio.keeper.TransportError
 import zio.keeper.TransportError._
+import zio.nio.{ InetAddress, InetSocketAddress, SocketAddress }
 
 final case class NodeId(value: UUID) extends AnyVal
 

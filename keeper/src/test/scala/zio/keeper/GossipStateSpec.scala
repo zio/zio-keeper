@@ -1,6 +1,7 @@
 package zio.keeper
 
-import zio.keeper.GossipState.StateDiff
+import zio.keeper.membership.GossipState.StateDiff
+import zio.keeper.membership.{ GossipState, Member, NodeAddress, NodeId }
 import zio.test.Assertion._
 import zio.test.{ DefaultRunnableSpec, _ }
 

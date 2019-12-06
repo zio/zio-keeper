@@ -1,4 +1,4 @@
-package zio.keeper
+package zio.keeper.membership
 
 sealed trait MembershipEvent
 
