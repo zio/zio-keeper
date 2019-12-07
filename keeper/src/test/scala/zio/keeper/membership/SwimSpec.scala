@@ -1,17 +1,18 @@
-package zio.keeper
+package zio.keeper.membership
 
-import zio._
 import zio.duration._
 import zio.keeper.discovery.TestDiscovery
-import zio.keeper.membership.{ Member, Membership, SWIM }
+import zio.keeper.transport
 import zio.logging.Logging
 import zio.logging.slf4j.Slf4jLogger
-import zio.macros.delegate.{ enrichWith, _ }
-import zio.test.Assertion._
+import zio.macros.delegate._
+import zio.test.Assertion.equalTo
 import zio.test.environment.Live
-import zio.test.{ DefaultRunnableSpec, _ }
+import zio.test.{DefaultRunnableSpec, assert, suite, testM}
+import zio.{Promise, Ref, UIO, ZIO}
 
-object ClusterSpec
+
+object SwimSpec
     extends DefaultRunnableSpec({
 
       val loggingEnv = ZIO.environment[zio.ZEnv] @@ enrichWith[Logging[String]](

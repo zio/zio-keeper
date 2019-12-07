@@ -40,14 +40,19 @@ final class SWIM(
   override val localMember: ZIO[Any, Nothing, Member] =
     ZIO.succeed(localMember_)
 
+  private def propagateEvent(event: MembershipEvent) =
+    clusterEventsQueue.offer(event)
+
   private def removeMember(member: Member) =
     gossipStateRef.update(_.removeMember(member)) *>
       nodeChannels.update(_ - member.nodeId) *>
+      propagateEvent(MembershipEvent.Leave(member)) *>
       logger.info("remove member: " + member)
 
   private def addMember(member: Member, send: ChannelOut) =
     gossipStateRef.update(_.addMember(member)) *>
       nodeChannels.update(_ + (member.nodeId -> send)) *>
+      propagateEvent(MembershipEvent.Join(member)) *>
       logger.info("add member: " + member)
 
   private def updateState(newState: GossipState): ZIO[Transport with Logging[String] with Clock, Error, Unit] =
@@ -135,6 +140,7 @@ final class SWIM(
                     {
                       val nodesWithoutTarget = nodes.filter(_ != target)
                       for {
+                        _ <- propagateEvent(MembershipEvent.Unreachable(target))
                         jumps <- ZIO.collectAll(
                                   List.fill(Math.min(3, nodesWithoutTarget.size))(
                                     zio.random.nextInt(nodesWithoutTarget.size).map(nodesWithoutTarget(_))
