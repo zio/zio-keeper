@@ -77,17 +77,18 @@ object SwimSpec
           def instance = cluster
           def stop     = shutdown.succeed(()).unit
         }
+      import zio.console._
 
       suite("cluster")(
         testM("all nodes should have references to each other") {
           environment >>> Live.live(
             for {
-              member1 <- member(3333)
-              member2 <- member(3331)
+              member1 <- member(33333)
+              member2 <- member(33331)
               _ <- ZIO.accessM[TestDiscovery](
                     d => member2.instance.localMember.flatMap(m => d.discover.removeMember(m))
                   )
-              member3 <- member(3332)
+              member3 <- member(33332)
               nodes1  <- member1.instance.nodes
               nodes2  <- member2.instance.nodes
               nodes3  <- member3.instance.nodes
@@ -103,9 +104,9 @@ object SwimSpec
         testM("should receive notification") {
           environment >>> Live.live(
             for {
-              member1       <- member(4333)
+              member1       <- member(44333)
               member1Events = member1.instance.events
-              member2       <- member(4331)
+              member2       <- member(44331)
               node2         <- member2.instance.localMember
               joinEvent     <- member1Events.run(Sink.await[MembershipEvent])
               _             <- member2.stop
