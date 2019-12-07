@@ -8,9 +8,8 @@ import zio.logging.slf4j.Slf4jLogger
 import zio.macros.delegate._
 import zio.test.Assertion.equalTo
 import zio.test.environment.Live
-import zio.test.{DefaultRunnableSpec, assert, suite, testM}
-import zio.{Promise, Ref, UIO, ZIO}
-
+import zio.test.{ DefaultRunnableSpec, assert, suite, testM }
+import zio.{ Promise, Ref, UIO, ZIO }
 
 object SwimSpec
     extends DefaultRunnableSpec({
