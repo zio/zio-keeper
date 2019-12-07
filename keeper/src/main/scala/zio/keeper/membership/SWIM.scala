@@ -3,18 +3,18 @@ package zio.keeper.membership
 import zio._
 import zio.clock.Clock
 import zio.duration._
-import zio.keeper.Message.{readMessage, serializeMessage}
+import zio.keeper.Message.{ readMessage, serializeMessage }
 import zio.keeper.ClusterError._
 import zio.keeper.Message
 import zio.keeper.protocol.InternalProtocol
 import zio.keeper.protocol.InternalProtocol._
-import zio.keeper.transport.{ChannelOut, Transport}
-import zio.nio.{InetAddress, SocketAddress}
-import zio.stm.{STM, TMap}
-import zio.stream.{Stream, ZStream}
+import zio.keeper.transport.{ ChannelOut, Transport }
+import zio.nio.{ InetAddress, SocketAddress }
+import zio.stm.{ STM, TMap }
+import zio.stream.{ Stream, ZStream }
 import zio.keeper._
 import zio.keeper.discovery.Discovery
-import zio.logging.AbstractLogging
+import zio.logging.Logging
 import zio.random.Random
 import zio.macros.delegate._
 import zio.logging.slf4j._
@@ -50,7 +50,7 @@ final class SWIM(
       nodeChannels.update(_ + (member.nodeId -> send)) *>
       logger.info("add member: " + member)
 
-  private def updateState(newState: GossipState): ZIO[Transport with AbstractLogging[String] with Clock, Error, Unit] =
+  private def updateState(newState: GossipState): ZIO[Transport with Logging[String] with Clock, Error, Unit] =
     for {
       current <- gossipStateRef.get
       diff    = newState.diff(current)
@@ -67,7 +67,7 @@ final class SWIM(
           }
     } yield ()
 
-  private def sendInternalMessage(to: ChannelOut, msg: InternalProtocol): ZIO[AbstractLogging[String], Error, Unit] = {
+  private def sendInternalMessage(to: ChannelOut, msg: InternalProtocol): ZIO[Logging[String], Error, Unit] = {
     for {
       _       <- logger.info(s"sending $msg")
       payload <- msg.serialize
@@ -78,7 +78,7 @@ final class SWIM(
     logger.info(s"error during sending message: $ex")
   }
 
-  private def sendInternalMessage(to: NodeId, msg: InternalProtocol): ZIO[AbstractLogging[String], Error, Unit] =
+  private def sendInternalMessage(to: NodeId, msg: InternalProtocol): ZIO[Logging[String], Error, Unit] =
     for {
       node <- nodeChannels.get.map(_.get(to))
       _ <- node match {
@@ -173,7 +173,7 @@ final class SWIM(
 
   private def acceptConnectionRequests =
     for {
-      env          <- ZManaged.environment[AbstractLogging[String] with Transport with Clock]
+      env          <- ZManaged.environment[Logging[String] with Transport with Clock]
       _            <- handleClusterMessages(ZStream.fromQueue(clusterMessageQueue)).fork.toManaged_
       localAddress <- localMember.flatMap(_.addr.socketAddress).toManaged_
       server <- transport.bind(localAddress) { channelOut =>
@@ -238,7 +238,7 @@ final class SWIM(
   private def listenOnChannel(
     channel: ChannelOut,
     partner: Member
-  ): ZIO[Transport with AbstractLogging[String] with Clock, Error, Unit] = {
+  ): ZIO[Transport with Logging[String] with Clock, Error, Unit] = {
 
     def handleSends(messages: Stream[Nothing, Chunk[Byte]]) =
       messages.tap { bytes =>
@@ -331,7 +331,9 @@ object SWIM {
   def withSWIM(port: Int) =
     enrichWithManaged[Membership](join(port))
 
-  def join(port: Int): ZManaged[AbstractLogging[String] with Clock with Random with Transport with Discovery, Error, Membership] =
+  def join(
+    port: Int
+  ): ZManaged[Logging[String] with Clock with Random with Transport with Discovery, Error, Membership] =
     for {
       localHost            <- InetAddress.localHost.toManaged_.orDie
       localMember          = Member(NodeId.generateNew, NodeAddress(localHost.address, port))

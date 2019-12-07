@@ -1,18 +1,21 @@
 package zio.keeper.discovery
 
-import zio.{Ref, UIO, ZIO}
+import zio.{ Ref, UIO, ZIO }
 import zio.keeper.membership.Member
 
 trait TestDiscovery extends Discovery {
   override def discover: TestDiscovery.Service[Any]
 }
+
 object TestDiscovery {
+
   trait Service[R] extends Discovery.Service[R] {
     def addMember(m: Member): UIO[Unit]
     def removeMember(m: Member): UIO[Unit]
   }
 
   class Test(ref: Ref[Set[Member]]) extends Service[Any] {
+
     override val discoverNodes =
       for {
         members <- ref.get

@@ -6,7 +6,7 @@ import zio.keeper.discovery.Discovery
 import zio.keeper.membership.SWIM
 import zio.keeper.transport
 import zio.keeper.transport.Transport
-import zio.logging.AbstractLogging
+import zio.logging.Logging
 import zio.logging.slf4j.Slf4jLogger
 import zio.macros.delegate._
 import zio.nio.{ InetAddress, SocketAddress }
@@ -34,7 +34,7 @@ object Node3 extends zio.ManagedApp {
 
 object TestNode {
 
-  val loggingEnv = ZIO.environment[zio.ZEnv] @@ enrichWith[AbstractLogging[String]](
+  val loggingEnv = ZIO.environment[zio.ZEnv] @@ enrichWith[Logging[String]](
     new Slf4jLogger.Live {
 
       override def formatMessage(msg: String): ZIO[Any, Nothing, String] =
@@ -54,22 +54,20 @@ object TestNode {
       )
 
   def membership(port: Int) =
-    ZManaged.environment[zio.ZEnv with AbstractLogging[String] with Transport with Discovery] @@
+    ZManaged.environment[zio.ZEnv with Logging[String] with Transport with Discovery] @@
       enrichWithManaged(
         SWIM.join(port)
       )
 
   val tcp =
     loggingEnv >>>
-      ZIO.environment[zio.ZEnv with AbstractLogging[String]] @@
+      ZIO.environment[zio.ZEnv with Logging[String]] @@
         transport.tcp.withTcpTransport(10.seconds, 10.seconds)
 
   private def environment(port: Int, others: Set[Int]) =
     discoveryEnv(others).toManaged_ @@
       enrichWithManaged(tcp.toManaged_) >>>
       membership(port)
-
-
 
   def start(port: Int, nodeName: String, otherPorts: Set[Int]) =
     (environment(port, otherPorts) >>> (for {
@@ -95,7 +93,7 @@ object TcpServer extends zio.App {
   import zio.duration._
   import zio.keeper.transport._
 
-  val localEnvironment = ZIO.environment[zio.ZEnv] @@ enrichWith[AbstractLogging[String]](
+  val localEnvironment = ZIO.environment[zio.ZEnv] @@ enrichWith[Logging[String]](
     new Slf4jLogger.Live {
 
       override def formatMessage(msg: String): ZIO[Any, Nothing, String] =
@@ -134,7 +132,7 @@ object TcpClient extends zio.App {
   import zio.duration._
   import zio.keeper.transport._
 
-  val localEnvironment = ZIO.environment[zio.ZEnv] @@ enrichWith[AbstractLogging[String]](
+  val localEnvironment = ZIO.environment[zio.ZEnv] @@ enrichWith[Logging[String]](
     new Slf4jLogger.Live {
 
       override def formatMessage(msg: String): ZIO[Any, Nothing, String] =

@@ -4,7 +4,7 @@ import zio._
 import zio.duration._
 import zio.keeper.discovery.TestDiscovery
 import zio.keeper.membership.{ Member, Membership, SWIM }
-import zio.logging.AbstractLogging
+import zio.logging.Logging
 import zio.logging.slf4j.Slf4jLogger
 import zio.macros.delegate.{ enrichWith, _ }
 import zio.test.Assertion._
@@ -14,7 +14,7 @@ import zio.test.{ DefaultRunnableSpec, _ }
 object ClusterSpec
     extends DefaultRunnableSpec({
 
-      val loggingEnv = ZIO.environment[zio.ZEnv] @@ enrichWith[AbstractLogging[String]](
+      val loggingEnv = ZIO.environment[zio.ZEnv] @@ enrichWith[Logging[String]](
         new Slf4jLogger.Live {
           override def formatMessage(msg: String): ZIO[Any, Nothing, String] =
             ZIO.succeed(msg)
@@ -35,11 +35,11 @@ object ClusterSpec
 
       def tcpEnv =
         loggingEnv >>> ZIO
-          .environment[zio.ZEnv with AbstractLogging[String]] @@ transport.tcp.withTcpTransport(10.seconds, 10.seconds)
+          .environment[zio.ZEnv with Logging[String]] @@
+          transport.tcp.withTcpTransport(10.seconds, 10.seconds)
 
       def dependencies =
         discoveryEnv @@
-          enrichWithM(loggingEnv) @@
           enrichWithM(tcpEnv)
 
       val liveEnv =

@@ -8,11 +8,10 @@ import zio.clock.Clock
 import zio.duration._
 import zio.keeper.TransportError
 import zio.keeper.TransportError._
-import zio.logging.AbstractLogging
+import zio.logging.Logging
 import zio.macros.delegate._
 import zio.nio._
 import zio.nio.channels._
-
 
 object tcp {
 
@@ -21,22 +20,22 @@ object tcp {
     val connectionTimeout: Duration
     val requestTimeout: Duration
 
-    val logger: AbstractLogging.Service[Any, String]
+    val logger: Logging.Service[Any, String]
 
     val transport = new Transport.Service[Any] {
+
       override def connect(to: SocketAddress) =
         (for {
           socketChannelAndClose  <- AsynchronousSocketChannel().withEarlyRelease.mapError(ExceptionWrapper)
           (close, socketChannel) = socketChannelAndClose
           _ <- socketChannel
-            .connect(to)
-            .mapError(ExceptionWrapper)
-            .timeoutFail(ConnectionTimeout(to, connectionTimeout))(connectionTimeout)
-            .toManaged_
+                .connect(to)
+                .mapError(ExceptionWrapper)
+                .timeoutFail(ConnectionTimeout(to, connectionTimeout))(connectionTimeout)
+                .toManaged_
           _ <- logger.info("transport connected to " + to).toManaged_
         } yield new NioChannelOut(socketChannel, to, requestTimeout, close, self))
-        .provide(self)
-
+          .provide(self)
 
       override def bind(addr: SocketAddress)(connectionHandler: ChannelOut => UIO[Unit]) =
         AsynchronousServerSocketChannel()
@@ -50,20 +49,22 @@ object tcp {
             case (close, server) =>
               (for {
                 cur <- server.accept.withEarlyRelease
-                  .mapError(ExceptionWrapper)
-                  .mapM {
-                    case (close, socket) =>
-                      socket.remoteAddress.flatMap {
-                        case None =>
-                          // This is almost impossible here but still we need to handle it.
-                          ZIO.fail(ExceptionWrapper(new RuntimeException("cannot obtain address")))
-                        case Some(addr) =>
-                          logger.info("connection accepted from: " + addr).as(
-                            new NioChannelOut(socket, addr, connectionTimeout, close, self)
-                          )
-                      }
-                  }
-                  .preallocate
+                        .mapError(ExceptionWrapper)
+                        .mapM {
+                          case (close, socket) =>
+                            socket.remoteAddress.flatMap {
+                              case None =>
+                                // This is almost impossible here but still we need to handle it.
+                                ZIO.fail(ExceptionWrapper(new RuntimeException("cannot obtain address")))
+                              case Some(addr) =>
+                                logger
+                                  .info("connection accepted from: " + addr)
+                                  .as(
+                                    new NioChannelOut(socket, addr, connectionTimeout, close, self)
+                                  )
+                            }
+                        }
+                        .preallocate
 
                 _ <- cur.use(connectionHandler).fork
               } yield ()).forever.fork
@@ -83,15 +84,15 @@ object tcp {
   def tcpTransport(
     connectionTimeout: Duration,
     requestTimeout: Duration
-  ): ZIO[Clock with AbstractLogging[String], Nothing, Transport] = {
+  ): ZIO[Clock with Logging[String], Nothing, Transport] = {
     val connectionTimeout_ = connectionTimeout
-    val requestTimeout_ = requestTimeout
-    ZIO.environment[Clock with AbstractLogging[String]].map { env =>
+    val requestTimeout_    = requestTimeout
+    ZIO.environment[Clock with Logging[String]].map { env =>
       new Live with Clock {
-        override val connectionTimeout: Duration = connectionTimeout_
-        override val requestTimeout: Duration = requestTimeout_
-        override val logger: AbstractLogging.Service[Any, String] = env.logging
-        override val clock: Clock.Service[Any] = env.clock
+        override val connectionTimeout: Duration          = connectionTimeout_
+        override val requestTimeout: Duration             = requestTimeout_
+        override val logger: Logging.Service[Any, String] = env.logging
+        override val clock: Clock.Service[Any]            = env.clock
       }
     }
   }
