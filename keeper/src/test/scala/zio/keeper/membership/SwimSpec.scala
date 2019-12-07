@@ -6,10 +6,11 @@ import zio.keeper.transport
 import zio.logging.Logging
 import zio.logging.slf4j.Slf4jLogger
 import zio.macros.delegate._
+import zio.stream.Sink
 import zio.test.Assertion.equalTo
 import zio.test.environment.Live
 import zio.test.{ DefaultRunnableSpec, assert, suite, testM }
-import zio.{ Promise, Ref, UIO, ZIO }
+import zio.{ Promise, UIO, ZIO }
 
 object SwimSpec
     extends DefaultRunnableSpec({
@@ -23,14 +24,7 @@ object SwimSpec
 
       val discoveryEnv = ZIO.environment[zio.ZEnv] @@
         enrichWithM[TestDiscovery](
-          Ref
-            .make(Set.empty[Member])
-            .map(
-              ref =>
-                new TestDiscovery {
-                  override def discover: TestDiscovery.Service[Any] = new TestDiscovery.Test(ref)
-                }
-            )
+          TestDiscovery.test
         )
 
       def tcpEnv =
@@ -56,12 +50,12 @@ object SwimSpec
           r   <- liveEnv @@ enrichWith(env)
         } yield r
 
-      trait ClusterHolder {
+      trait MemberHolder {
         def instance: Membership.Service[Any]
         def stop: UIO[Unit]
       }
 
-      def cluster(port: Int) =
+      def member(port: Int) =
         for {
           start         <- Promise.make[Nothing, Membership.Service[Any]]
           shutdown      <- Promise.make[Nothing, Unit]
@@ -79,7 +73,7 @@ object SwimSpec
                 )
                 .fork
           cluster <- start.await
-        } yield new ClusterHolder {
+        } yield new MemberHolder {
           def instance = cluster
           def stop     = shutdown.succeed(()).unit
         }
@@ -88,20 +82,37 @@ object SwimSpec
         testM("all nodes should have references to each other") {
           environment >>> Live.live(
             for {
-              c1     <- cluster(3333)
-              c2     <- cluster(3331)
-              _      <- ZIO.accessM[TestDiscovery](d => c2.instance.localMember.flatMap(m => d.discover.removeMember(m)))
-              c3     <- cluster(3332)
-              nodes1 <- c1.instance.nodes
-              nodes2 <- c2.instance.nodes
-              nodes3 <- c3.instance.nodes
-              node1  <- c1.instance.localMember.map(_.nodeId)
-              node2  <- c2.instance.localMember.map(_.nodeId)
-              node3  <- c3.instance.localMember.map(_.nodeId)
-              _      <- c1.stop *> c2.stop *> c3.stop
+              member1 <- member(3333)
+              member2 <- member(3331)
+              _ <- ZIO.accessM[TestDiscovery](
+                    d => member2.instance.localMember.flatMap(m => d.discover.removeMember(m))
+                  )
+              member3 <- member(3332)
+              nodes1  <- member1.instance.nodes
+              nodes2  <- member2.instance.nodes
+              nodes3  <- member3.instance.nodes
+              node1   <- member1.instance.localMember.map(_.nodeId)
+              node2   <- member2.instance.localMember.map(_.nodeId)
+              node3   <- member3.instance.localMember.map(_.nodeId)
+              _       <- member1.stop *> member2.stop *> member3.stop
             } yield assert(nodes1, equalTo(List(node2, node3))) &&
               assert(nodes2, equalTo(List(node1, node3))) &&
               assert(nodes3, equalTo(List(node1, node2)))
+          )
+        },
+        testM("should receive notification") {
+          environment >>> Live.live(
+            for {
+              member1       <- member(4333)
+              member1Events = member1.instance.events
+              member2       <- member(4331)
+              node2         <- member2.instance.localMember
+              joinEvent     <- member1Events.run(Sink.await[MembershipEvent])
+              _             <- member2.stop
+              leaveEvents   <- member1Events.run(Sink.collectAllN[MembershipEvent](2))
+              _             <- member1.stop
+            } yield assert(joinEvent, equalTo(MembershipEvent.Join(node2))) &&
+              assert(leaveEvents, equalTo(List(MembershipEvent.Unreachable(node2), MembershipEvent.Leave(node2))))
           )
         }
       )

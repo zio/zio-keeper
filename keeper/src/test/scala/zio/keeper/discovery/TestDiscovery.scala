@@ -14,6 +14,16 @@ object TestDiscovery {
     def removeMember(m: Member): UIO[Unit]
   }
 
+  def test =
+    Ref
+      .make(Set.empty[Member])
+      .map(
+        ref =>
+          new TestDiscovery {
+            override def discover: Service[Any] = new Test(ref)
+          }
+      )
+
   class Test(ref: Ref[Set[Member]]) extends Service[Any] {
 
     override val discoverNodes =
