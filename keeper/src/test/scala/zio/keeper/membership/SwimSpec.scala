@@ -77,7 +77,6 @@ object SwimSpec
           def instance = cluster
           def stop     = shutdown.succeed(()).unit
         }
-      import zio.console._
 
       suite("cluster")(
         testM("all nodes should have references to each other") {
