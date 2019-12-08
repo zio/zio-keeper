@@ -70,4 +70,16 @@ package object hyparview {
       }
       .flatten
 
+  private[hyparview] def report[T] =
+    Env
+      .using[T] { env =>
+        STM.atomically {
+          for {
+            active  <- env.activeView.keys.map(_.size)
+            passive <- env.passiveView.size
+          } yield console.putStrLn(s"${env.myself}: { active: $active, passive: $passive }")
+        }
+      }
+      .flatten
+
 }

@@ -3,6 +3,9 @@ package zio.membership.hyparview
 import zio._
 import zio.stm._
 import zio.membership.transport.ChunkConnection
+import zio.macros.delegate._
+import com.github.ghik.silencer.silent
+import zio.random.Random
 
 private[hyparview] trait Env[T] {
   val env: Env.Service[T]
@@ -18,6 +21,29 @@ private[hyparview] object Env {
 
   def get[T]: ZIO[Env[T], Nothing, Env.Service[T]] = ZIO.environment[Env[T]].map(_.env)
   def using[T]: Using[T]                           = new Using[T]
+
+  def withEnv[T](localAddr: T, config: Config) = enrichWithM[Env[T]] {
+    @silent("deprecated")
+    val makePickRandom: ZIO[Random, Nothing, Int => STM[Nothing, Int]] =
+      for {
+        seed    <- random.nextInt
+        sRandom = new scala.util.Random(seed)
+        ref     <- TRef.make(Stream.continually((i: Int) => sRandom.nextInt(i))).commit
+      } yield (i: Int) => ref.modify(s => (s.head(i), s.tail))
+    for {
+      activeView0  <- TMap.empty[T, ChunkConnection].commit
+      passiveView0 <- TSet.empty[T].commit
+      pickRandom0  <- makePickRandom
+    } yield new Env[T] {
+      val env = new Env.Service[T] {
+        override val myself      = localAddr
+        override val activeView  = activeView0
+        override val passiveView = passiveView0
+        override val pickRandom  = pickRandom0
+        override val cfg         = config
+      }
+    }
+  }
 
   trait Service[T] {
     val myself: T

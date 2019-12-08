@@ -1,11 +1,9 @@
 package zio.membership.hyparview
 
 import zio._
-import zio.stm._
-import zio.membership.transport.{ ChunkConnection, Transport }
+import zio.membership.transport.Transport
 import zio.random.Random
 import zio.macros.delegate._
-import com.github.ghik.silencer.silent
 import zio.console.Console
 import zio.membership.Membership
 import zio.membership.ByteCodec
@@ -40,26 +38,12 @@ object HyParView {
       shuffleTTL
     )
     for {
-      r            <- ZManaged.environment[R]
-      activeView0  <- TMap.empty[T, ChunkConnection].commit.toManaged_
-      passiveView0 <- TSet.empty[T].commit.toManaged_
-      pickRandom0  <- makePickRandom.toManaged_
-      env <- ZManaged.environment[Transport[T] with zio.console.Console] @@ enrichWith[Env[T]] {
-              new Env[T] {
-                val env = new Env.Service[T] {
-                  override val myself      = localAddr
-                  override val activeView  = activeView0
-                  override val passiveView = passiveView0
-                  override val pickRandom  = pickRandom0
-                  override val cfg         = config
-                }
-              }
-            }
-      _ <- (for {
-            active  <- activeView0.keys.map(_.size).commit
-            passive <- passiveView0.size.commit
-            _       <- console.putStrLn(s"${localAddr}: { active: $active, passive: $passive }")
-          } yield ()).repeat(Schedule.spaced(1.second)).toManaged_.fork
+      r <- ZManaged.environment[R]
+      env <- ZManaged.environment[Clock with Random with Transport[T] with zio.console.Console] @@ Env.withEnv(
+              localAddr,
+              config
+            )
+      _ <- report[T].repeat(Schedule.spaced(1.second)).provide(env).toManaged_.fork
       _ <- env.transport
             .bind(localAddr)
             .foreach(InitialProtocol.handleInitialProtocol(_).fork)
@@ -71,7 +55,7 @@ object HyParView {
     } yield new Membership[T] {
       val membership = new Membership.Service[Any, T] {
         override val identity = ZIO.succeed(localAddr)
-        override val nodes    = activeView0.keys.commit
+        override val nodes    = env.env.activeView.keys.commit
 
         override def connect(to: T) =
           for {
@@ -87,12 +71,4 @@ object HyParView {
       }
     }
   }
-
-  @silent("deprecated")
-  private[hyparview] val makePickRandom: ZIO[Random, Nothing, Int => STM[Nothing, Int]] =
-    for {
-      seed    <- random.nextInt
-      sRandom = new scala.util.Random(seed)
-      ref     <- TRef.make(Stream.continually((i: Int) => sRandom.nextInt(i))).commit
-    } yield (i: Int) => ref.modify(s => (s.head(i), s.tail))
 }
