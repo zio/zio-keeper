@@ -1,9 +1,8 @@
-package zio.keeper
+package zio.keeper.membership
 
 import zio.keeper.membership.GossipState.StateDiff
-import zio.keeper.membership.{ GossipState, Member, NodeAddress, NodeId }
-import zio.test.Assertion._
-import zio.test.{ DefaultRunnableSpec, _ }
+import zio.test.Assertion.equalTo
+import zio.test.{ DefaultRunnableSpec, assert, suite, test }
 
 import scala.collection.immutable.SortedSet
 

@@ -1,30 +1,44 @@
 package zio.keeper.transport
 
 import zio._
-import zio.clock.Clock
-import zio.console.Console
+import zio.console.{ Console, _ }
 import zio.duration._
-import zio.console._
 import zio.keeper.TransportError.ExceptionWrapper
+import zio.keeper.transport
+import zio.logging.Logging
+import zio.logging.slf4j.Slf4jLogger
 import zio.macros.delegate._
 import zio.nio.SocketAddress
 import zio.test.Assertion._
 import zio.test._
-import zio.test.environment.{ Live, TestClock, TestConsole }
+import zio.test.environment.Live
 
 object TransportSpec
     extends DefaultRunnableSpec({
       // todo: actually find free port
       val freePort = ZIO.succeed(9010)
 
-      val withTransport = tcp.withTcpTransport(10.seconds, 10.seconds)
+      val loggingEnv = ZIO.environment[zio.ZEnv] @@ enrichWith[Logging[String]](
+        new Slf4jLogger.Live {
+          override def formatMessage(msg: String): ZIO[Any, Nothing, String] =
+            ZIO.succeed(msg)
+        }
+      )
+
+      def tcpEnv =
+        loggingEnv >>> ZIO
+          .environment[zio.ZEnv with Logging[String]] @@
+          transport.tcp.withTcpTransport(10.seconds, 10.seconds)
+
+      val liveEnv =
+        (Live.live(ZIO.environment[zio.ZEnv]) @@ enrichWithM(tcpEnv))
+          .flatMap(Live.make)
 
       val environment =
         for {
-          test <- (ZIO.environment[TestClock with TestConsole] @@ withTransport)
-          live <- (Live.live(ZIO.environment[Clock with Console]) @@ withTransport).flatMap(Live.make)
-          env  <- ZIO.succeed(live) @@ enrichWith(test)
-        } yield env
+          env <- tcpEnv
+          r   <- liveEnv @@ enrichWith(env)
+        } yield r
 
       def bindAndWaitForValue(
         addr: SocketAddress,

@@ -53,6 +53,7 @@ lazy val keeper = project
       "dev.zio"                %% "zio-streams"             % "1.0.0-RC17",
       "dev.zio"                %% "zio-nio"                 % "0.4.0",
       "dev.zio"                %% "zio-macros-core"         % "0.6.0",
+      "dev.zio"                %% "zio-logging-slf4j"       % "0.0.4",
       "com.lihaoyi"            %% "upickle"                 % "0.8.0",
       "org.scala-lang.modules" %% "scala-collection-compat" % "2.1.2",
       "dev.zio"                %% "zio-test"                % "1.0.0-RC17" % Test,
@@ -82,6 +83,11 @@ lazy val examples = project
   .in(file("examples"))
   .settings(stdSettings("zio-keeper-examples"))
   .dependsOn(keeper)
+  .settings(
+    libraryDependencies ++= Seq(
+      "ch.qos.logback" % "logback-classic" % "1.2.3"
+    )
+  )
 
 lazy val docs = project
   .in(file("zio-keeper-docs"))
