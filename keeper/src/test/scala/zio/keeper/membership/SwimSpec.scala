@@ -88,6 +88,7 @@ object SwimSpec
                     d => member2.instance.localMember.flatMap(m => d.discover.removeMember(m))
                   )
               member3 <- member(33332)
+              _       <- member1.instance.events.run(Sink.collectAllN[MembershipEvent](2))
               nodes1  <- member1.instance.nodes
               nodes2  <- member2.instance.nodes
               nodes3  <- member3.instance.nodes
