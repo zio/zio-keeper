@@ -55,14 +55,16 @@ package object hyparview {
                        for {
                          _ <- env.activeView.delete(node)
                          _ <- env.addNodeToPassiveView(node)
-                       } yield for {
-                         _ <- Tagged
-                               .write[Protocol[T]](Protocol.Disconnect(env.myself, shutDown))
-                               .flatMap(con.send)
-                               .ignore
-                               .unit
-                         _ <- con.close
-                       } yield ()
+                       } yield {
+                         for {
+                           _ <- Tagged
+                                 .write[Protocol[T]](Protocol.Disconnect(env.myself, shutDown))
+                                 .flatMap(con.send)
+                                 .ignore
+                                 .unit
+                           _ <- con.close
+                         } yield ()
+                       }
                      case None => STM.succeed(ZIO.unit)
                    }
           } yield task
