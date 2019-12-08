@@ -9,16 +9,15 @@ private[hyparview] trait Env[T] {
 }
 
 private[hyparview] object Env {
-  def myself[T]                 = ZIO.environment[Env[T]].map(_.env.myself)
-  def activeView[T]             = ZIO.environment[Env[T]].map(_.env.activeView)
-  def passiveView[T]            = ZIO.environment[Env[T]].map(_.env.passiveView)
-  def cfg[T]                    = ZIO.environment[Env[T]].map(_.env.cfg)
-  def dropOneActiveToPassive[T] = ZIO.accessM[Env[T]](_.env.dropOneActiveToPassive.commit)
 
-  def addNodeToActiveView[T](node: T, con: ChunkConnection) =
-    ZIO.accessM[Env[T]](_.env.addNodeToActiveView(node, con).commit)
-  def addNodeToPassiveView[T](node: T) = ZIO.accessM[Env[T]](_.env.addNodeToPassiveView(node).commit)
-  def promoteRandom[T]                 = ZIO.accessM[Env[T]](_.env.promoteRandom.commit)
+  final class Using[T] {
+
+    def apply[R <: Env[T], E, A](f: Env.Service[T] => ZIO[R, E, A]): ZIO[R, E, A] =
+      ZIO.environment[Env[T]].flatMap(r => f(r.env))
+  }
+
+  def get[T]: ZIO[Env[T], Nothing, Env.Service[T]] = ZIO.environment[Env[T]].map(_.env)
+  def using[T]: Using[T]                           = new Using[T]
 
   trait Service[T] {
     val myself: T
@@ -27,20 +26,20 @@ private[hyparview] object Env {
     val pickRandom: Int => STM[Nothing, Int]
     val cfg: Config
 
-    lazy val isActiveViewFull =
+    lazy val isActiveViewFull: STM[Nothing, Boolean] =
       activeView.keys.map(_.size >= cfg.activeViewCapactiy)
 
-    lazy val isPassiveViewFull =
+    lazy val isPassiveViewFull: STM[Nothing, Boolean] =
       passiveView.size.map(_ >= cfg.passiveViewCapacity)
 
-    lazy val dropOneActiveToPassive =
+    lazy val dropOneActiveToPassive: STM[Nothing, Option[T]] =
       for {
         active  <- activeView.keys
         dropped <- selectOne(active)
         _       <- STM.foreach(dropped)(addNodeToPassiveView(_))
       } yield dropped
 
-    def addNodeToActiveView(node: T, connection: ChunkConnection) =
+    def addNodeToActiveView(node: T, connection: ChunkConnection): STM[Nothing, Option[T]] =
       if (node == myself) STM.succeed(None)
       else {
         for {
@@ -58,22 +57,28 @@ private[hyparview] object Env {
         } yield dropped
       }
 
-    def addNodeToPassiveView(node: T) =
+    def addNodeToPassiveView(node: T): STM[Nothing, Unit] =
       for {
         inActive  <- activeView.contains(node)
         inPassive <- passiveView.contains(node)
-      } yield {
-        if (node == myself || inActive || inPassive) STM.unit
-        else {
-          for {
-            size <- passiveView.size
-            _    <- if (size >= cfg.passiveViewCapacity) dropOne(passiveView) else STM.unit
-            _    <- passiveView.put(node)
-          } yield ()
-        }
-      }
+        _ <- if (node == myself || inActive || inPassive) STM.unit
+            else {
+              for {
+                size <- passiveView.size
+                _ <- if (size < cfg.passiveViewCapacity) STM.unit
+                    else {
+                      for {
+                        list    <- passiveView.toList
+                        dropped <- selectOne(list)
+                        _       <- STM.foreach(dropped)(passiveView.delete(_))
+                      } yield ()
+                    }
+                _ <- passiveView.put(node)
+              } yield ()
+            }
+      } yield ()
 
-    lazy val promoteRandom =
+    lazy val promoteRandom: STM[Nothing, Option[T]] =
       for {
         activeFull <- activeView.keys.map(_.size >= cfg.activeViewCapactiy)
         promoted <- if (activeFull) STM.succeed(None)
@@ -85,7 +90,7 @@ private[hyparview] object Env {
                    }
       } yield promoted
 
-    def selectOne[A](values: List[A]) =
+    def selectOne[A](values: List[A]): STM[Nothing, Option[A]] =
       if (values.isEmpty) STM.succeed(None)
       else {
         for {
@@ -94,7 +99,7 @@ private[hyparview] object Env {
         } yield Some(selected)
       }
 
-    def selectN[A](values: List[A], n: Int) =
+    def selectN[A](values: List[A], n: Int): STM[Nothing, List[A]] =
       if (values.isEmpty) STM.succeed(Nil)
       else {
         def go(remaining: List[A], toPick: Int, acc: List[A]): STM[Nothing, List[A]] =
@@ -110,17 +115,11 @@ private[hyparview] object Env {
         go(values, n, Nil)
       }
 
-    def addAllToPassiveView(remaining: List[T]): STM[Nothing, Unit] = remaining match {
-      case Nil     => STM.unit
-      case x :: xs => addNodeToPassiveView(x) *> addAllToPassiveView(xs)
-    }
-
-    private[this] def dropOne[A](set: TSet[A]) =
-      for {
-        list    <- set.toList
-        dropped <- selectOne(list)
-        _       <- STM.foreach(dropped)(set.delete(_))
-      } yield dropped
+    def addAllToPassiveView(remaining: List[T]): STM[Nothing, Unit] =
+      remaining match {
+        case Nil     => STM.unit
+        case x :: xs => addNodeToPassiveView(x) *> addAllToPassiveView(xs)
+      }
 
   }
 }

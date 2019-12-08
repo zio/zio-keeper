@@ -92,7 +92,7 @@ private[hyparview] object Protocol {
   def handleDisconnect[T](
     msg: Protocol.Disconnect[T]
   ) =
-    ZIO.environment[Env[T]].map(_.env).flatMap { env =>
+    Env.using[T] { env =>
       STM
         .atomically {
           for {
@@ -110,7 +110,7 @@ private[hyparview] object Protocol {
     ev1: Tagged[Protocol[T]],
     ev2: Tagged[InitialProtocol[T]]
   ) =
-    ZIO.environment[Env[T]].map(_.env).flatMap { env =>
+    Env.using[T] { env =>
       val accept = for {
         con   <- ZIO.accessM[Transport[T]](_.transport.connect(msg.originalSender))
         reply <- Tagged.write[InitialProtocol[T]](InitialProtocol.ForwardJoinReply(env.myself))
@@ -140,7 +140,7 @@ private[hyparview] object Protocol {
     ev1: Tagged[InitialProtocol[T]],
     ev2: Tagged[Protocol[T]]
   ) =
-    ZIO.environment[Env[T]].map(_.env).flatMap { env =>
+    Env.using[T] { env =>
       env.activeView.keys
         .map(ks => (ks.size, msg.ttl.step))
         .flatMap {

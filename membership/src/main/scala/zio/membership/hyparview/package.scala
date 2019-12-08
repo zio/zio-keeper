@@ -15,7 +15,7 @@ package object hyparview {
     ev2: Tagged[InitialProtocol[T]]
   ) =
     for {
-      dropped <- Env.addNodeToActiveView(to, con)
+      dropped <- Env.using[T](_.addNodeToActiveView(to, con).commit)
       _       <- ZIO.foreach(dropped)(disconnect(_))
       _       <- Protocol.handleProtocol(con)
     } yield ()
@@ -33,7 +33,7 @@ package object hyparview {
         e => console.putStrLn(s"Failed serializing message. Not sending: $e"),
         chunk =>
           for {
-            con <- Env.activeView[T].flatMap(_.get(to).commit)
+            con <- Env.using[T](_.activeView.get(to).commit)
             _   <- ZIO.foreach(con)(_.send(chunk).orElse(disconnect(to)))
           } yield ()
       )
@@ -45,25 +45,29 @@ package object hyparview {
     implicit
     ev: Tagged[Protocol[T]]
   ) =
-    ZIO.environment[Env[T]].map(_.env).flatMap { env =>
-      (for {
-        conOpt <- env.activeView.get(node)
-        task <- conOpt match {
-                 case Some(con) =>
-                   for {
-                     _ <- env.activeView.delete(node)
-                     _ <- env.addNodeToPassiveView(node)
-                   } yield for {
-                     _ <- Tagged
-                           .write[Protocol[T]](Protocol.Disconnect(env.myself, shutDown))
-                           .flatMap(con.send)
-                           .ignore
-                           .unit
-                     _ <- con.close
-                   } yield ()
-                 case None => STM.succeed(ZIO.unit)
-               }
-      } yield task).commit.flatten
-    }
+    Env
+      .using[T] { env =>
+        STM.atomically {
+          for {
+            conOpt <- env.activeView.get(node)
+            task <- conOpt match {
+                     case Some(con) =>
+                       for {
+                         _ <- env.activeView.delete(node)
+                         _ <- env.addNodeToPassiveView(node)
+                       } yield for {
+                         _ <- Tagged
+                               .write[Protocol[T]](Protocol.Disconnect(env.myself, shutDown))
+                               .flatMap(con.send)
+                               .ignore
+                               .unit
+                         _ <- con.close
+                       } yield ()
+                     case None => STM.succeed(ZIO.unit)
+                   }
+          } yield task
+        }
+      }
+      .flatten
 
 }

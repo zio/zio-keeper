@@ -106,7 +106,7 @@ private[hyparview] object InitialProtocol {
     ev1: Tagged[Protocol[T]],
     ev2: Tagged[InitialProtocol[T]]
   ) =
-    ZIO.environment[Env[T]].map(_.env).flatMap { env =>
+    Env.using[T] { env =>
       val accept = for {
         reply <- Tagged.write[NeighborProtocol](NeighborProtocol.Accept)
         _     <- con.send(reply)
@@ -121,18 +121,20 @@ private[hyparview] object InitialProtocol {
       if (msg.isHighPriority) {
         accept
       } else {
-        (for {
-          full <- env.isActiveViewFull
-          task <- if (full) {
-                   env
-                     .addNodeToPassiveView(msg.sender)
-                     .as(
-                       reject
-                     )
-                 } else {
-                   STM.succeed(accept)
-                 }
-        } yield task).commit.flatten
+        STM.atomically {
+          for {
+            full <- env.isActiveViewFull
+            task <- if (full) {
+                     env
+                       .addNodeToPassiveView(msg.sender)
+                       .as(
+                         reject
+                       )
+                   } else {
+                     STM.succeed(accept)
+                   }
+          } yield task
+        }.flatten
       }
     }
 
@@ -144,7 +146,7 @@ private[hyparview] object InitialProtocol {
     ev1: Tagged[Protocol[T]],
     ev2: Tagged[InitialProtocol[T]]
   ) =
-    ZIO.environment[Env[T]].map(_.env).flatMap { env =>
+    Env.using[T] { env =>
       for {
         others <- env.activeView.keys.map(_.filterNot(_ == msg.sender)).commit
         _ <- ZIO.foreachPar_(others)(
@@ -167,14 +169,16 @@ private[hyparview] object InitialProtocol {
   def handleShuffleReply[T](
     msg: InitialProtocol.ShuffleReply[T]
   ) =
-    ZIO.environment[Env[T]].map(_.env).flatMap { env =>
+    Env.using[T] { env =>
       val sentOriginally = msg.sentOriginally.toSet
-      (for {
-        _         <- env.passiveView.removeIf(sentOriginally.contains)
-        _         <- env.addAllToPassiveView(msg.passiveNodes)
-        remaining <- env.passiveView.size.map(env.cfg.passiveViewCapacity - _)
-        _         <- env.addAllToPassiveView(sentOriginally.take(remaining).toList)
-      } yield ()).commit
+      STM.atomically {
+        for {
+          _         <- env.passiveView.removeIf(sentOriginally.contains)
+          _         <- env.addAllToPassiveView(msg.passiveNodes)
+          remaining <- env.passiveView.size.map(env.cfg.passiveViewCapacity - _)
+          _         <- env.addAllToPassiveView(sentOriginally.take(remaining).toList)
+        } yield ()
+      }
     }
 
 }

@@ -15,7 +15,7 @@ private[hyparview] object periodic {
     ev1: Tagged[Protocol[T]],
     ev2: Tagged[InitialProtocol[T]]
   ): ZIO[Console with Env[T] with Transport[T], Nothing, Int] =
-    ZIO.environment[Env[T]].map(_.env).flatMap { env =>
+    Env.using[T] { env =>
       for {
         promoted <- env.promoteRandom.commit
         _ <- ZIO.foreach(promoted) { node =>
@@ -36,7 +36,7 @@ private[hyparview] object periodic {
     implicit
     ev: Tagged[Protocol[T]]
   ): ZIO[Console with Env[T] with Transport[T], Nothing, Int] =
-    ZIO.environment[Env[T]].map(_.env).flatMap { env =>
+    Env.using[T] { env =>
       (for {
         nodes  <- env.activeView.keys
         target <- env.selectOne(nodes)
