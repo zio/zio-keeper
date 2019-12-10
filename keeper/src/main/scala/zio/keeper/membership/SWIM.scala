@@ -122,6 +122,7 @@ final class SWIM(
 
   private def ack(id: Long) =
     for {
+      _ <- logger.info(s"message ack $id")
       promOpt <- acks
                   .get(id)
                   .flatMap(
@@ -309,7 +310,7 @@ final class SWIM(
                 for {
                   _     <- updateState(state)
                   state <- gossipStateRef.get
-                  _ <- sendInternalMessageWithAck(target.nodeId, 10.seconds)(ackId => Ping(ackId, state))
+                  _ <- sendInternalMessageWithAck(target.nodeId, 5.seconds)(ackId => Ping(ackId, state))
                         .foldM(
                           _ => ZIO.unit,
                           _ =>
