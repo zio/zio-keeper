@@ -45,7 +45,13 @@ final class SWIM(
 
   private def removeMember(member: Member) =
     gossipStateRef.update(_.removeMember(member)) *>
-      nodeChannels.update(_ - member.nodeId) *>
+      nodeChannels.modify(old => (old.get(member.nodeId), old - member.nodeId)).flatMap {
+        case Some(channel) =>
+          channel.close.ignore *>
+            logger.info("channel closed for member: " + member)
+        case None =>
+          ZIO.unit
+      } *>
       propagateEvent(MembershipEvent.Leave(member)) *>
       logger.info("remove member: " + member)
 
@@ -99,7 +105,6 @@ final class SWIM(
       prom   <- Promise.make[Error, Unit]
       _      <- acks.put(offset, prom).commit
       msg    = fn(offset)
-      _      <- logger.info(s"sending $msg with ack and timeout: ${timeout.asScala.toSeconds} seconds")
       _      <- sendInternalMessage(to, fn(offset))
       _ <- prom.await
             .ensuring(acks.delete(offset).commit)
@@ -147,7 +152,7 @@ final class SWIM(
                                   )
                                 )
                         pingReqs = jumps.map { jump =>
-                          sendInternalMessageWithAck(jump.nodeId, 10.seconds)(
+                          sendInternalMessageWithAck(jump.nodeId, 5.seconds)(
                             ackId => PingReq(target, ackId, state)
                           )
                         }
@@ -159,22 +164,23 @@ final class SWIM(
                                   _ => removeMember(target),
                                   _ =>
                                     logger.info(
-                                      s"SWIM: Successful ping req to [ ${target.nodeId} ] through [ ${jumps.map(_.nodeId).mkString(", ")} ]"
+                                      s"Successful ping req to [ ${target.nodeId} ] through [ ${jumps.map(_.nodeId).mkString(", ")} ]"
                                     )
                                 )
                             } else {
+                              logger.info(s"Ack failed timeout") *>
                               removeMember(target)
                             }
                       } yield ()
                     },
-                    _ => logger.info(s"SWIM: Successful ping to [ ${target.nodeId} ]")
+                    _ => logger.info(s"Successful ping to [ ${target.nodeId} ]")
                   )
           } yield ()
         } else {
-          logger.info("SWIM: No nodes to spread gossip to")
+          logger.info("No nodes to spread gossip to")
         }
       }
-      loop.repeat(Schedule.spaced(30.seconds))
+      loop.repeat(Schedule.spaced(10.seconds))
     }
 
   private def acceptConnectionRequests =
@@ -286,7 +292,7 @@ final class SWIM(
 
   private def handleClusterMessages(stream: Stream[Nothing, Message]) =
     stream.tap { message =>
-      for {
+      (for {
         payload <- InternalProtocol.deserialize(message.payload)
         _       <- logger.info(s"receive message: $payload")
         _ <- payload match {
@@ -314,7 +320,11 @@ final class SWIM(
                 } yield ()
               case _ => logger.error("unknown message: " + payload)
             }
-      } yield ()
+      } yield ())
+        .catchAll(ex =>
+          //we should probably reconnect to the sender.
+          logger.error(s"Exception $ex processing cluster message $message")
+        )
     }.runDrain
 
   override def nodes: ZIO[Any, Nothing, List[NodeId]] =
