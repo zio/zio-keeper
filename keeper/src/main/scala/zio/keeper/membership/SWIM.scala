@@ -170,7 +170,7 @@ final class SWIM(
                                 )
                             } else {
                               logger.info(s"Ack failed timeout") *>
-                              removeMember(target)
+                                removeMember(target)
                             }
                       } yield ()
                     },
@@ -322,9 +322,10 @@ final class SWIM(
               case _ => logger.error("unknown message: " + payload)
             }
       } yield ())
-        .catchAll(ex =>
-          //we should probably reconnect to the sender.
-          logger.error(s"Exception $ex processing cluster message $message")
+        .catchAll(
+          ex =>
+            //we should probably reconnect to the sender.
+            logger.error(s"Exception $ex processing cluster message $message")
         )
     }.runDrain
 
