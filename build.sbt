@@ -1,4 +1,5 @@
 import BuildHelper._
+import explicitdeps.ExplicitDepsPlugin.autoImport.moduleFilterRemoveValue
 
 inThisBuild(
   List(
@@ -41,7 +42,7 @@ addCommandAlias("check", "all scalafmtSbtCheck scalafmtCheck test:scalafmtCheck"
 lazy val root = project
   .in(file("."))
   .settings(skip in publish := true)
-  .aggregate(keeper, membership, examples)
+  .aggregate(docs, keeper, membership, examples)
 
 lazy val keeper = project
   .in(file("keeper"))
@@ -52,8 +53,9 @@ lazy val keeper = project
       "dev.zio"                %% "zio-streams"             % "1.0.0-RC17",
       "dev.zio"                %% "zio-nio"                 % "0.4.0",
       "dev.zio"                %% "zio-macros-core"         % "0.6.0",
+      "dev.zio"                %% "zio-logging-slf4j"       % "0.0.4",
       "com.lihaoyi"            %% "upickle"                 % "0.8.0",
-      "org.scala-lang.modules" %% "scala-collection-compat" % "2.1.2",
+      "org.scala-lang.modules" %% "scala-collection-compat" % "2.1.3",
       "dev.zio"                %% "zio-test"                % "1.0.0-RC17" % Test,
       "dev.zio"                %% "zio-test-sbt"            % "1.0.0-RC17" % Test
     ),
@@ -70,7 +72,7 @@ lazy val membership = project
       "dev.zio"                %% "zio-nio"                 % "0.4.0",
       "dev.zio"                %% "zio-macros-core"         % "0.6.0",
       "com.lihaoyi"            %% "upickle"                 % "0.8.0",
-      "org.scala-lang.modules" %% "scala-collection-compat" % "2.1.2",
+      "org.scala-lang.modules" %% "scala-collection-compat" % "2.1.3",
       "dev.zio"                %% "zio-test"                % "1.0.0-RC17" % Test,
       "dev.zio"                %% "zio-test-sbt"            % "1.0.0-RC17" % Test
     ),
@@ -83,5 +85,23 @@ lazy val examples = project
   .dependsOn(keeper)
   .settings(
     libraryDependencies ++= Seq(
-      )
+      "ch.qos.logback" % "logback-classic" % "1.2.3"
+    )
   )
+
+lazy val docs = project
+  .in(file("zio-keeper-docs"))
+  .settings(
+    skip in publish := true,
+    moduleName := "docs",
+    unusedCompileDependenciesFilter -= moduleFilter("org.scalameta", "mdoc"),
+    scalacOptions -= "-Yno-imports",
+    scalacOptions -= "-Xfatal-warnings",
+    scalacOptions ~= { _.filterNot(_.startsWith("-Ywarn")) },
+    scalacOptions ~= { _.filterNot(_.startsWith("-Xlint")) },
+    libraryDependencies ++= Seq(
+      ("com.github.ghik" % "silencer-lib" % "1.4.4" % Provided).cross(CrossVersion.full)
+    )
+  )
+  .dependsOn(keeper, membership)
+  .enablePlugins(MdocPlugin, DocusaurusPlugin)

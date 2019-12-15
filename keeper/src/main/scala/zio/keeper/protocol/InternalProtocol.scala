@@ -3,8 +3,8 @@ package zio.keeper.protocol
 import java.math.BigInteger
 
 import upickle.default._
-import zio.keeper.SerializationError.SerializationTypeError
-import zio.keeper.{ GossipState, Member, NodeAddress, NodeId }
+import zio.keeper.SerializationError.{ DeserializationTypeError, SerializationTypeError }
+import zio.keeper.membership.{ GossipState, Member, NodeAddress, NodeId }
 import zio.{ Chunk, IO, ZIO }
 
 sealed trait InternalProtocol {
@@ -17,12 +17,12 @@ sealed trait InternalProtocol {
 
 object InternalProtocol {
 
-  def deserialize(bytes: Chunk[Byte]): IO[SerializationTypeError[InternalProtocol], InternalProtocol] =
+  def deserialize(bytes: Chunk[Byte]): IO[DeserializationTypeError[InternalProtocol], InternalProtocol] =
     ZIO
       .effect(
         readBinary[InternalProtocol](bytes.toArray)
       )
-      .mapError(ex => SerializationTypeError[InternalProtocol](ex))
+      .mapError(ex => DeserializationTypeError[InternalProtocol](ex))
 
   final case class Ack(conversation: Long, state: GossipState) extends InternalProtocol
 
@@ -30,7 +30,9 @@ object InternalProtocol {
 
   final case class PingReq(target: Member, ackConversation: Long, state: GossipState) extends InternalProtocol
 
-  final case class OpenConnection(state: GossipState, address: Member) extends InternalProtocol
+  final case class NewConnection(state: GossipState, address: Member) extends InternalProtocol
+
+  final case class JoinCluster(state: GossipState, address: Member) extends InternalProtocol
 
   implicit val gossipStateRW: ReadWriter[GossipState] = macroRW[GossipState]
 
@@ -48,6 +50,7 @@ object InternalProtocol {
     macroRW[Ack],
     macroRW[Ping],
     macroRW[PingReq],
-    macroRW[OpenConnection]
+    macroRW[NewConnection],
+    macroRW[JoinCluster]
   )
 }

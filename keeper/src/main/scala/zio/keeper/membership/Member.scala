@@ -1,10 +1,11 @@
-package zio.keeper
+package zio.keeper.membership
 
 import java.util.UUID
 
 import zio.ZIO
-import zio.nio.{ InetAddress, InetSocketAddress, SocketAddress }
+import zio.keeper.TransportError
 import zio.keeper.TransportError._
+import zio.nio.{ InetAddress, InetSocketAddress, SocketAddress }
 
 final case class NodeId(value: UUID) extends AnyVal
 
@@ -15,7 +16,9 @@ object NodeId {
     NodeId(UUID.randomUUID())
 }
 
-final case class Member(nodeId: NodeId, addr: NodeAddress)
+final case class Member(nodeId: NodeId, addr: NodeAddress) {
+  override def toString: String = s"nodeId: ${nodeId.value}, ip: ${addr.ip.mkString(".")}, port: ${addr.port}"
+}
 
 object Member {
   implicit val ordering: Ordering[Member] = Ordering.by(_.nodeId)

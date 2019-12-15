@@ -1,6 +1,6 @@
-package zio.keeper
+package zio.keeper.membership
 
-import zio.keeper.GossipState.StateDiff
+import zio.keeper.membership.GossipState.StateDiff
 
 import scala.collection.immutable.SortedSet
 
@@ -20,6 +20,8 @@ case class GossipState(members: SortedSet[Member]) extends AnyVal {
       this.members.diff(other.members),
       other.members.diff(this.members)
     )
+
+  override def toString: String = s"GossipState[${members.mkString(",")}] "
 }
 
 object GossipState {

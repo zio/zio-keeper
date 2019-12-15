@@ -1,8 +1,9 @@
 package zio.keeper.protocol
 
 import zio.Chunk
-import zio.keeper.SerializationError.SerializationTypeError
-import zio.keeper.{ GossipState, Member, NodeAddress, NodeId }
+import zio.keeper.SerializationError.DeserializationTypeError
+import zio.keeper.membership.{ GossipState, Member, NodeAddress, NodeId }
+import zio.keeper.membership.Member
 import zio.test.Assertion._
 import zio.test._
 
@@ -61,13 +62,23 @@ object InternalProtocolSpec
             for {
               gossipState <- gossipStateGen
               member      <- memberGen
-            } yield InternalProtocol.OpenConnection(gossipState, member)
+            } yield InternalProtocol.NewConnection(gossipState, member)
+          }
+        },
+        testM("JoinCluster read and write") {
+          serializationTest {
+            for {
+              gossipState <- gossipStateGen
+              member      <- memberGen
+            } yield InternalProtocol.JoinCluster(gossipState, member)
           }
         },
         testM("Malformed bytes") {
           assertM(
             InternalProtocol.deserialize(Chunk.single(Byte.MaxValue)).either,
-            isLeft(equalTo(SerializationTypeError(upickle.core.Abort("expected dictionary got int32"))))
+            isLeft(
+              equalTo(DeserializationTypeError[InternalProtocol](upickle.core.Abort("expected dictionary got int32")))
+            )
           )
         }
       )
