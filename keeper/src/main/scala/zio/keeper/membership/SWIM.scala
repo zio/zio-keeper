@@ -40,20 +40,28 @@ final class SWIM(
   override val localMember: ZIO[Any, Nothing, Member] =
     ZIO.succeed(localMember_)
 
-  private def propagateEvent(event: MembershipEvent) =
-    clusterEventsQueue.offer(event)
+  override def broadcast(data: Chunk[Byte]): IO[Error, Unit] =
+    serializeMessage(localMember_, data, 2).flatMap[Any, Error, Unit](publishToBroadcast).unit
 
-  private def removeMember(member: Member) =
-    gossipStateRef.update(_.removeMember(member)) *>
-      nodeChannels.modify(old => (old.get(member.nodeId), old - member.nodeId)).flatMap {
-        case Some(channel) =>
-          channel.close.ignore *>
-            logger.info("channel closed for member: " + member)
-        case None =>
-          ZIO.unit
-      } *>
-      propagateEvent(MembershipEvent.Leave(member)) *>
-      logger.info("remove member: " + member)
+  override def nodes: ZIO[Any, Nothing, List[NodeId]] =
+    nodeChannels.get
+      .map(_.keys.toList)
+
+  override def receive: Stream[Error, Message] =
+    zio.stream.Stream.fromQueue(userMessageQueue)
+
+  override def send(data: Chunk[Byte], receipt: NodeId): IO[Error, Unit] =
+    sendMessage(receipt, 2, data)
+
+  private def sendMessage(to: NodeId, msgType: Int, payload: Chunk[Byte]) =
+    for {
+      node <- nodeChannels.get.map(_.get(to))
+      _ <- node match {
+            case Some(channel) =>
+              serializeMessage(localMember_, payload, msgType) >>= channel.send
+            case None => ZIO.fail(UnknownNode(to))
+          }
+    } yield ()
 
   private def addMember(member: Member, send: ChannelOut) =
     gossipStateRef.update(_.addMember(member)) *>
@@ -66,49 +74,6 @@ final class SWIM(
       current <- gossipStateRef.get
       diff    = newState.diff(current)
       _       <- ZIO.foreach(diff.local)(n => (n.addr.socketAddress >>= connect).ignore)
-    } yield ()
-
-  private def sendMessage(to: NodeId, msgType: Int, payload: Chunk[Byte]) =
-    for {
-      node <- nodeChannels.get.map(_.get(to))
-      _ <- node match {
-            case Some(channel) =>
-              serializeMessage(localMember_, payload, msgType) >>= channel.send
-            case None => ZIO.fail(UnknownNode(to))
-          }
-    } yield ()
-
-  private def sendInternalMessage(to: ChannelOut, msg: InternalProtocol): ZIO[Logging[String], Error, Unit] = {
-    for {
-      _       <- logger.info(s"sending $msg")
-      payload <- msg.serialize
-      msg     <- serializeMessage(localMember_, payload, 1)
-      _       <- to.send(msg)
-    } yield ()
-  }.catchAll { ex =>
-    logger.info(s"error during sending message: $ex")
-  }
-
-  private def sendInternalMessage(to: NodeId, msg: InternalProtocol): ZIO[Logging[String], Error, Unit] =
-    for {
-      node <- nodeChannels.get.map(_.get(to))
-      _ <- node match {
-            case Some(channel) =>
-              sendInternalMessage(channel, msg)
-            case None => ZIO.fail(UnknownNode(to))
-          }
-    } yield ()
-
-  private def sendInternalMessageWithAck(to: NodeId, timeout: Duration)(fn: Long => InternalProtocol) =
-    for {
-      offset <- msgOffset.update(_ + 1)
-      prom   <- Promise.make[Error, Unit]
-      _      <- acks.put(offset, prom).commit
-      msg    = fn(offset)
-      _      <- sendInternalMessage(to, fn(offset))
-      _ <- prom.await
-            .ensuring(acks.delete(offset).commit)
-            .timeoutFail(AckMessageFail(offset, msg, to))(timeout)
     } yield ()
 
   private def expects[R, A](
@@ -183,6 +148,54 @@ final class SWIM(
       }
       loop.repeat(Schedule.spaced(10.seconds))
     }
+
+  private def removeMember(member: Member) =
+    gossipStateRef.update(_.removeMember(member)) *>
+      nodeChannels.modify(old => (old.get(member.nodeId), old - member.nodeId)).flatMap {
+        case Some(channel) =>
+          channel.close.ignore *>
+            logger.info("channel closed for member: " + member)
+        case None =>
+          ZIO.unit
+      } *>
+      propagateEvent(MembershipEvent.Leave(member)) *>
+      logger.info("remove member: " + member)
+
+  private def propagateEvent(event: MembershipEvent) =
+    clusterEventsQueue.offer(event)
+
+  private def sendInternalMessageWithAck(to: NodeId, timeout: Duration)(fn: Long => InternalProtocol) =
+    for {
+      offset <- msgOffset.update(_ + 1)
+      prom   <- Promise.make[Error, Unit]
+      _      <- acks.put(offset, prom).commit
+      msg    = fn(offset)
+      _      <- sendInternalMessage(to, fn(offset))
+      _ <- prom.await
+            .ensuring(acks.delete(offset).commit)
+            .timeoutFail(AckMessageFail(offset, msg, to))(timeout)
+    } yield ()
+
+  private def sendInternalMessage(to: NodeId, msg: InternalProtocol): ZIO[Logging[String], Error, Unit] =
+    for {
+      node <- nodeChannels.get.map(_.get(to))
+      _ <- node match {
+            case Some(channel) =>
+              sendInternalMessage(channel, msg)
+            case None => ZIO.fail(UnknownNode(to))
+          }
+    } yield ()
+
+  private def sendInternalMessage(to: ChannelOut, msg: InternalProtocol): ZIO[Logging[String], Error, Unit] = {
+    for {
+      _       <- logger.info(s"sending $msg")
+      payload <- msg.serialize
+      msg     <- serializeMessage(localMember_, payload, 1)
+      _       <- to.send(msg)
+    } yield ()
+  }.catchAll { ex =>
+    logger.info(s"error during sending message: $ex")
+  }
 
   private def acceptConnectionRequests =
     for {
@@ -328,19 +341,6 @@ final class SWIM(
             logger.error(s"Exception $ex processing cluster message $message")
         )
     }.runDrain
-
-  override def nodes: ZIO[Any, Nothing, List[NodeId]] =
-    nodeChannels.get
-      .map(_.keys.toList)
-
-  override def send(data: Chunk[Byte], receipt: NodeId): IO[Error, Unit] =
-    sendMessage(receipt, 2, data)
-
-  override def broadcast(data: Chunk[Byte]): IO[Error, Unit] =
-    serializeMessage(localMember_, data, 2).flatMap[Any, Error, Unit](publishToBroadcast).unit
-
-  override def receive: Stream[Error, Message] =
-    zio.stream.Stream.fromQueue(userMessageQueue)
 
 }
 

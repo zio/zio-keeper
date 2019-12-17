@@ -9,11 +9,6 @@ trait TestDiscovery extends Discovery {
 
 object TestDiscovery {
 
-  trait Service[R] extends Discovery.Service[R] {
-    def addMember(m: Member): UIO[Unit]
-    def removeMember(m: Member): UIO[Unit]
-  }
-
   def test =
     Ref
       .make(Set.empty[Member])
@@ -23,6 +18,11 @@ object TestDiscovery {
             override def discover: Service[Any] = new Test(ref)
           }
       )
+
+  trait Service[R] extends Discovery.Service[R] {
+    def addMember(m: Member): UIO[Unit]
+    def removeMember(m: Member): UIO[Unit]
+  }
 
   class Test(ref: Ref[Set[Member]]) extends Service[Any] {
 

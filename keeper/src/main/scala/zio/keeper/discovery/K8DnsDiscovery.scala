@@ -20,8 +20,6 @@ import zio.{ IO, URIO, ZIO, keeper }
  */
 trait K8DnsDiscovery extends Discovery.Service[Any] {
 
-  val logging: Logging.Service[Any, String]
-
   final override val discoverNodes: ZIO[Any, keeper.Error, Set[SocketAddress]] = {
     for {
       addresses <- lookup(serviceDns, serviceDnsTimeout)
@@ -32,6 +30,7 @@ trait K8DnsDiscovery extends Discovery.Service[Any] {
       logging.error("discovery strategy " + this.getClass.getSimpleName + " failed.") *>
         ZIO.fail(ServiceDiscoveryError(ex.getMessage))
   )
+  val logging: Logging.Service[Any, String]
 
   def lookup(serviceDns: InetAddress, serviceDnsTimeout: Duration) = {
     import scala.jdk.CollectionConverters._
@@ -73,6 +72,12 @@ trait K8DnsDiscovery extends Discovery.Service[Any] {
 
 object K8DnsDiscovery {
 
+  def withK8DnsDiscovery(
+    addr: zio.nio.InetAddress,
+    timeout: Duration,
+    port: Int
+  ) = enrichWithM[Discovery](k8DnsDiscovery(addr, timeout, port))
+
   def k8DnsDiscovery(
     addr: zio.nio.InetAddress,
     timeout: Duration,
@@ -93,11 +98,5 @@ object K8DnsDiscovery {
           }
         }
     )
-
-  def withK8DnsDiscovery(
-    addr: zio.nio.InetAddress,
-    timeout: Duration,
-    port: Int
-  ) = enrichWithM[Discovery](k8DnsDiscovery(addr, timeout, port))
 
 }

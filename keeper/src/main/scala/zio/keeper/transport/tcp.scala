@@ -15,6 +15,28 @@ import zio.nio.channels._
 
 object tcp {
 
+  def withTcpTransport(
+    connectionTimeout: Duration,
+    sendTimeout: Duration
+  ) =
+    enrichWithM[Transport](tcpTransport(connectionTimeout, sendTimeout))
+
+  def tcpTransport(
+    connectionTimeout: Duration,
+    requestTimeout: Duration
+  ): ZIO[Clock with Logging[String], Nothing, Transport] = {
+    val connectionTimeout_ = connectionTimeout
+    val requestTimeout_    = requestTimeout
+    ZIO.environment[Clock with Logging[String]].map { env =>
+      new Live with Clock {
+        override val connectionTimeout: Duration          = connectionTimeout_
+        override val requestTimeout: Duration             = requestTimeout_
+        override val logger: Logging.Service[Any, String] = env.logging
+        override val clock: Clock.Service[Any]            = env.clock
+      }
+    }
+  }
+
   trait Live extends Transport {
     self: Clock =>
     val connectionTimeout: Duration
@@ -75,28 +97,6 @@ object tcp {
 
   }
 
-  def withTcpTransport(
-    connectionTimeout: Duration,
-    sendTimeout: Duration
-  ) =
-    enrichWithM[Transport](tcpTransport(connectionTimeout, sendTimeout))
-
-  def tcpTransport(
-    connectionTimeout: Duration,
-    requestTimeout: Duration
-  ): ZIO[Clock with Logging[String], Nothing, Transport] = {
-    val connectionTimeout_ = connectionTimeout
-    val requestTimeout_    = requestTimeout
-    ZIO.environment[Clock with Logging[String]].map { env =>
-      new Live with Clock {
-        override val connectionTimeout: Duration          = connectionTimeout_
-        override val requestTimeout: Duration             = requestTimeout_
-        override val logger: Logging.Service[Any, String] = env.logging
-        override val clock: Clock.Service[Any]            = env.clock
-      }
-    }
-  }
-
 }
 
 class NioChannelOut(
@@ -106,6 +106,22 @@ class NioChannelOut(
   finalizer: URIO[Any, Any],
   clock: Clock
 ) extends ChannelOut {
+
+  override def isOpen: ZIO[Any, TransportError, Boolean] =
+    socket.isOpen
+
+  override def read: ZIO[Any, TransportError, Chunk[Byte]] =
+    (for {
+      length <- socket
+                 .read(4)
+                 .flatMap(c => ZIO.effect(new BigInteger(c.toArray).intValue()))
+                 .mapError(ExceptionWrapper)
+      data <- socket.read(length).mapError(ExceptionWrapper)
+    } yield data)
+      .catchSome {
+        case ExceptionWrapper(ex: IOException) if ex.getMessage == "Connection reset by peer" =>
+          close *> ZIO.fail(ExceptionWrapper(ex))
+      }
 
   override def send(data: Chunk[Byte]): ZIO[Any, TransportError, Unit] = {
     val size = data.size
@@ -123,22 +139,6 @@ class NioChannelOut(
       .provide(clock)
   }
 
-  override def read: ZIO[Any, TransportError, Chunk[Byte]] =
-    (for {
-      length <- socket
-                 .read(4)
-                 .flatMap(c => ZIO.effect(new BigInteger(c.toArray).intValue()))
-                 .mapError(ExceptionWrapper)
-      data <- socket.read(length).mapError(ExceptionWrapper)
-    } yield data)
-      .catchSome {
-        case ExceptionWrapper(ex: IOException) if ex.getMessage == "Connection reset by peer" =>
-          close *> ZIO.fail(ExceptionWrapper(ex))
-      }
-
-  override def isOpen: ZIO[Any, TransportError, Boolean] =
-    socket.isOpen
-
   override def close: ZIO[Any, TransportError, Unit] =
     finalizer.ignore
 
@@ -149,10 +149,10 @@ class NioChannelIn(
   finalizer: URIO[Any, Any]
 ) extends ChannelIn {
 
-  override def isOpen: ZIO[Any, TransportError, Boolean] =
-    serverSocket.isOpen
-
   override def close: ZIO[Any, TransportError, Unit] =
     finalizer.ignore
+
+  override def isOpen: ZIO[Any, TransportError, Boolean] =
+    serverSocket.isOpen
 
 }
