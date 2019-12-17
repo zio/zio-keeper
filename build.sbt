@@ -49,9 +49,9 @@ lazy val keeper = project
   .settings(stdSettings("zio-keeper"))
   .settings(
     libraryDependencies ++= Seq(
-      "dev.zio"                %% "zio"                     % "1.0.0-RC17",
-      "dev.zio"                %% "zio-streams"             % "1.0.0-RC17",
-      "dev.zio"                %% "zio-nio"                 % "0.4.0",
+      "dev.zio"                %% "zio"                     % zioVersion,
+      "dev.zio"                %% "zio-streams"             % zioVersion,
+      "dev.zio"                %% "zio-nio"                 % nioVersion,
       "dev.zio"                %% "zio-macros-core"         % "0.6.0",
       "dev.zio"                %% "zio-logging-slf4j"       % "0.0.4",
       "com.lihaoyi"            %% "upickle"                 % "0.8.0",
@@ -67,9 +67,9 @@ lazy val membership = project
   .settings(stdSettings("zio-membership"))
   .settings(
     libraryDependencies ++= Seq(
-      "dev.zio"                %% "zio"                     % "1.0.0-RC17",
-      "dev.zio"                %% "zio-streams"             % "1.0.0-RC17",
-      "dev.zio"                %% "zio-nio"                 % "0.4.0",
+      "dev.zio"                %% "zio"                     % zioVersion,
+      "dev.zio"                %% "zio-streams"             % zioVersion,
+      "dev.zio"                %% "zio-nio"                 % nioVersion,
       "dev.zio"                %% "zio-macros-core"         % "0.6.0",
       "com.lihaoyi"            %% "upickle"                 % "0.8.0",
       "org.scala-lang.modules" %% "scala-collection-compat" % "2.1.3",
