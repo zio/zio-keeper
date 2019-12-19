@@ -107,10 +107,12 @@ class NioChannelOut(
   clock: Clock
 ) extends ChannelOut {
 
-  override def isOpen: ZIO[Any, TransportError, Boolean] =
+  //conv
+  override val isOpen: ZIO[Any, TransportError, Boolean] =
     socket.isOpen
 
-  override def read: ZIO[Any, TransportError, Chunk[Byte]] =
+  //conv
+  override val read: ZIO[Any, TransportError, Chunk[Byte]] =
     (for {
       length <- socket
                  .read(4)
@@ -139,7 +141,7 @@ class NioChannelOut(
       .provide(clock)
   }
 
-  override def close: ZIO[Any, TransportError, Unit] =
+  override val close: ZIO[Any, TransportError, Unit] =
     finalizer.ignore
 
 }
@@ -149,10 +151,12 @@ class NioChannelIn(
   finalizer: URIO[Any, Any]
 ) extends ChannelIn {
 
-  override def close: ZIO[Any, TransportError, Unit] =
+  //conv
+  override val close: ZIO[Any, TransportError, Unit] =
     finalizer.ignore
 
-  override def isOpen: ZIO[Any, TransportError, Boolean] =
+  //conv
+  override val isOpen: ZIO[Any, TransportError, Boolean] =
     serverSocket.isOpen
 
 }

@@ -62,11 +62,11 @@ trait K8DnsDiscovery extends Discovery.Service[Any] {
         host.replaceAll("\\\\.$", "")
       }
 
-  def serviceDns: zio.nio.InetAddress
+  val serviceDns: zio.nio.InetAddress
 
-  def serviceDnsTimeout: Duration
+  val serviceDnsTimeout: Duration
 
-  def servicePort: Int
+  val servicePort: Int
 
 }
 
@@ -87,14 +87,16 @@ object K8DnsDiscovery {
       env =>
         new Discovery {
 
-          override def discover: Discovery.Service[Any] = new K8DnsDiscovery {
-            override val logging: Logging.Service[Any, String] = env.logging
+            override val discover: Discovery.Service[Any] = new K8DnsDiscovery {
 
-            override def serviceDns: InetAddress = addr
+              override val logging: Logging.Service[Any, String] = env.logging
 
-            override def serviceDnsTimeout: Duration = timeout
+            override val serviceDns: InetAddress = addr
 
-            override def servicePort: Int = port
+            override val serviceDnsTimeout: Duration = timeout
+
+            //conv
+            override val servicePort: Int = port
           }
         }
     )

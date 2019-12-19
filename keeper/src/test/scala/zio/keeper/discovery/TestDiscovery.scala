@@ -4,7 +4,7 @@ import zio.{ Ref, UIO, ZIO }
 import zio.keeper.membership.Member
 
 trait TestDiscovery extends Discovery {
-  override def discover: TestDiscovery.Service[Any]
+  override val discover: TestDiscovery.Service[Any]
 }
 
 object TestDiscovery {
@@ -15,7 +15,7 @@ object TestDiscovery {
       .map(
         ref =>
           new TestDiscovery {
-            override def discover: Service[Any] = new Test(ref)
+            override val discover: Service[Any] = new Test(ref)
           }
       )
 

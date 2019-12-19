@@ -43,11 +43,11 @@ final class SWIM(
   override def broadcast(data: Chunk[Byte]): IO[Error, Unit] =
     serializeMessage(localMember_, data, 2).flatMap[Any, Error, Unit](publishToBroadcast).unit
 
-  override def nodes: ZIO[Any, Nothing, List[NodeId]] =
+  override val nodes: ZIO[Any, Nothing, List[NodeId]] =
     nodeChannels.get
       .map(_.keys.toList)
 
-  override def receive: Stream[Error, Message] =
+  override val receive: Stream[Error, Message] =
     zio.stream.Stream.fromQueue(userMessageQueue)
 
   override def send(data: Chunk[Byte], receipt: NodeId): IO[Error, Unit] =
@@ -197,7 +197,8 @@ final class SWIM(
     logger.info(s"error during sending message: $ex")
   }
 
-  private def acceptConnectionRequests =
+  //conv
+  private val acceptConnectionRequests =
     for {
       env          <- ZManaged.environment[Logging[String] with Transport with Clock]
       _            <- handleClusterMessages(ZStream.fromQueue(clusterMessageQueue)).fork.toManaged_

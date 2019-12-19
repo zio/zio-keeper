@@ -21,14 +21,19 @@ object Transport {
 }
 
 sealed trait Channel {
-  def isOpen: ZIO[Any, TransportError, Boolean]
 
+  //conv
+  val isOpen: ZIO[Any, TransportError, Boolean]
+
+  //conv
   def close: ZIO[Any, TransportError, Unit]
 }
 
 trait ChannelOut extends Channel {
+
   def send(data: Chunk[Byte]): ZIO[Any, TransportError, Unit]
 
+  //conv
   def read: ZIO[Any, TransportError, Chunk[Byte]]
 }
 

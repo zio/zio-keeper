@@ -12,12 +12,12 @@ final case class NodeId(value: UUID) extends AnyVal
 object NodeId {
   implicit val ordering: Ordering[NodeId] = Ordering.by(_.value)
 
-  def generateNew: NodeId =
-    NodeId(UUID.randomUUID())
+  val generateNew: NodeId = NodeId(UUID.randomUUID())
 }
 
 final case class Member(nodeId: NodeId, addr: NodeAddress) {
-  override def toString: String = s"nodeId: ${nodeId.value}, ip: ${addr.ip.mkString(".")}, port: ${addr.port}"
+  //conv
+  override val toString: String = s"nodeId: ${nodeId.value}, ip: ${addr.ip.mkString(".")}, port: ${addr.port}"
 }
 
 object Member {
