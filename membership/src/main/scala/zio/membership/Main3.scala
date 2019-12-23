@@ -7,7 +7,7 @@ import zio.membership.transport.{tcp, Address}
 import zio.membership.hyparview.HyParView
 import upickle.default._
 
-object Main2 extends zio.App {
+object Main3 extends zio.App {
 
   override def run(args: List[String]) = {
     val env =
@@ -21,7 +21,7 @@ object Main2 extends zio.App {
         )
 
         (env >>> HyParView(
-          Address("localhost", 8020),
+          Address("localhost", 8040),
           10,
           10,
           4,

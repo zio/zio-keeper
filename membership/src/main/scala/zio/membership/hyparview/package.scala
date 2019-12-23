@@ -1,84 +1,45 @@
 package zio.membership
 
-import zio.membership.transport.ChunkConnection
 import zio._
 import zio.stm._
 
 package object hyparview {
 
-  private[hyparview] def addConnection[T](
+  private[hyparview] def send[T](
     to: T,
-    con: ChunkConnection
+    msg: ActiveProtocol[T]
   )(
     implicit
-    ev1: Tagged[Protocol[T]],
-    ev2: Tagged[InitialProtocol[T]]
-  ) =
-    for {
-      dropped <- Env.using[T](_.addNodeToActiveView(to, con).commit)
-      _       <- ZIO.foreach(dropped)(disconnect(_))
-      _       <- Protocol.handleProtocol(con)
-    } yield ()
-
-  private[hyparview] def send[T, M <: Protocol[T]: Tagged](
-    to: T,
-    msg: M
-  )(
-    implicit
-    ev: Tagged[Protocol[T]]
+    ev: Tagged[ActiveProtocol[T]]
   ) =
     Tagged
-      .write[M](msg)
+      .write[ActiveProtocol[T]](msg)
       .foldM(
         e => console.putStrLn(s"Failed serializing message. Not sending: $e"),
         chunk =>
           for {
+            _   <- UIO(println(s"sent: $to -> $msg"))
             con <- Env.using[T](_.activeView.get(to).commit)
-            _   <- ZIO.foreach(con)(_.send(chunk).orElse(disconnect(to)))
+            _   <- ZIO.foreach(con)(_(Command.Send(chunk)))
           } yield ()
       )
 
   private[hyparview] def disconnect[T](
     node: T,
     shutDown: Boolean = false
-  )(
-    implicit
-    ev: Tagged[Protocol[T]]
   ) =
-    Env
-      .using[T] { env =>
-        STM.atomically {
-          for {
-            conOpt <- env.activeView.get(node)
-            task <- conOpt match {
-                     case Some(con) =>
-                       for {
-                         _ <- env.activeView.delete(node)
-                         _ <- env.addNodeToPassiveView(node)
-                       } yield {
-                         for {
-                           _ <- Tagged
-                                 .write[Protocol[T]](Protocol.Disconnect(env.myself, shutDown))
-                                 .flatMap(con.send)
-                                 .ignore
-                                 .unit
-                           _ <- con.close
-                         } yield ()
-                       }
-                     case None => STM.succeed(ZIO.unit)
-                   }
-          } yield task
-        }
-      }
-      .flatten
+    Env.using[T](_.activeView.get(node).commit).flatMap {
+      case None          => ZIO.unit
+      case Some(sendMsg) => sendMsg(Command.Disconnect(shutDown))
+    }
 
   private[hyparview] def report[T] =
     Env
       .using[T] { env =>
         STM.atomically {
           for {
-            active  <- env.activeView.keys.map(_.size)
-            passive <- env.passiveView.size
+            active  <- env.activeView.keys
+            passive <- env.passiveView.toList
           } yield console.putStrLn(s"${env.myself}: { active: $active, passive: $passive }")
         }
       }

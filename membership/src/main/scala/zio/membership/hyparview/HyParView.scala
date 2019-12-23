@@ -3,18 +3,21 @@ package zio.membership.hyparview
 import zio._
 import zio.membership.transport.Transport
 import zio.random.Random
-import zio.macros.delegate._
+import zio.macros.delegate.syntax._
 import zio.console.Console
 import zio.membership.Membership
 import zio.membership.ByteCodec
 import zio.duration._
 import zio.clock.Clock
+import zio.stream.ZStream
+import zio.membership.Error
+import zio.stream.Take
 
 object HyParView {
 
   def apply[R <: Transport[T] with Random with Console with Clock, T](
     localAddr: T,
-    activeViewCapactiy: Int,
+    activeViewCapacity: Int,
     passiveViewCapacity: Int,
     arwl: Int,
     prwl: Int,
@@ -22,14 +25,20 @@ object HyParView {
     shuffleNPassive: Int,
     shuffleTTL: Int,
     neighborSchedule: Schedule[R, Int, Any],
-    shuffleSchedule: Schedule[R, Int, Any]
+    shuffleSchedule: Schedule[R, Int, Any],
+    outboundMessagesBuffer: Int,
+    userMessagesBuffer: Int,
+    nWorkers: Int
   )(
     implicit
     ev1: Tagged[InitialProtocol[T]],
-    ev2: Tagged[Protocol[T]]
-  ): ZManaged[R, Nothing, Membership[T]] = {
+    ev2: Tagged[ActiveProtocol[T]],
+    ev3: ByteCodec[JoinReply[T]]
+  ): ZManaged[R, Error, Membership[T]] = {
+    type R1 = Clock with Random with Transport[T] with Env[T] with zio.console.Console
+
     val config = Config(
-      activeViewCapactiy,
+      activeViewCapacity,
       passiveViewCapacity,
       arwl,
       prwl,
@@ -39,35 +48,94 @@ object HyParView {
     )
     for {
       r <- ZManaged.environment[R]
-      env <- ZManaged.environment[Clock with Random with Transport[T] with zio.console.Console] @@ Env.withEnv(
-              localAddr,
-              config
-            )
-      _ <- report[T].repeat(Schedule.spaced(1.second)).provide(env).toManaged_.fork
-      _ <- env.transport
-            .bind(localAddr)
-            .foreach(InitialProtocol.handleInitialProtocol(_).fork)
-            .provide(env)
-            .toManaged_
-            .fork
-      _ <- periodic.doNeighbor.repeat(neighborSchedule.provide(r)).provide(env).toManaged_.fork
+      env <- ZManaged.environment[Clock with Random with Transport[T] with zio.console.Console] @@
+              Env.withEnv(
+                localAddr,
+                config
+              )
+      _            <- report[T].repeat(Schedule.spaced(1.second)).provide(env).toManaged_.fork
+      initialQueue <- Queue.bounded[(T, InitialProtocol[T])](outboundMessagesBuffer).toManaged_
+      sendInitial = (to: T, msg: InitialProtocol[T]) =>
+        initialQueue
+          .offer((to, msg))
+          .catchSomeCause {
+            case cause if cause.interrupted => ZIO.unit
+          }
+          .unit
+      outgoing = InitialProtocol
+        .sendInitialProtocol[
+          R1,
+          R1,
+          Error,
+          Error,
+          T,
+          Chunk[Byte]
+        ](
+          ZStream.fromQueue(initialQueue)
+        ) { case (addr, send, receive) =>
+          ActiveProtocol.receiveActiveProtocol(
+              receive,
+              addr,
+              send,
+              sendInitial
+            ).orElse(ZStream.empty)
+        }.mapError(e => {println(e.getMessage()); e})
+      incoming = env.transport
+        .bind(localAddr)
+        .map(ZStream.managed(_).flatMap { c =>
+          InitialProtocol
+            .receiveInitialProtocol[
+              R1,
+              R1,
+              Error,
+              Error,
+              T,
+              Chunk[Byte]
+            ](
+              c.receive,
+              c.send
+            ) { (addr, receive) =>
+              ActiveProtocol.receiveActiveProtocol(
+                receive,
+                addr,
+                c.send,
+                sendInitial
+              ).orElse(ZStream.empty)
+            }
+        }).mapError(e => {println(e.getMessage()); e})
+      userMessages <- Queue.dropping[Take[Error, Chunk[Byte]]](userMessagesBuffer).toManaged_
+      _ <- outgoing
+        .merge(incoming)
+        .flatMapPar(nWorkers)(identity)
+        .into(userMessages)
+        .provide(env)
+        .toManaged_
+        .fork
+      _ <- periodic.doNeighbor(sendInitial).repeat(neighborSchedule.provide(r)).provide(env).toManaged_.fork
       _ <- periodic.doShuffle.repeat(shuffleSchedule.provide(r)).provide(env).toManaged_.fork
     } yield new Membership[T] {
       val membership = new Membership.Service[Any, T] {
-        override val identity = ZIO.succeed(localAddr)
-        override val nodes    = env.env.activeView.keys.commit
 
-        override def connect(to: T) =
+        override val identity = ZIO.succeed(localAddr)
+
+        override val nodes = env.env.activeView.keys.commit
+
+        override def join(node: T) =
+          initialQueue.offer((node, InitialProtocol.Join(env.env.myself))).unit
+
+        override def send[A: ByteCodec](to: T, payload: A) =
           for {
-            con <- env.transport.connect(to)
-            msg <- Tagged.write[InitialProtocol[T]](InitialProtocol.Join(localAddr))
-            _   <- con.send(msg)
-            _   <- addConnection(to, con).fork.provide(env)
+            chunk <- ByteCodec[A].toChunk(payload)
+            _     <- zio.membership.hyparview.send(to, ActiveProtocol.UserMessage(chunk)).provide(env)
           } yield ()
 
-        override def send[A: ByteCodec](to: T, payload: A) = ???
-        override def broadcast[A: ByteCodec](payload: A)   = ???
-        override def receive[A: ByteCodec]                 = ???
+        override def broadcast[A: ByteCodec](payload: A) =
+          env.env.activeView.keys.commit.flatMap { peers =>
+            ZIO.foreach(peers)(send(_, payload))
+          }.unit
+
+        override def receive[A: ByteCodec] =
+          ZStream.fromQueue(userMessages).unTake.mapM(ByteCodec[A].fromChunk(_))
       }
     }
   }

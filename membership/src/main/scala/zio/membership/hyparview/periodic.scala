@@ -6,35 +6,29 @@ import zio.stm._
 import zio.console.Console
 
 /**
- * Collection of periodic tasks that are part of hyparview protocol.
+ * periodic tasks that are part of hyparview protocol.
  */
 private[hyparview] object periodic {
 
   def doNeighbor[T](
-    implicit
-    ev1: Tagged[Protocol[T]],
-    ev2: Tagged[InitialProtocol[T]]
-  ): ZIO[Console with Env[T] with Transport[T], Nothing, Int] =
+    sendInitial: (T, InitialProtocol[T]) => UIO[Unit]
+  ): ZIO[Env[T], Nothing, Int] =
     Env.using[T] { env =>
-      for {
-        promoted <- env.promoteRandom.commit
-        _ <- ZIO.foreach(promoted) { node =>
-              (for {
-                con   <- ZIO.accessM[Transport[T]](_.transport.connect(node))
-                reply <- con.receive.take(1).mapM(Tagged.read[NeighborProtocol]).runHead.map(_.get)
-                _ <- reply match {
-                      case NeighborProtocol.Accept => addConnection(node, con).fork
-                      case NeighborProtocol.Reject => con.close *> doNeighbor
-                    }
-              } yield ()).orElse(env.passiveView.delete(node).commit *> doNeighbor)
-            }
-        active <- env.activeView.keys.map(_.size).commit
-      } yield active
+      STM
+        .atomically {
+          for {
+            promoted <- env.promoteRandom
+            active   <- env.activeView.keys.map(_.size)
+          } yield (promoted, active)
+        }
+        .flatMap {
+          case (Some(node), active) => sendInitial(node, InitialProtocol.Neighbor(env.myself, active <= 0)).as(active)
+          case (_, active)          => ZIO.succeed(active)
+        }
     }
 
   def doShuffle[T](
-    implicit
-    ev: Tagged[Protocol[T]]
+    implicit ev: Tagged[ActiveProtocol[T]]
   ): ZIO[Console with Env[T] with Transport[T], Nothing, Int] =
     Env.using[T] { env =>
       (for {
@@ -46,9 +40,9 @@ private[hyparview] object periodic {
                    for {
                      active  <- env.selectN(nodes.filter(_ != node), env.cfg.shuffleNActive)
                      passive <- env.passiveView.toList.flatMap(env.selectN(_, env.cfg.shuffleNPassive))
-                   } yield send[T, Protocol[T]](
+                   } yield send(
                      node,
-                     Protocol.Shuffle(env.myself, env.myself, active, passive, TimeToLive(env.cfg.shuffleTTL))
+                     ActiveProtocol.Shuffle(env.myself, env.myself, active, passive, TimeToLive(env.cfg.shuffleTTL))
                    )
                }
       } yield task.as(nodes.size)).commit.flatten

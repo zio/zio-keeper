@@ -2,7 +2,6 @@ package zio.membership.hyparview
 
 import zio._
 import zio.stm._
-import zio.membership.transport.ChunkConnection
 import zio.macros.delegate._
 import com.github.ghik.silencer.silent
 import zio.random.Random
@@ -19,8 +18,15 @@ private[hyparview] object Env {
       ZIO.environment[Env[T]].flatMap(r => f(r.env))
   }
 
+  final class UsingManaged[T] {
+
+    def apply[R <: Env[T], E, A](f: Env.Service[T] => ZManaged[R, E, A]): ZManaged[R, E, A] =
+      ZManaged.environment[Env[T]].flatMap(r => f(r.env))
+  }
+
   def get[T]: ZIO[Env[T], Nothing, Env.Service[T]] = ZIO.environment[Env[T]].map(_.env)
   def using[T]: Using[T]                           = new Using[T]
+  def usingManaged[T]: UsingManaged[T]             = new UsingManaged[T]
 
   def withEnv[T](localAddr: T, config: Config) = enrichWithM[Env[T]] {
     @silent("deprecated")
@@ -31,7 +37,7 @@ private[hyparview] object Env {
         ref     <- TRef.make(Stream.continually((i: Int) => sRandom.nextInt(i))).commit
       } yield (i: Int) => ref.modify(s => (s.head(i), s.tail))
     for {
-      activeView0  <- TMap.empty[T, ChunkConnection].commit
+      activeView0  <- TMap.empty[T, Command => UIO[Unit]].commit
       passiveView0 <- TSet.empty[T].commit
       pickRandom0  <- makePickRandom
     } yield new Env[T] {
@@ -47,7 +53,7 @@ private[hyparview] object Env {
 
   trait Service[T] {
     val myself: T
-    val activeView: TMap[T, ChunkConnection]
+    val activeView: TMap[T, Command => UIO[Unit]]
     val passiveView: TSet[T]
     val pickRandom: Int => STM[Nothing, Int]
     val cfg: Config
@@ -65,7 +71,7 @@ private[hyparview] object Env {
         _       <- STM.foreach(dropped)(addNodeToPassiveView(_))
       } yield dropped
 
-    def addNodeToActiveView(node: T, connection: ChunkConnection): STM[Nothing, Option[T]] =
+    def addNodeToActiveView(node: T, f: Command => UIO[Unit]): STM[Nothing, Option[T]] =
       if (node == myself) STM.succeed(None)
       else {
         for {
@@ -77,7 +83,7 @@ private[hyparview] object Env {
                         _    <- passiveView.delete(node)
                         dropped <- if (size >= cfg.activeViewCapactiy) dropOneActiveToPassive
                                   else STM.succeed(None)
-                        _ <- activeView.put(node, connection)
+                        _ <- activeView.put(node, f)
                       } yield dropped
                     }
         } yield dropped
@@ -128,17 +134,17 @@ private[hyparview] object Env {
     def selectN[A](values: List[A], n: Int): STM[Nothing, List[A]] =
       if (values.isEmpty) STM.succeed(Nil)
       else {
-        def go(remaining: List[A], toPick: Int, acc: List[A]): STM[Nothing, List[A]] =
+        def go(remaining: Vector[A], toPick: Int, acc: Vector[A]): STM[Nothing, Vector[A]] =
           (remaining, toPick) match {
-            case (Nil, _) | (_, 0) => STM.succeed(acc)
+            case (Vector(), _) | (_, 0) => STM.succeed(acc)
             case _ =>
               pickRandom(remaining.size).flatMap { index =>
-                val x  = values(index)
-                val xs = values.drop(index)
-                go(xs, toPick - 1, x :: acc)
+                val x  = remaining(index)
+                val xs = remaining.patch(index, Nil, 1)
+                go(xs, toPick - 1, x +: acc)
               }
           }
-        go(values, n, Nil)
+        go(values.toVector, n, Vector()).map(_.toList)
       }
 
     def addAllToPassiveView(remaining: List[T]): STM[Nothing, Unit] =

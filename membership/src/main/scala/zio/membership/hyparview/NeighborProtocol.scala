@@ -2,6 +2,9 @@ package zio.membership.hyparview
 
 import zio.membership.ByteCodec
 import upickle.default._
+import zio._
+import zio.membership.Error
+import zio.stream.ZStream
 
 sealed private[hyparview] trait NeighborProtocol
 
@@ -29,5 +32,25 @@ private[hyparview] object NeighborProtocol {
     implicit val codec: ByteCodec[Accept.type] =
       ByteCodec.fromReadWriter(macroRW[Accept.type])
   }
+
+  def receiveNeighborProtocol[R, R1 <: R, E >: Error, E1 >: E, A](
+    stream: ZStream[R, E, Chunk[Byte]]
+  )(
+    contStream: ZStream[R, E, Chunk[Byte]] => ZStream[R1, E1, A]
+  ): ZStream[R1, E1, A] =
+    ZStream.unwrapManaged {
+      stream.process.mapM { pull =>
+        val continue =
+          pull.foldM[R, E, Boolean](
+            _.fold[ZIO[R, E, Boolean]](ZIO.succeed(false))(ZIO.fail(_)), { msg =>
+              Tagged.read[NeighborProtocol](msg).map {
+                case Accept => true
+                case Reject => false
+              }
+            }
+          )
+        continue.map(if (_) contStream(ZStream.fromPull(pull)) else ZStream.empty)
+      }
+    }
 
 }

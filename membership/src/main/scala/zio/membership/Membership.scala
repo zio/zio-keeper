@@ -32,12 +32,15 @@ object Membership {
      */
     val nodes: ZIO[R, Nothing, List[T]]
 
-    def connect(to: T): ZIO[R, Error, Unit]
-
     /**
      * Send a message to a node.
      */
     def send[A: ByteCodec](to: T, payload: A): ZIO[R, Error, Unit]
+
+    /**
+     * Connect to a remote node, joining the relevant cluster.
+     */
+    def join(node: T): ZIO[R, Error, Unit]
 
     /**
      * Send a message to all nodes.
