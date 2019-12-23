@@ -21,21 +21,21 @@ object Main1 extends zio.App {
           { case (host: String, port: Int) => Address(host, port) }
         )
 
-        (env >>> HyParView(
-          Address("localhost", 8000),
-          10,
-          10,
-          4,
-          2,
-          3,
-          3,
-          3,
-          Schedule.spaced(2.seconds),
-          Schedule.spaced(2.seconds),
-          256,
-          256,
-          16
-        )).useForever.catchAll(e => console.putStr(e.toString()).as(1))
+    (env >>> HyParView(
+      Address("localhost", 8000),
+      10,
+      10,
+      4,
+      2,
+      3,
+      3,
+      3,
+      Schedule.spaced(2.seconds),
+      Schedule.spaced(2.seconds),
+      256,
+      256,
+      16
+    )).useForever.catchAll(e => console.putStr(e.toString()).as(1))
   }
 
 }

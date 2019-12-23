@@ -17,4 +17,6 @@ final case class BindFailed(addr: Address, exc: Throwable)
 
 final case class SerializationError(msg: String, cause: Throwable = null)   extends Error(msg, cause)
 final case class DeserializationError(msg: String, cause: Throwable = null) extends Error(msg, cause)
-final case class ResolutionFailed(address: Address, cause: Throwable) extends Error(s"Resolution failed for $address", cause)
+
+final case class ResolutionFailed(address: Address, cause: Throwable)
+    extends Error(s"Resolution failed for $address", cause)

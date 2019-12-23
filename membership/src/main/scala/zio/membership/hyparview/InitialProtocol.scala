@@ -96,31 +96,40 @@ private[hyparview] object InitialProtocol {
       .tap(c => UIO(println(s"sendInitial: ${c._1} -> ${c._2}")))
       .map {
         case (to, m: ForwardJoinReply[T]) =>
-          ZStream.unwrapManaged {
-            openConnection(to, m).map { con =>
-              contStream(to, con.send, con.receive)
+          ZStream
+            .unwrapManaged {
+              openConnection(to, m).map { con =>
+                contStream(to, con.send, con.receive)
+              }
             }
-          }.orElse(ZStream.empty)
+            .orElse(ZStream.empty)
         case (to, m: Join[T]) =>
-          ZStream.unwrapManaged {
-            openConnection(to, m).map { con =>
-              JoinReply.receive[R, R1, E, E1, T, A](con.receive) { case (sender, receive) =>
-                contStream(sender, con.send, receive)
+          ZStream
+            .unwrapManaged {
+              openConnection(to, m).map { con =>
+                JoinReply.receive[R, R1, E, E1, T, A](con.receive) {
+                  case (sender, receive) =>
+                    contStream(sender, con.send, receive)
+                }
               }
             }
-          }.orElse(ZStream.empty)
+            .orElse(ZStream.empty)
         case (to, m: Neighbor[T]) =>
-          ZStream.unwrapManaged {
-            openConnection(to, m).map { con =>
-              NeighborProtocol.receiveNeighborProtocol[R, R1, E, E1, A](con.receive) { cont =>
-                contStream(to, con.send, cont)
+          ZStream
+            .unwrapManaged {
+              openConnection(to, m).map { con =>
+                NeighborProtocol.receiveNeighborProtocol[R, R1, E, E1, A](con.receive) { cont =>
+                  contStream(to, con.send, cont)
+                }
               }
             }
-          }.orElse(ZStream.fromEffect(Env.using[T](_.passiveView.delete(to).commit)) *> ZStream.empty)
+            .orElse(ZStream.fromEffect(Env.using[T](_.passiveView.delete(to).commit)) *> ZStream.empty)
         case (sender, m: ShuffleReply[T]) =>
-          ZStream.unwrapManaged {
-            openConnection(sender, m).as(ZStream.empty)
-          }.orElse(ZStream.empty)
+          ZStream
+            .unwrapManaged {
+              openConnection(sender, m).as(ZStream.empty)
+            }
+            .orElse(ZStream.empty)
       }
   }
 

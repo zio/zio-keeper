@@ -8,7 +8,7 @@ import zio._
 import zio.membership.Error
 import zio.stream.ZStream
 
-final case class JoinReply[T] (
+final case class JoinReply[T](
   remote: T
 )
 

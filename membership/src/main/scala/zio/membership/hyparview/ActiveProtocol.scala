@@ -151,10 +151,13 @@ private[hyparview] object ActiveProtocol {
                       .flatMap {
                         case (0, _) | (_, None) =>
                           for {
-                            passive    <- env.passiveView.toList
-                            sentNodes  =  msg.activeNodes ++ msg.passiveNodes
-                            replyNodes <- env.selectN(passive.filterNot(_ == msg.originalSender), env.cfg.shuffleNActive + env.cfg.shuffleNPassive)
-                            _          <- env.addAllToPassiveView(sentNodes)
+                            passive   <- env.passiveView.toList
+                            sentNodes = msg.activeNodes ++ msg.passiveNodes
+                            replyNodes <- env.selectN(
+                                           passive.filterNot(_ == msg.originalSender),
+                                           env.cfg.shuffleNActive + env.cfg.shuffleNPassive
+                                         )
+                            _ <- env.addAllToPassiveView(sentNodes)
                           } yield sendInitial(msg.originalSender, InitialProtocol.ShuffleReply(replyNodes, sentNodes))
                         case (_, Some(ttl)) =>
                           for {

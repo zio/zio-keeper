@@ -72,14 +72,18 @@ object HyParView {
           Chunk[Byte]
         ](
           ZStream.fromQueue(initialQueue)
-        ) { case (addr, send, receive) =>
-          ActiveProtocol.receiveActiveProtocol(
-              receive,
-              addr,
-              send,
-              sendInitial
-            ).orElse(ZStream.empty)
-        }.mapError(e => {println(e.getMessage()); e})
+        ) {
+          case (addr, send, receive) =>
+            ActiveProtocol
+              .receiveActiveProtocol(
+                receive,
+                addr,
+                send,
+                sendInitial
+              )
+              .orElse(ZStream.empty)
+        }
+        .mapError(e => { println(e.getMessage()); e })
       incoming = env.transport
         .bind(localAddr)
         .map(ZStream.managed(_).flatMap { c =>
@@ -95,22 +99,25 @@ object HyParView {
               c.receive,
               c.send
             ) { (addr, receive) =>
-              ActiveProtocol.receiveActiveProtocol(
-                receive,
-                addr,
-                c.send,
-                sendInitial
-              ).orElse(ZStream.empty)
+              ActiveProtocol
+                .receiveActiveProtocol(
+                  receive,
+                  addr,
+                  c.send,
+                  sendInitial
+                )
+                .orElse(ZStream.empty)
             }
-        }).mapError(e => {println(e.getMessage()); e})
+        })
+        .mapError(e => { println(e.getMessage()); e })
       userMessages <- Queue.dropping[Take[Error, Chunk[Byte]]](userMessagesBuffer).toManaged_
       _ <- outgoing
-        .merge(incoming)
-        .flatMapPar(nWorkers)(identity)
-        .into(userMessages)
-        .provide(env)
-        .toManaged_
-        .fork
+            .merge(incoming)
+            .flatMapPar(nWorkers)(identity)
+            .into(userMessages)
+            .provide(env)
+            .toManaged_
+            .fork
       _ <- periodic.doNeighbor(sendInitial).repeat(neighborSchedule.provide(r)).provide(env).toManaged_.fork
       _ <- periodic.doShuffle.repeat(shuffleSchedule.provide(r)).provide(env).toManaged_.fork
     } yield new Membership[T] {
@@ -129,10 +136,7 @@ object HyParView {
             _     <- zio.membership.hyparview.send(to, ActiveProtocol.UserMessage(chunk)).provide(env)
           } yield ()
 
-        override def broadcast[A: ByteCodec](payload: A) =
-          env.env.activeView.keys.commit.flatMap { peers =>
-            ZIO.foreach(peers)(send(_, payload))
-          }.unit
+        override def broadcast[A: ByteCodec](payload: A) = ???
 
         override def receive[A: ByteCodec] =
           ZStream.fromQueue(userMessages).unTake.mapM(ByteCodec[A].fromChunk(_))
