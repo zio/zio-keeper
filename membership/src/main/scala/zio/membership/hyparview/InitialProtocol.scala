@@ -8,6 +8,7 @@ import zio.membership.transport._
 import zio.membership.Error
 import zio.stream.ZStream
 import zio.logging.Logging
+import zio.membership.log
 
 sealed private[hyparview] trait InitialProtocol[T]
 
@@ -76,7 +77,7 @@ private[hyparview] object InitialProtocol {
       ByteCodec.fromReadWriter(macroRW[ShuffleReply[T]])
   }
 
-  def sendInitialProtocol[R <: Env[T] with Transport[T], R1 <: R, E >: Error, E1 >: E, T, A](
+  def sendInitialProtocol[R <: Env[T] with Transport[T] with Logging[String], R1 <: R, E >: Error, E1 >: E, T, A](
     stream: ZStream[R, E, (T, InitialProtocol[T])]
   )(
     contStream: (T, Chunk[Byte] => IO[E, Unit], ZStream[R, E, Chunk[Byte]]) => ZStream[R1, E1, A]
@@ -93,6 +94,7 @@ private[hyparview] object InitialProtocol {
       } yield con
 
     stream
+      .tap { case (to, msg) => log.debug(s"sendInitialProtocol: $to -> $msg") }
       .map {
         case (to, m: ForwardJoinReply[T]) =>
           ZStream
@@ -140,77 +142,79 @@ private[hyparview] object InitialProtocol {
   )(
     implicit
     ev1: Tagged[InitialProtocol[T]],
-    ev2: Tagged[ActiveProtocol[T]],
-    ev3: ByteCodec[JoinReply[T]]
+    ev2: ByteCodec[JoinReply[T]]
   ): ZStream[R1, E1, A] =
     ZStream.unwrapManaged {
       stream.process.mapM { pull =>
         val continue =
           pull.foldM[R, E, Option[T]](
             _.fold[ZIO[R, E, Option[T]]](ZIO.succeed(None))(ZIO.fail(_)), { raw =>
-              Tagged.read[InitialProtocol[T]](raw).flatMap {
-                case msg: InitialProtocol.Neighbor[T] =>
-                  Env.using[T] {
-                    env =>
-                      val accept = for {
-                        reply <- Tagged.write[NeighborProtocol](NeighborProtocol.Accept)
+              Tagged
+                .read[InitialProtocol[T]](raw)
+                .tap(msg => log.debug(s"receiveInitialProtocl: $msg"))
+                .flatMap {
+                  case msg: InitialProtocol.Neighbor[T] =>
+                    Env.using[T] {
+                      env =>
+                        val accept = for {
+                          reply <- Tagged.write[NeighborProtocol](NeighborProtocol.Accept)
+                          _     <- sendReply(reply)
+                        } yield Some(msg.sender)
+
+                        val reject = for {
+                          reply <- Tagged.write[NeighborProtocol](NeighborProtocol.Reject)
+                          _     <- sendReply(reply)
+                        } yield None
+
+                        if (msg.isHighPriority) {
+                          accept
+                        } else {
+                          STM.atomically {
+                            for {
+                              full <- env.isActiveViewFull
+                              task <- if (full) {
+                                       env
+                                         .addNodeToPassiveView(msg.sender)
+                                         .as(
+                                           reject
+                                         )
+                                     } else {
+                                       STM.succeed(accept)
+                                     }
+                            } yield task
+                          }.flatten
+                        }
+                    }
+                  case msg: InitialProtocol.Join[T] =>
+                    Env.using[T] { env =>
+                      for {
+                        others <- env.activeView.keys.map(_.filterNot(_ == msg.sender)).commit
+                        _ <- ZIO
+                              .foreachPar_(others)(
+                                node =>
+                                  send(
+                                    node,
+                                    ActiveProtocol.ForwardJoin(env.myself, msg.sender, TimeToLive(env.cfg.arwl))
+                                  ).ignore
+                              )
+                        reply <- ByteCodec[JoinReply[T]].toChunk(JoinReply(env.myself))
                         _     <- sendReply(reply)
                       } yield Some(msg.sender)
-
-                      val reject = for {
-                        reply <- Tagged.write[NeighborProtocol](NeighborProtocol.Reject)
-                        _     <- sendReply(reply)
-                      } yield None
-
-                      if (msg.isHighPriority) {
-                        accept
-                      } else {
-                        STM.atomically {
-                          for {
-                            full <- env.isActiveViewFull
-                            task <- if (full) {
-                                     env
-                                       .addNodeToPassiveView(msg.sender)
-                                       .as(
-                                         reject
-                                       )
-                                   } else {
-                                     STM.succeed(accept)
-                                   }
-                          } yield task
-                        }.flatten
-                      }
-                  }
-                case msg: InitialProtocol.Join[T] =>
-                  Env.using[T] { env =>
-                    for {
-                      others <- env.activeView.keys.map(_.filterNot(_ == msg.sender)).commit
-                      _ <- ZIO
-                            .foreachPar_(others)(
-                              node =>
-                                send(
-                                  node,
-                                  ActiveProtocol.ForwardJoin(env.myself, msg.sender, TimeToLive(env.cfg.arwl))
-                                ).ignore
-                            )
-                      reply <- ByteCodec[JoinReply[T]].toChunk(JoinReply(env.myself))
-                      _     <- sendReply(reply)
-                    } yield Some(msg.sender)
-                  }
-                case msg: InitialProtocol.ForwardJoinReply[T] => ZIO.succeed(Some(msg.sender)) // nothing to do here
-                case msg: InitialProtocol.ShuffleReply[T] =>
-                  Env.using[T] { env =>
-                    val sentOriginally = msg.sentOriginally.toSet
-                    STM.atomically {
-                      for {
-                        _         <- env.passiveView.removeIf(sentOriginally.contains)
-                        _         <- env.addAllToPassiveView(msg.passiveNodes)
-                        remaining <- env.passiveView.size.map(env.cfg.passiveViewCapacity - _)
-                        _         <- env.addAllToPassiveView(sentOriginally.take(remaining).toList)
-                      } yield None
                     }
-                  }
-              }
+                  case msg: InitialProtocol.ForwardJoinReply[T] => ZIO.succeed(Some(msg.sender)) // nothing to do here
+                  case msg: InitialProtocol.ShuffleReply[T] =>
+                    Env.using[T] { env =>
+                      val sentOriginally = msg.sentOriginally.toSet
+                      STM.atomically {
+                        for {
+                          _         <- env.passiveView.removeIf(sentOriginally.contains)
+                          _         <- env.addAllToPassiveView(msg.passiveNodes)
+                          remaining <- env.passiveView.size.map(env.cfg.passiveViewCapacity - _)
+                          _         <- env.addAllToPassiveView(sentOriginally.take(remaining).toList)
+                        } yield None
+                      }
+                    }
+                }
             }
           )
         continue.map(_.fold[ZStream[R1, E1, A]](ZStream.empty)(contStream(_, ZStream.fromPull(pull))))

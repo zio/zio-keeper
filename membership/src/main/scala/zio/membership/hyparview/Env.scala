@@ -28,33 +28,34 @@ private[hyparview] object Env {
   def using[T]: Using[T]                           = new Using[T]
   def usingManaged[T]: UsingManaged[T]             = new UsingManaged[T]
 
-  def withEnv[T](localAddr: T, sendInitial0: (T, InitialProtocol[T]) => UIO[Unit], config: Config) = enrichWithM[Env[T]] {
-    @silent("deprecated")
-    val makePickRandom: ZIO[Random, Nothing, Int => STM[Nothing, Int]] =
+  def withEnv[T](localAddr: T, sendInitial0: (T, InitialProtocol[T]) => UIO[Unit], config: Config) =
+    enrichWithM[Env[T]] {
+      @silent("deprecated")
+      val makePickRandom: ZIO[Random, Nothing, Int => STM[Nothing, Int]] =
+        for {
+          seed    <- random.nextInt
+          sRandom = new scala.util.Random(seed)
+          ref     <- TRef.make(Stream.continually((i: Int) => sRandom.nextInt(i))).commit
+        } yield (i: Int) => ref.modify(s => (s.head(i), s.tail))
       for {
-        seed    <- random.nextInt
-        sRandom = new scala.util.Random(seed)
-        ref     <- TRef.make(Stream.continually((i: Int) => sRandom.nextInt(i))).commit
-      } yield (i: Int) => ref.modify(s => (s.head(i), s.tail))
-    for {
-      activeView0  <- TMap.empty[T, Command => UIO[Unit]].commit
-      passiveView0 <- TSet.empty[T].commit
-      pickRandom0  <- makePickRandom
-    } yield new Env[T] {
-      val env = new Env.Service[T] {
-        override val myself      = localAddr
-        override val activeView  = activeView0
-        override val passiveView = passiveView0
-        override val sendInitial = sendInitial0
-        override val pickRandom  = pickRandom0
-        override val cfg         = config
+        activeView0  <- TMap.empty[T, ActiveProtocol[T] => UIO[Unit]].commit
+        passiveView0 <- TSet.empty[T].commit
+        pickRandom0  <- makePickRandom
+      } yield new Env[T] {
+        val env = new Env.Service[T] {
+          override val myself      = localAddr
+          override val activeView  = activeView0
+          override val passiveView = passiveView0
+          override val sendInitial = sendInitial0
+          override val pickRandom  = pickRandom0
+          override val cfg         = config
+        }
       }
     }
-  }
 
-  trait Service[T] {
+  private[hyparview] trait Service[T] {
     val myself: T
-    val activeView: TMap[T, Command => UIO[Unit]]
+    val activeView: TMap[T, ActiveProtocol[T] => UIO[Unit]]
     val passiveView: TSet[T]
     val sendInitial: (T, InitialProtocol[T]) => UIO[Unit]
     val pickRandom: Int => STM[Nothing, Int]
@@ -73,7 +74,7 @@ private[hyparview] object Env {
         _       <- STM.foreach(dropped)(addNodeToPassiveView(_))
       } yield dropped
 
-    def addNodeToActiveView(node: T, f: Command => UIO[Unit]): STM[Nothing, Option[T]] =
+    def addNodeToActiveView(node: T, f: ActiveProtocol[T] => UIO[Unit]): STM[Nothing, Option[T]] =
       if (node == myself) STM.succeed(None)
       else {
         for {

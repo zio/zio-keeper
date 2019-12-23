@@ -47,7 +47,7 @@ object HyParView {
       shuffleTTL
     )
     for {
-      r <- ZManaged.environment[R]
+      r            <- ZManaged.environment[R]
       initialQueue <- Queue.bounded[(T, InitialProtocol[T])](outboundMessagesBuffer).toManaged_
       sendInitial = (to: T, msg: InitialProtocol[T]) =>
         initialQueue
@@ -57,11 +57,11 @@ object HyParView {
           }
           .unit
       env <- ZManaged.environment[Clock with Random with Transport[T] with Logging[String]] @@
-        Env.withEnv(
-          localAddr,
-          sendInitial,
-          config
-        )
+              Env.withEnv(
+                localAddr,
+                sendInitial,
+                config
+              )
       outgoing = InitialProtocol
         .sendInitialProtocol[
           R1,
@@ -116,8 +116,8 @@ object HyParView {
             .provide(env)
             .toManaged_
             .fork
-      _ <- periodic.doNeighbor(sendInitial).repeat(neighborSchedule.provide(r)).provide(env).toManaged_.fork
-      _ <- periodic.doShuffle.repeat(shuffleSchedule.provide(r)).provide(env).toManaged_.fork
+      _ <- periodic.doNeighbor[T].repeat(neighborSchedule.provide(r)).provide(env).toManaged_.fork
+      _ <- periodic.doShuffle[T].repeat(shuffleSchedule.provide(r)).provide(env).toManaged_.fork
       _ <- periodic.doReport[T].repeat(Schedule.spaced(1.second)).provide(env).toManaged_.fork
     } yield new Membership[T] {
       val membership = new Membership.Service[Any, T] {

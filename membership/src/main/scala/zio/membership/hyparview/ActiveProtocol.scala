@@ -9,6 +9,8 @@ import zio.stm._
 import zio.membership.Error
 import zio.stream.ZStream
 import zio.logging.Logging
+import zio.membership.log
+import compat._
 
 sealed private[hyparview] trait ActiveProtocol[+T]
 
@@ -95,9 +97,9 @@ private[hyparview] object ActiveProtocol {
     ZStream
       .managed(
         for {
-          commands <- Queue.dropping[Command](256).toManaged(_.shutdown)
-          offer = (c: Command) =>
-            commands.offer(c).unit.catchSomeCause {
+          outgoing <- Queue.dropping[ActiveProtocol[T]](256).toManaged(_.shutdown)
+          offer = (c: ActiveProtocol[T]) =>
+            outgoing.offer(c).unit.catchSomeCause {
               case cause if cause.interrupted => ZIO.unit
             }
           keepInPassive <- Ref.make(false).toManaged_
@@ -114,69 +116,71 @@ private[hyparview] object ActiveProtocol {
                         }
                       }
           _ <- ZIO.foreach(dropped)(disconnect(_)).toManaged_
-        } yield (ZStream.fromQueueWithShutdown(commands), keepInPassive)
+        } yield (ZStream.fromQueueWithShutdown(outgoing), keepInPassive)
       )
       .flatMap {
-        case (commands, keepInPassive) =>
-          stream.mergeEither(commands).mapM {
-            case Left(raw) =>
-              Tagged.read[ActiveProtocol[T]](raw).tap(c => UIO(println(c))).flatMap {
-                case msg: ActiveProtocol.Disconnect[T] =>
-                  keepInPassive.set(msg.alive).as((false, None))
-                case msg: ActiveProtocol.ForwardJoin[T] =>
-                  Env.using[T] { env =>
-                    val accept =
-                      sendInitial(msg.originalSender, InitialProtocol.ForwardJoinReply(env.myself))
+        case (outgoing, keepInPassive) =>
+          stream
+            .drainFork(
+              outgoing.mapM { msg =>
+                for {
+                  chunk <- Tagged.write[ActiveProtocol[T]](msg)
+                  _     <- reply(chunk)
+                  _     <- log.debug(s"sendActiveProtocol: $to -> $msg")
+                } yield ()
+              }
+            )
+            .mapM(Tagged.read[ActiveProtocol[T]])
+            .tap(msg => log.debug(s"receiveActiveProtocol: $to -> $msg"))
+            .mapM {
+              case msg: ActiveProtocol.Disconnect[T] =>
+                keepInPassive.set(msg.alive).as((false, None))
+              case msg: ActiveProtocol.ForwardJoin[T] =>
+                Env.using[T] { env =>
+                  val accept =
+                    sendInitial(msg.originalSender, InitialProtocol.ForwardJoinReply(env.myself))
 
-                    val process = env.activeView.keys.map(ks => (ks.size, msg.ttl.step)).flatMap {
-                      case (i, _) if i <= 1 =>
-                        STM.succeed(accept)
-                      case (_, None) =>
-                        STM.succeed(accept)
+                  val process = env.activeView.keys.map(ks => (ks.size, msg.ttl.step)).flatMap {
+                    case (i, _) if i <= 1 =>
+                      STM.succeed(accept)
+                    case (_, None) =>
+                      STM.succeed(accept)
+                    case (_, Some(ttl)) =>
+                      for {
+                        list <- env.activeView.keys.map(_.filterNot(n => n == msg.sender || n == msg.originalSender))
+                        next <- env.selectOne(list)
+                        _    <- if (ttl.count == env.cfg.prwl) env.addNodeToPassiveView(msg.originalSender) else STM.unit
+                      } yield ZIO.foreach(next)(send(_, msg.copy(sender = env.myself, ttl = ttl)))
+                  }
+                  process.commit.flatten.as((true, None))
+                }
+              case msg: ActiveProtocol.Shuffle[T] =>
+                Env.using[T] { env =>
+                  env.activeView.keys
+                    .map(ks => (ks.size, msg.ttl.step))
+                    .flatMap {
+                      case (0, _) | (_, None) =>
+                        for {
+                          passive   <- env.passiveView.toList
+                          sentNodes = msg.activeNodes ++ msg.passiveNodes
+                          replyNodes <- env.selectN(
+                                         passive.filterNot(_ == msg.originalSender),
+                                         env.cfg.shuffleNActive + env.cfg.shuffleNPassive
+                                       )
+                          _ <- env.addAllToPassiveView(sentNodes)
+                        } yield sendInitial(msg.originalSender, InitialProtocol.ShuffleReply(replyNodes, sentNodes))
                       case (_, Some(ttl)) =>
                         for {
-                          list <- env.activeView.keys.map(_.filterNot(n => n == msg.sender || n == msg.originalSender))
-                          next <- env.selectOne(list)
-                          _    <- if (ttl.count == env.cfg.prwl) env.addNodeToPassiveView(msg.originalSender) else STM.unit
+                          active <- env.activeView.keys
+                          next   <- env.selectOne(active.filterNot(n => n == msg.sender || n == msg.originalSender))
                         } yield ZIO.foreach(next)(send(_, msg.copy(sender = env.myself, ttl = ttl)))
                     }
-                    process.commit.flatten.as((true, None))
-                  }
-                case msg: ActiveProtocol.Shuffle[T] =>
-                  Env.using[T] { env =>
-                    env.activeView.keys
-                      .map(ks => (ks.size, msg.ttl.step))
-                      .flatMap {
-                        case (0, _) | (_, None) =>
-                          for {
-                            passive   <- env.passiveView.toList
-                            sentNodes = msg.activeNodes ++ msg.passiveNodes
-                            replyNodes <- env.selectN(
-                                           passive.filterNot(_ == msg.originalSender),
-                                           env.cfg.shuffleNActive + env.cfg.shuffleNPassive
-                                         )
-                            _ <- env.addAllToPassiveView(sentNodes)
-                          } yield sendInitial(msg.originalSender, InitialProtocol.ShuffleReply(replyNodes, sentNodes))
-                        case (_, Some(ttl)) =>
-                          for {
-                            active <- env.activeView.keys
-                            next   <- env.selectOne(active.filterNot(n => n == msg.sender || n == msg.originalSender))
-                          } yield ZIO.foreach(next)(send(_, msg.copy(sender = env.myself, ttl = ttl)))
-                      }
-                      .commit
-                      .flatten
-                      .as((true, None))
-                  }
-                case m: ActiveProtocol.UserMessage => ZIO.succeed((true, Some(m.msg)))
-              }
-            case Right(Command.Disconnect(shutDown)) =>
-              for {
-                myself <- Env.using[T](e => ZIO.succeed(e.myself))
-                msg    <- Tagged.write[ActiveProtocol[T]](Disconnect(myself, shutDown))
-                _      <- reply(msg)
-              } yield (true, None)
-            case Right(Command.Send(msg)) => reply(msg).as((true, None))
-          }
+                    .commit
+                    .flatten
+                    .as((true, None))
+                }
+              case m: ActiveProtocol.UserMessage => ZIO.succeed((true, Some(m.msg)))
+            }
       }
       .takeWhile(_._1)
       .collect {

@@ -10,9 +10,7 @@ import zio.logging.Logging
  */
 private[hyparview] object periodic {
 
-  def doNeighbor[T](
-    sendInitial: (T, InitialProtocol[T]) => UIO[Unit]
-  ): ZIO[Env[T], Nothing, Int] =
+  def doNeighbor[T]: ZIO[Env[T], Nothing, Int] =
     Env.using[T] { env =>
       STM
         .atomically {
@@ -27,9 +25,7 @@ private[hyparview] object periodic {
         }
     }
 
-  def doShuffle[T](
-    implicit ev: Tagged[ActiveProtocol[T]]
-  ): ZIO[Env[T] with Logging[String], Nothing, Int] =
+  def doShuffle[T]: ZIO[Env[T] with Logging[String], Nothing, Int] =
     Env.using[T] { env =>
       (for {
         nodes  <- env.activeView.keys
@@ -55,7 +51,9 @@ private[hyparview] object periodic {
           for {
             active  <- env.activeView.keys.map(_.size)
             passive <- env.passiveView.size
-          } yield log.info(s"HyParView: { addr: ${env.myself}, activeView: $active/${env.cfg.activeViewCapacity}, passiveView: $passive/${env.cfg.passiveViewCapacity} }")
+          } yield log.info(
+            s"HyParView: { addr: ${env.myself}, activeView: $active/${env.cfg.activeViewCapacity}, passiveView: $passive/${env.cfg.passiveViewCapacity} }"
+          )
         }
       }
       .flatten

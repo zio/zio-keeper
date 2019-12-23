@@ -14,7 +14,9 @@ object Main3 extends zio.App {
   override def run(args: List[String]) = {
     val env =
       ZManaged.environment[ZEnv] @@
-        enrichWith[Logging[String]](new zio.logging.slf4j.Slf4jLogger.Live { def formatMessage(msg: String) = ZIO.succeed(msg)}) @@
+        enrichWith[Logging[String]](new zio.logging.slf4j.Slf4jLogger.Live {
+          def formatMessage(msg: String) = ZIO.succeed(msg)
+        }) @@
         tcp.withTcpTransport(64, 100.seconds, 100.seconds)
     implicit val rw: ReadWriter[Address] =
       macroRW[(String, Int)]
