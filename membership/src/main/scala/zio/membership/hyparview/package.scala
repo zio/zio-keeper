@@ -1,9 +1,9 @@
 package zio.membership
 
 import zio._
-import zio.stm._
 
 package object hyparview {
+import zio.logging.Logging
 
   private[hyparview] def send[T](
     to: T,
@@ -11,18 +11,25 @@ package object hyparview {
   )(
     implicit
     ev: Tagged[ActiveProtocol[T]]
-  ) =
+  ): ZIO[Env[T] with Logging[String], Nothing, Unit] =
     Tagged
       .write[ActiveProtocol[T]](msg)
       .foldM(
-        e => console.putStrLn(s"Failed serializing message. Not sending: $e"),
+        e => log.error(s"Failed serializing $msg", Cause.fail(e)),
         chunk =>
           for {
-            _   <- UIO(println(s"sent: $to -> $msg"))
-            con <- Env.using[T](_.activeView.get(to).commit)
-            _   <- ZIO.foreach(con)(_(Command.Send(chunk)))
+            _     <- log.debug(s"send: $to -> $msg")
+            con   <- Env.using[T](_.activeView.get(to).commit)
+            _     <- ZIO.foreach(con)(_(Command.Send(chunk)))
           } yield ()
       )
+
+  private[hyparview] def sendInitial[T](
+    to: T,
+    msg: InitialProtocol[T]
+  ): ZIO[Env[T] with Logging[String], Nothing, Unit] =
+    log.debug(s"sendInitial: $to -> $msg") *>
+    Env.using[T](_.sendInitial(to, msg))
 
   private[hyparview] def disconnect[T](
     node: T,
@@ -32,17 +39,5 @@ package object hyparview {
       case None          => ZIO.unit
       case Some(sendMsg) => sendMsg(Command.Disconnect(shutDown))
     }
-
-  private[hyparview] def report[T] =
-    Env
-      .using[T] { env =>
-        STM.atomically {
-          for {
-            active  <- env.activeView.keys
-            passive <- env.passiveView.toList
-          } yield console.putStrLn(s"${env.myself}: { active: $active, passive: $passive }")
-        }
-      }
-      .flatten
 
 }

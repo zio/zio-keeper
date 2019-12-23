@@ -4,10 +4,10 @@ import zio.membership.ByteCodec
 import upickle.default._
 import zio._
 import zio.stm._
-import zio.console._
 import zio.membership.transport._
 import zio.membership.Error
 import zio.stream.ZStream
+import zio.logging.Logging
 
 sealed private[hyparview] trait InitialProtocol[T]
 
@@ -76,7 +76,7 @@ private[hyparview] object InitialProtocol {
       ByteCodec.fromReadWriter(macroRW[ShuffleReply[T]])
   }
 
-  def sendInitialProtocol[R <: Console with Env[T] with Transport[T], R1 <: R, E >: Error, E1 >: E, T, A](
+  def sendInitialProtocol[R <: Env[T] with Transport[T], R1 <: R, E >: Error, E1 >: E, T, A](
     stream: ZStream[R, E, (T, InitialProtocol[T])]
   )(
     contStream: (T, Chunk[Byte] => IO[E, Unit], ZStream[R, E, Chunk[Byte]]) => ZStream[R1, E1, A]
@@ -93,7 +93,6 @@ private[hyparview] object InitialProtocol {
       } yield con
 
     stream
-      .tap(c => UIO(println(s"sendInitial: ${c._1} -> ${c._2}")))
       .map {
         case (to, m: ForwardJoinReply[T]) =>
           ZStream
@@ -133,7 +132,7 @@ private[hyparview] object InitialProtocol {
       }
   }
 
-  def receiveInitialProtocol[R <: Console with Env[T] with Transport[T], R1 <: R, E >: Error, E1 >: E, T, A](
+  def receiveInitialProtocol[R <: Env[T] with Transport[T] with Logging[String], R1 <: R, E >: Error, E1 >: E, T, A](
     stream: ZStream[R, E, Chunk[Byte]],
     sendReply: Chunk[Byte] => IO[E, Unit]
   )(

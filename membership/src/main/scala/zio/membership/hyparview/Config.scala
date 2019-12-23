@@ -1,7 +1,7 @@
 package zio.membership.hyparview
 
 final private[hyparview] case class Config(
-  activeViewCapactiy: Int,
+  activeViewCapacity: Int,
   passiveViewCapacity: Int,
   arwl: Int,
   prwl: Int,

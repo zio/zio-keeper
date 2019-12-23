@@ -1,9 +1,9 @@
 package zio.membership.hyparview
 
 import zio._
-import zio.membership.transport.Transport
 import zio.stm._
-import zio.console.Console
+import zio.membership.log
+import zio.logging.Logging
 
 /**
  * periodic tasks that are part of hyparview protocol.
@@ -29,7 +29,7 @@ private[hyparview] object periodic {
 
   def doShuffle[T](
     implicit ev: Tagged[ActiveProtocol[T]]
-  ): ZIO[Console with Env[T] with Transport[T], Nothing, Int] =
+  ): ZIO[Env[T] with Logging[String], Nothing, Int] =
     Env.using[T] { env =>
       (for {
         nodes  <- env.activeView.keys
@@ -47,5 +47,17 @@ private[hyparview] object periodic {
                }
       } yield task.as(nodes.size)).commit.flatten
     }
+
+  private[hyparview] def doReport[T]: ZIO[Env[T] with Logging[String], Nothing, Unit] =
+    Env
+      .using[T] { env =>
+        STM.atomically {
+          for {
+            active  <- env.activeView.keys.map(_.size)
+            passive <- env.passiveView.size
+          } yield log.info(s"HyParView: { addr: ${env.myself}, activeView: $active/${env.cfg.activeViewCapacity}, passiveView: $passive/${env.cfg.passiveViewCapacity} }")
+        }
+      }
+      .flatten
 
 }

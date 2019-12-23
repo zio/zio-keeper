@@ -28,7 +28,7 @@ private[hyparview] object Env {
   def using[T]: Using[T]                           = new Using[T]
   def usingManaged[T]: UsingManaged[T]             = new UsingManaged[T]
 
-  def withEnv[T](localAddr: T, config: Config) = enrichWithM[Env[T]] {
+  def withEnv[T](localAddr: T, sendInitial0: (T, InitialProtocol[T]) => UIO[Unit], config: Config) = enrichWithM[Env[T]] {
     @silent("deprecated")
     val makePickRandom: ZIO[Random, Nothing, Int => STM[Nothing, Int]] =
       for {
@@ -45,6 +45,7 @@ private[hyparview] object Env {
         override val myself      = localAddr
         override val activeView  = activeView0
         override val passiveView = passiveView0
+        override val sendInitial = sendInitial0
         override val pickRandom  = pickRandom0
         override val cfg         = config
       }
@@ -55,11 +56,12 @@ private[hyparview] object Env {
     val myself: T
     val activeView: TMap[T, Command => UIO[Unit]]
     val passiveView: TSet[T]
+    val sendInitial: (T, InitialProtocol[T]) => UIO[Unit]
     val pickRandom: Int => STM[Nothing, Int]
     val cfg: Config
 
     lazy val isActiveViewFull: STM[Nothing, Boolean] =
-      activeView.keys.map(_.size >= cfg.activeViewCapactiy)
+      activeView.keys.map(_.size >= cfg.activeViewCapacity)
 
     lazy val isPassiveViewFull: STM[Nothing, Boolean] =
       passiveView.size.map(_ >= cfg.passiveViewCapacity)
@@ -81,7 +83,7 @@ private[hyparview] object Env {
                       for {
                         size <- activeView.keys.map(_.size)
                         _    <- passiveView.delete(node)
-                        dropped <- if (size >= cfg.activeViewCapactiy) dropOneActiveToPassive
+                        dropped <- if (size >= cfg.activeViewCapacity) dropOneActiveToPassive
                                   else STM.succeed(None)
                         _ <- activeView.put(node, f)
                       } yield dropped
@@ -112,7 +114,7 @@ private[hyparview] object Env {
 
     lazy val promoteRandom: STM[Nothing, Option[T]] =
       for {
-        activeFull <- activeView.keys.map(_.size >= cfg.activeViewCapactiy)
+        activeFull <- activeView.keys.map(_.size >= cfg.activeViewCapacity)
         promoted <- if (activeFull) STM.succeed(None)
                    else {
                      for {

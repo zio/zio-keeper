@@ -13,4 +13,7 @@ final case class Address(
   val toInetSocketAddres: IO[ResolutionFailed, InetSocketAddress] =
     SocketAddress.inetSocketAddress(host, port).mapError(ResolutionFailed(self, _))
 
+  override def toString() =
+    s"$host:$port"
+
 }

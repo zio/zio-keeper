@@ -4,7 +4,6 @@ import zio._
 import zio.membership.transport.Transport
 import zio.random.Random
 import zio.macros.delegate.syntax._
-import zio.console.Console
 import zio.membership.Membership
 import zio.membership.ByteCodec
 import zio.duration._
@@ -12,10 +11,11 @@ import zio.clock.Clock
 import zio.stream.ZStream
 import zio.membership.Error
 import zio.stream.Take
+import zio.logging.Logging
 
 object HyParView {
 
-  def apply[R <: Transport[T] with Random with Console with Clock, T](
+  def apply[R <: Transport[T] with Random with Logging[String] with Clock, T](
     localAddr: T,
     activeViewCapacity: Int,
     passiveViewCapacity: Int,
@@ -35,7 +35,7 @@ object HyParView {
     ev2: Tagged[ActiveProtocol[T]],
     ev3: ByteCodec[JoinReply[T]]
   ): ZManaged[R, Error, Membership[T]] = {
-    type R1 = Clock with Random with Transport[T] with Env[T] with zio.console.Console
+    type R1 = Clock with Random with Transport[T] with Env[T] with Logging[String]
 
     val config = Config(
       activeViewCapacity,
@@ -48,12 +48,6 @@ object HyParView {
     )
     for {
       r <- ZManaged.environment[R]
-      env <- ZManaged.environment[Clock with Random with Transport[T] with zio.console.Console] @@
-              Env.withEnv(
-                localAddr,
-                config
-              )
-      _            <- report[T].repeat(Schedule.spaced(1.second)).provide(env).toManaged_.fork
       initialQueue <- Queue.bounded[(T, InitialProtocol[T])](outboundMessagesBuffer).toManaged_
       sendInitial = (to: T, msg: InitialProtocol[T]) =>
         initialQueue
@@ -62,6 +56,12 @@ object HyParView {
             case cause if cause.interrupted => ZIO.unit
           }
           .unit
+      env <- ZManaged.environment[Clock with Random with Transport[T] with Logging[String]] @@
+        Env.withEnv(
+          localAddr,
+          sendInitial,
+          config
+        )
       outgoing = InitialProtocol
         .sendInitialProtocol[
           R1,
@@ -78,8 +78,7 @@ object HyParView {
               .receiveActiveProtocol(
                 receive,
                 addr,
-                send,
-                sendInitial
+                send
               )
               .orElse(ZStream.empty)
         }
@@ -103,8 +102,7 @@ object HyParView {
                 .receiveActiveProtocol(
                   receive,
                   addr,
-                  c.send,
-                  sendInitial
+                  c.send
                 )
                 .orElse(ZStream.empty)
             }
@@ -120,6 +118,7 @@ object HyParView {
             .fork
       _ <- periodic.doNeighbor(sendInitial).repeat(neighborSchedule.provide(r)).provide(env).toManaged_.fork
       _ <- periodic.doShuffle.repeat(shuffleSchedule.provide(r)).provide(env).toManaged_.fork
+      _ <- periodic.doReport[T].repeat(Schedule.spaced(1.second)).provide(env).toManaged_.fork
     } yield new Membership[T] {
       val membership = new Membership.Service[Any, T] {
 

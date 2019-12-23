@@ -6,10 +6,9 @@ import zio.membership.ByteCodec
 import upickle.default._
 import zio._
 import zio.stm._
-import zio.console._
-import zio.membership.transport._
 import zio.membership.Error
 import zio.stream.ZStream
+import zio.logging.Logging
 
 sealed private[hyparview] trait ActiveProtocol[+T]
 
@@ -85,11 +84,10 @@ private[hyparview] object ActiveProtocol {
       )
   }
 
-  def receiveActiveProtocol[R <: Console with Env[T] with Transport[T], E >: Error, T](
+  def receiveActiveProtocol[R <: Env[T] with Logging[String], E >: Error, T](
     stream: ZStream[R, E, Chunk[Byte]],
     to: T,
-    reply: Chunk[Byte] => IO[E, Unit],
-    sendInitial: (T, InitialProtocol[T]) => UIO[Unit]
+    reply: Chunk[Byte] => IO[E, Unit]
   )(
     implicit
     ev1: Tagged[ActiveProtocol[T]]

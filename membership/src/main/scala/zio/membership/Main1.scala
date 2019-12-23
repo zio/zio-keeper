@@ -2,17 +2,20 @@ package zio.membership
 
 import zio._
 import zio.duration._
+import zio.macros.delegate._
 import zio.macros.delegate.syntax._
 import zio.membership.transport.tcp
 import zio.membership.hyparview.HyParView
 import upickle.default._
 import zio.membership.transport.Address
+import zio.logging.Logging
 
 object Main1 extends zio.App {
 
   override def run(args: List[String]) = {
     val env =
       ZManaged.environment[ZEnv] @@
+        enrichWith[Logging[String]](new zio.logging.slf4j.Slf4jLogger.Live { def formatMessage(msg: String) = ZIO.succeed(msg)}) @@
         tcp.withTcpTransport(64, 100.seconds, 100.seconds)
     implicit val rw: ReadWriter[Address] =
       macroRW[(String, Int)]
