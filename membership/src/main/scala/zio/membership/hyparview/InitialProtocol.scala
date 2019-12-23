@@ -151,7 +151,7 @@ private[hyparview] object InitialProtocol {
             _.fold[ZIO[R, E, Option[T]]](ZIO.succeed(None))(ZIO.fail(_)), { raw =>
               Tagged
                 .read[InitialProtocol[T]](raw)
-                .tap(msg => log.debug(s"receiveInitialProtocl: $msg"))
+                .tap(msg => log.debug(s"receiveInitialProtocol: $msg"))
                 .flatMap {
                   case msg: InitialProtocol.Neighbor[T] =>
                     Env.using[T] {
