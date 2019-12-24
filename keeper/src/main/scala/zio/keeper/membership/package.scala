@@ -1,5 +1,6 @@
 package zio.keeper
-import zio.{ Chunk, ZIO }
+
+import zio.{Chunk, ZIO}
 import zio.stream.ZStream
 
 package object membership extends Membership.Service[Membership] {

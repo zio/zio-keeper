@@ -1,8 +1,8 @@
 package zio.keeper.membership
 
-import zio.keeper.{ Error, Message }
+import zio.keeper.{Error, Message}
 import zio.stream.ZStream
-import zio.{ Chunk, ZIO }
+import zio.{Chunk, ZIO}
 
 trait Membership {
   def membership: Membership.Service[Any]
@@ -24,4 +24,5 @@ object Membership {
 
     def send(data: Chunk[Byte], receipt: NodeId): ZIO[R, Error, Unit]
   }
+
 }

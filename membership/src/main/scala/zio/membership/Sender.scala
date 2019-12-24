@@ -1,5 +1,5 @@
 package zio.membership
 
 final case class Sender(
-  nodeId: NodeId
-)
+                         nodeId: NodeId
+                       )

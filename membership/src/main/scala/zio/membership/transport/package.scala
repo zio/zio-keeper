@@ -1,8 +1,8 @@
 package zio.membership
 
 import zio._
-import zio.stream._
 import zio.nio.SocketAddress
+import zio.stream._
 
 package object transport extends Transport.Service[Transport] {
 

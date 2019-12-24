@@ -26,5 +26,7 @@ case class GossipState(members: SortedSet[Member]) extends AnyVal {
 
 object GossipState {
   val Empty = GossipState(SortedSet())
+
   final case class StateDiff(local: SortedSet[Member], remote: SortedSet[Member])
+
 }

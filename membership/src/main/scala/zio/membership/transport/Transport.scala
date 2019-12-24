@@ -16,7 +16,8 @@ object Transport {
    * Also allows listening to messages sends from other nodes.
    */
   trait Service[R] {
-    def send(to: SocketAddress, data: Chunk[Byte]): ZIO[R, TransportError, Unit]
     def bind(addr: SocketAddress): ZStream[R, TransportError, Chunk[Byte]]
+
+    def send(to: SocketAddress, data: Chunk[Byte]): ZIO[R, TransportError, Unit]
   }
 }
