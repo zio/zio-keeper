@@ -30,7 +30,7 @@ object Membership {
      * Note that depending on implementation this might only return the nodes
      * in a local view.
      */
-    val nodes: ZIO[R, Nothing, List[T]]
+    val nodes: ZIO[R, Nothing, Set[T]]
 
     /**
      * Send a message to a node.
