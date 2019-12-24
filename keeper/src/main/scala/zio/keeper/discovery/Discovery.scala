@@ -22,4 +22,5 @@ object Discovery {
   trait Service[R] {
     val discoverNodes: ZIO[R, Error, Set[zio.nio.SocketAddress]]
   }
+
 }

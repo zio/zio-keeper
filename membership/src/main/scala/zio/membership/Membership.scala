@@ -25,13 +25,13 @@ object Membership {
      * Note that depending on implementation this might only return the nodes
      * in a local view.
      */
-    //conv
+
     val nodes: ZIO[R, Nothing, List[Member]]
 
     /**
      * Receive a stream of all messages.
      */
-    //conv
+
     val receive: ZStream[R, Error, Message]
 
     /**
