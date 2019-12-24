@@ -1,10 +1,9 @@
 package zio.keeper
 
-import zio.{Chunk, ZIO}
+import zio.{ Chunk, ZIO }
 import zio.stream.ZStream
 
 package object membership extends Membership.Service[Membership] {
-
 
   override def broadcast(data: Chunk[Byte]): ZIO[Membership, Error, Unit] =
     ZIO.accessM[Membership](_.membership.broadcast(data))

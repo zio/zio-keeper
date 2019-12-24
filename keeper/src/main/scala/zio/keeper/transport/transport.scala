@@ -2,7 +2,7 @@ package zio.keeper.transport
 
 import zio.keeper.TransportError
 import zio.nio.SocketAddress
-import zio.{Chunk, UIO, ZIO, ZManaged}
+import zio.{ Chunk, UIO, ZIO, ZManaged }
 
 trait Transport {
   val transport: Transport.Service[Any]
@@ -11,6 +11,7 @@ trait Transport {
 object Transport {
 
   trait Service[R] {
+
     def bind(localAddr: SocketAddress)(
       connectionHandler: ChannelOut => UIO[Unit]
     ): ZManaged[R, TransportError, ChannelIn]
@@ -21,7 +22,6 @@ object Transport {
 }
 
 sealed trait Channel {
-
 
   val isOpen: ZIO[Any, TransportError, Boolean]
 

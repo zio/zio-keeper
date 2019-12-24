@@ -4,26 +4,26 @@ import java.net.UnknownHostException
 import java.util
 
 import javax.naming.directory.InitialDirContext
-import javax.naming.{Context, NamingException}
+import javax.naming.{ Context, NamingException }
 import zio.duration.Duration
 import zio.keeper.ServiceDiscoveryError
 import zio.logging.Logging
 import zio.macros.delegate._
-import zio.nio.{InetAddress, SocketAddress}
-import zio.{IO, URIO, ZIO, keeper}
+import zio.nio.{ InetAddress, SocketAddress }
+import zio.{ IO, URIO, ZIO, keeper }
 
 /**
-  * This discovery strategy uses K8 service headless service dns to find other members of the cluster.
-  *
-  * Headless service is a service of type ClusterIP with the clusterIP property set to None.
-  *
-  */
+ * This discovery strategy uses K8 service headless service dns to find other members of the cluster.
+ *
+ * Headless service is a service of type ClusterIP with the clusterIP property set to None.
+ *
+ */
 trait K8DnsDiscovery extends Discovery.Service[Any] {
 
   final override val discoverNodes: ZIO[Any, keeper.Error, Set[SocketAddress]] = {
     for {
       addresses <- lookup(serviceDns, serviceDnsTimeout)
-      nodes <- ZIO.foreach(addresses)(addr => zio.nio.SocketAddress.inetSocketAddress(addr, servicePort))
+      nodes     <- ZIO.foreach(addresses)(addr => zio.nio.SocketAddress.inetSocketAddress(addr, servicePort))
     } yield nodes.toSet: Set[zio.nio.SocketAddress]
   }.catchAll(
     ex =>
@@ -43,18 +43,18 @@ trait K8DnsDiscovery extends Discovery.Service[Any] {
     env.put("com.sun.jndi.dns.timeout.initial", serviceDnsTimeout.toMillis.toString)
 
     for {
-      dirContext <- ZIO.effect(new InitialDirContext(env)).refineToOrDie[NamingException]
-      attributes <- ZIO.effectTotal(dirContext.getAttributes(serviceDns.hostname, Array[String]("SRV")))
+      dirContext   <- ZIO.effect(new InitialDirContext(env)).refineToOrDie[NamingException]
+      attributes   <- ZIO.effectTotal(dirContext.getAttributes(serviceDns.hostname, Array[String]("SRV")))
       srvAttribute = Option(attributes.get("srv")).toList.flatMap(_.getAll.asScala)
       addresses <- ZIO.foldLeft(srvAttribute)(Set.empty[zio.nio.InetAddress]) {
-        case (acc, address: String) =>
-          extractHost(address)
-            .flatMap(zio.nio.InetAddress.byName)
-            .map(acc + _)
-            .refineToOrDie[UnknownHostException]
-        case (acc, _) =>
-          ZIO.succeed(acc)
-      }
+                    case (acc, address: String) =>
+                      extractHost(address)
+                        .flatMap(zio.nio.InetAddress.byName)
+                        .map(acc + _)
+                        .refineToOrDie[UnknownHostException]
+                    case (acc, _) =>
+                      ZIO.succeed(acc)
+                  }
     } yield addresses
   }
 
@@ -70,16 +70,16 @@ trait K8DnsDiscovery extends Discovery.Service[Any] {
 object K8DnsDiscovery {
 
   def withK8DnsDiscovery(
-                          addr: zio.nio.InetAddress,
-                          timeout: Duration,
-                          port: Int
-                        ) = enrichWithM[Discovery](k8DnsDiscovery(addr, timeout, port))
+    addr: zio.nio.InetAddress,
+    timeout: Duration,
+    port: Int
+  ) = enrichWithM[Discovery](k8DnsDiscovery(addr, timeout, port))
 
   def k8DnsDiscovery(
-                      addr: zio.nio.InetAddress,
-                      timeout: Duration,
-                      port: Int
-                    ): URIO[Logging[String], Discovery] =
+    addr: zio.nio.InetAddress,
+    timeout: Duration,
+    port: Int
+  ): URIO[Logging[String], Discovery] =
     ZIO.access[Logging[String]](
       env =>
         new Discovery {

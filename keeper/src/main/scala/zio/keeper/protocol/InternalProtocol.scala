@@ -3,9 +3,9 @@ package zio.keeper.protocol
 import java.math.BigInteger
 
 import upickle.default._
-import zio.keeper.SerializationError.{DeserializationTypeError, SerializationTypeError}
-import zio.keeper.membership.{GossipState, Member, NodeAddress, NodeId}
-import zio.{Chunk, IO, ZIO}
+import zio.keeper.SerializationError.{ DeserializationTypeError, SerializationTypeError }
+import zio.keeper.membership.{ GossipState, Member, NodeAddress, NodeId }
+import zio.{ Chunk, IO, ZIO }
 
 sealed trait InternalProtocol {
 

@@ -4,9 +4,9 @@ import zio._
 import zio.stream._
 
 /**
-  * The main entrypoint to the membership library. Allows querying the cluster state
-  * and sending messages to members.
-  */
+ * The main entrypoint to the membership library. Allows querying the cluster state
+ * and sending messages to members.
+ */
 trait Membership {
   val membership: Membership.Service[Any]
 }
@@ -16,26 +16,25 @@ object Membership {
   trait Service[R] {
 
     /**
-      * Get a list of all nodes that are currently considered healthy.
-      * Note that depending on implementation this might only return the nodes
-      * in a local view.
-      */
-
+     * Get a list of all nodes that are currently considered healthy.
+     * Note that depending on implementation this might only return the nodes
+     * in a local view.
+     */
     val nodes: ZIO[R, Nothing, List[Member]]
-    /**
-      * Receive a stream of all messages.
-      */
 
+    /**
+     * Receive a stream of all messages.
+     */
     val receive: ZStream[R, Error, Message]
 
     /**
-      * Send a message to all nodes.
-      */
+     * Send a message to all nodes.
+     */
     def broadcast[R1 <: R, A](payload: A)(implicit ev: ByteCodec[R1, A]): ZIO[R1, Error, Unit]
 
     /**
-      * Send a message to a node.
-      */
+     * Send a message to a node.
+     */
     def send[R1 <: R, A](to: Member, payload: A)(implicit ev: ByteCodec[R1, A]): ZIO[R1, Error, Unit]
   }
 
