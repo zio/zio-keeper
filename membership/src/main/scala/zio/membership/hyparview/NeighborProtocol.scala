@@ -33,7 +33,7 @@ private[hyparview] object NeighborProtocol {
       ByteCodec.fromReadWriter(macroRW[Accept.type])
   }
 
-  def receiveNeighborProtocol[R, R1 <: R, E >: Error, E1 >: E, A](
+  def receive[R, R1 <: R, E >: Error, E1 >: E, A](
     stream: ZStream[R, E, Chunk[Byte]]
   )(
     contStream: ZStream[R, E, Chunk[Byte]] => ZStream[R1, E1, A]

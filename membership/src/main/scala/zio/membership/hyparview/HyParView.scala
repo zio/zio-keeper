@@ -66,7 +66,7 @@ object HyParView {
                 passiveViewCapacity
               )
       outgoing = InitialProtocol
-        .sendInitialProtocol[
+        .send[
           R1,
           R1,
           Error,
@@ -78,7 +78,7 @@ object HyParView {
         ) {
           case (addr, send, receive) =>
             ActiveProtocol
-              .receiveActiveProtocol(
+              .receive(
                 receive,
                 addr,
                 send,
@@ -86,12 +86,11 @@ object HyParView {
               )
               .orElse(ZStream.empty)
         }
-        .mapError(e => { println(e.getMessage()); e })
       incoming = env.transport
         .bind(localAddr)
         .map(ZStream.managed(_).flatMap { c =>
           InitialProtocol
-            .receiveInitialProtocol[
+            .receive[
               R1,
               R1,
               Error,
@@ -103,7 +102,7 @@ object HyParView {
               c.send
             ) { (addr, receive) =>
               ActiveProtocol
-                .receiveActiveProtocol(
+                .receive(
                   receive,
                   addr,
                   c.send,
@@ -111,8 +110,8 @@ object HyParView {
                 )
                 .orElse(ZStream.empty)
             }
+            .orElse(ZStream.empty)
         })
-        .mapError(e => { println(e.getMessage()); e })
       userMessages <- Queue.dropping[Take[Error, Chunk[Byte]]](userMessagesBuffer).toManaged_
       _ <- outgoing
             .merge(incoming)

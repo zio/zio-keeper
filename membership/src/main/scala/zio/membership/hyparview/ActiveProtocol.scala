@@ -85,7 +85,7 @@ private[hyparview] object ActiveProtocol {
       )
   }
 
-  def receiveActiveProtocol[R <: Views[T] with Cfg with Logging[String], E >: Error, T](
+  def receive[R <: Views[T] with Cfg with Logging[String], E >: Error, T](
     stream: ZStream[R, E, Chunk[Byte]],
     to: T,
     reply: Chunk[Byte] => IO[E, Unit],
@@ -100,7 +100,7 @@ private[hyparview] object ActiveProtocol {
           env           <- ZManaged.environment[R]
           keepInPassive <- Ref.make(false).toManaged_
           finalizerRef  <- ZManaged.finalizerRef(_ => UIO.unit)
-          end           <- Promise.make[Nothing, Nothing].toManaged_
+          end           <- Promise.make[Unit, Nothing].toManaged_
           config        <- getConfig.toManaged_
           _ <- Views
                 .using[T] { views =>
@@ -112,10 +112,10 @@ private[hyparview] object ActiveProtocol {
                         _     <- reply(chunk)
                         _     <- log.debug(s"sendActiveProtocol: $to -> $msg")
                       } yield ())
-                        .tapError(e => log.error("Failed sending activeProtocol message", Cause.fail(e)))
+                        .tapError(e => log.error(s"Failed sending message to $to", Cause.fail(e)))
                         .mapError(_ => ())
                         .provide(env),
-                    end.interrupt.unit,
+                    end.fail(()).unit,
                     f => finalizerRef.set(_ => keepInPassive.get.flatMap(f))
                   )
                 }
@@ -125,7 +125,6 @@ private[hyparview] object ActiveProtocol {
       .flatMap {
         case (keepInPassive, end, config) =>
           stream
-            .merge(ZStream.fromEffect(end.await))
             .mapM { raw =>
               Tagged
                 .read[ActiveProtocol[T]](raw)
@@ -207,9 +206,15 @@ private[hyparview] object ActiveProtocol {
                   case m: ActiveProtocol.UserMessage => ZIO.succeed((true, Some(m.msg)))
                 }
             }
+            .mapError(Right(_))
+            .merge(ZStream.fromEffect(end.await).mapError(Left(_)))
       }
       .takeWhile(_._1)
       .collect {
         case (_, Some(msg)) => msg
+      }
+      .catchAll {
+        case Left(_)  => ZStream.empty
+        case Right(e) => ZStream.fail(e)
       }
 }

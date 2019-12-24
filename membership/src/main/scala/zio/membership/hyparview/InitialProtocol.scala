@@ -77,7 +77,7 @@ private[hyparview] object InitialProtocol {
       ByteCodec.fromReadWriter(macroRW[ShuffleReply[T]])
   }
 
-  def sendInitialProtocol[R <: Transport[T] with Logging[String] with Views[T], R1 <: R, E >: Error, E1 >: E, T, A](
+  def send[R <: Transport[T] with Logging[String] with Views[T], R1 <: R, E >: Error, E1 >: E, T, A](
     stream: ZStream[R, E, (T, InitialProtocol[T])]
   )(
     contStream: (T, Chunk[Byte] => IO[E, Unit], ZStream[R, E, Chunk[Byte]]) => ZStream[R1, E1, A]
@@ -119,7 +119,7 @@ private[hyparview] object InitialProtocol {
           ZStream
             .unwrapManaged {
               openConnection(to, m).map { con =>
-                NeighborProtocol.receiveNeighborProtocol[R, R1, E, E1, A](con.receive) { cont =>
+                NeighborProtocol.receive[R, R1, E, E1, A](con.receive) { cont =>
                   contStream(to, con.send, cont)
                 }
               }
@@ -134,7 +134,7 @@ private[hyparview] object InitialProtocol {
       }
   }
 
-  def receiveInitialProtocol[R <: Views[T] with Transport[T] with Logging[String] with Cfg, R1 <: R, E >: Error, E1 >: E, T, A](
+  def receive[R <: Views[T] with Transport[T] with Logging[String] with Cfg, R1 <: R, E >: Error, E1 >: E, T, A](
     stream: ZStream[R, E, Chunk[Byte]],
     sendReply: Chunk[Byte] => IO[E, Unit]
   )(
@@ -158,11 +158,13 @@ private[hyparview] object InitialProtocol {
                       views =>
                         val accept = for {
                           reply <- Tagged.write[NeighborProtocol](NeighborProtocol.Accept)
+                          _     <- log.debug(s"Accepting neighborhood request from ${msg.sender}")
                           _     <- sendReply(reply)
                         } yield Some(msg.sender)
 
                         val reject = for {
                           reply <- Tagged.write[NeighborProtocol](NeighborProtocol.Reject)
+                          _     <- log.debug(s"Rejecting neighborhood request from ${msg.sender}")
                           _     <- sendReply(reply)
                         } yield None
 
