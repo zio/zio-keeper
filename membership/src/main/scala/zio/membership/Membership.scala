@@ -35,7 +35,7 @@ object Membership {
     /**
      * Send a message to a node.
      */
-    def send[A: ByteCodec](to: T, payload: A): ZIO[R, Error, Unit]
+    def send[A: ByteCodec](to: T, payload: A): ZIO[R, SendError, Unit]
 
     /**
      * Connect to a remote node, joining the relevant cluster.
@@ -45,7 +45,7 @@ object Membership {
     /**
      * Send a message to all nodes.
      */
-    def broadcast[A: ByteCodec](payload: A): ZIO[R, Error, Unit]
+    def broadcast[A: ByteCodec](payload: A): ZIO[R, SendError, Unit]
 
     /**
      * Send a message to a node.

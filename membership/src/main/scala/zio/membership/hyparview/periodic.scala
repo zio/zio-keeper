@@ -2,61 +2,46 @@ package zio.membership.hyparview
 
 import zio._
 import zio.stm._
-import zio.membership.log
+import zio.membership.{ SendError, log }
 import zio.logging.Logging
 
-/**
- * periodic tasks that are part of hyparview protocol.
- */
-private[hyparview] object periodic {
+object periodic {
 
-  def doNeighbor[E, T](
-    sendInitial: (T, InitialProtocol[T]) => IO[E, Unit]
-  ): ZIO[Views[T], E, Int] =
-    Views.using[T] { views =>
-      STM
-        .atomically {
-          for {
-            full <- views.isActiveViewFull
-            promoted <- if (full) STM.succeed(None)
-                       else views.passiveView.flatMap(a => views.selectOne(a.toList))
-            active <- views.activeViewSize
-          } yield (promoted, active)
-        }
-        .flatMap {
-          case (Some(node), active) =>
-            sendInitial(node, InitialProtocol.Neighbor(views.myself, active <= 0)).as(active)
-          case (_, active) =>
-            ZIO.succeed(active)
-        }
-    }
-
-  def doShuffle[T]: ZIO[Views[T] with Logging[String] with Cfg, Nothing, Int] =
+  def doShuffle[T]: ZIO[Views[T] with Logging[String] with HyParViewConfig, Nothing, ViewState] =
     Views.using[T] { views =>
       getConfig.flatMap { config =>
-        def go(nodes: List[T]): UIO[Unit] =
-          views.selectOne(nodes.toList).commit.flatMap {
-            case None => ZIO.unit
-            case Some(node) =>
-              (for {
-                active  <- views.selectN(nodes.filter(_ != node), config.shuffleNActive)
-                passive <- views.passiveView.flatMap(p => views.selectN(p.toList, config.shuffleNPassive))
-              } yield views.send(
-                node,
-                ActiveProtocol.Shuffle(views.myself, views.myself, active, passive, TimeToLive(config.shuffleTTL))
-              )).commit.flatten.orElse(go(nodes.filterNot(_ == node)))
-          }
-        views.activeView.commit.flatMap(a => go(a.toList)) *> views.activeViewSize.commit
+        val go: IO[SendError, ViewState] =
+          views.activeView
+            .map(_.toList)
+            .flatMap { nodes =>
+              views.selectOne(nodes).flatMap {
+                case None => STM.succeed(views.viewState.commit)
+                case Some(node) =>
+                  for {
+                    active  <- views.selectN(nodes.filter(_ != node), config.shuffleNActive)
+                    passive <- views.passiveView.flatMap(p => views.selectN(p.toList, config.shuffleNPassive))
+                    state   <- views.viewState
+                  } yield views
+                    .send(
+                      node,
+                      ActiveProtocol.Shuffle(views.myself, views.myself, active, passive, TimeToLive(config.shuffleTTL))
+                    )
+                    .as(state)
+              }
+            }
+            .commit
+            .flatten
+        go.eventually
       }
     }
 
-  private[hyparview] def doReport[T]: ZIO[Views[T] with Logging[String], Nothing, Unit] =
+  def doReport[T]: ZIO[Views[T] with Logging[String], Nothing, Unit] =
     Views
       .using[T] { views =>
         STM.atomically {
           for {
-            active  <- views.activeViewSize
-            passive <- views.passiveViewSize
+            active  <- views.activeView
+            passive <- views.passiveView
           } yield log.info(
             s"HyParView: { addr: ${views.myself}, activeView: $active/${views.activeViewCapacity}, passiveView: $passive/${views.passiveViewCapacity} }"
           )

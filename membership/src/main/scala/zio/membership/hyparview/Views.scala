@@ -4,9 +4,13 @@ import zio._
 import zio.stm._
 import zio.stream._
 import com.github.ghik.silencer.silent
+import zio.logging.Logging
 import zio.random.Random
+
 import scala.collection.immutable.{ Stream => ScStream }
 import zio.macros.delegate._
+import zio.membership.SendError
+import zio.membership.log
 
 private[hyparview] trait Views[T] {
   val views: Views.Service[Any, T]
@@ -32,11 +36,11 @@ private[hyparview] object Views {
 
     def isPassiveViewFull: STM[Nothing, Boolean]
 
-    def send(to: T, msg: ActiveProtocol[T]): IO[Unit, Unit]
+    def send(to: T, msg: ActiveProtocol[T]): IO[SendError, Unit]
 
     def addNodeToActiveView(
       node: T,
-      send: ActiveProtocol[T] => IO[Unit, Unit],
+      send: ActiveProtocol[T] => IO[SendError, Unit],
       disconnect: UIO[Unit],
       registerExitHook: (Boolean => UIO[Unit]) => UIO[Unit]
     ): UIO[Unit]
@@ -53,6 +57,12 @@ private[hyparview] object Views {
       sentOriginally: Set[T],
       replied: Set[T]
     ): STM[Nothing, Unit]
+
+    def viewState: STM[Nothing, ViewState] =
+      for {
+        activeViewSize  <- activeViewSize
+        passiveViewSize <- passiveViewSize
+      } yield ViewState(activeViewSize, activeViewCapacity, passiveViewSize, passiveViewCapacity)
   }
 
   final class Using[T] {
@@ -80,7 +90,7 @@ private[hyparview] object Views {
     myself0: T,
     activeViewCapacity0: Int,
     passiveViewCapacity0: Int
-  ): ZIO[Random, Nothing, Views[T]] = {
+  ): ZIO[Random with Logging[String], Nothing, Views[T]] = {
     @silent("deprecated")
     val makePickRandom: ZIO[Random, Nothing, Int => STM[Nothing, Int]] =
       for {
@@ -90,9 +100,9 @@ private[hyparview] object Views {
       } yield (i: Int) => ref.modify(s => (s.head(i), s.tail))
     for {
       toAdd <- Queue.bounded[
-                (T, ActiveProtocol[T] => IO[Unit, Unit], (Boolean => UIO[Unit]) => UIO[Unit], UIO[Unit], UIO[Unit])
+                (T, ActiveProtocol[T] => IO[SendError, Unit], (Boolean => UIO[Unit]) => UIO[Unit], UIO[Unit], UIO[Unit])
               ](256)
-      activeView0  <- TMap.empty[T, (ActiveProtocol[T] => IO[Unit, Unit], UIO[Unit])].commit
+      activeView0  <- TMap.empty[T, (ActiveProtocol[T] => IO[SendError, Unit], UIO[Unit])].commit
       passiveView0 <- TSet.empty[T].commit
       pickRandom   <- makePickRandom
       _ <- Stream
@@ -100,32 +110,34 @@ private[hyparview] object Views {
             .foreach {
               case (addr, sendMsg, registerExitHook, disconnect, done) =>
                 for {
-                  toDrop <- activeView0
-                             .get(addr)
-                             .flatMap {
-                               case None =>
-                                 activeView0.values.map(aV => (aV.size >= activeViewCapacity0, aV)).flatMap {
-                                   case (true, nodes) =>
-                                     def selectOne[A](values: List[A]): STM[Nothing, Option[A]] =
-                                       if (values.isEmpty) STM.succeed(None)
-                                       else {
-                                         for {
-                                           index    <- pickRandom(values.size)
-                                           selected = values(index)
-                                         } yield Some(selected)
-                                       }
-                                     selectOne(nodes)
-                                   case (false, _) => STM.succeed(None)
-                                 }
-                               case Some(old) => STM.succeed(Some(old))
-                             }
-                             .commit
-                  _ <- ZIO.foreach(toDrop)(_._2)
+//                  toDrop <- activeView0
+//                             .get(addr)
+//                             .flatMap {
+//                               case None =>
+//                                 activeView0.values.map(aV => (aV.size >= activeViewCapacity0, aV)).flatMap {
+//                                   case (true, nodes) =>
+//                                     def selectOne[A](values: List[A]): STM[Nothing, Option[A]] =
+//                                       if (values.isEmpty) STM.succeed(None)
+//                                       else {
+//                                         for {
+//                                           index    <- pickRandom(values.size)
+//                                           selected = values(index)
+//                                         } yield Some(selected)
+//                                       }
+//                                     selectOne(nodes)
+//                                   case (false, _) => STM.succeed(None)
+//                                 }
+//                               case Some(old) => STM.succeed(Some(old))
+//                             }
+//                             .commit
+//                  _ <- ZIO.foreach(toDrop)(_._2)
                   _ <- ZIO.uninterruptible {
                         for {
                           _ <- (for {
-                                hasSpace <- activeView0.keys.map(_.size <= activeViewCapacity0)
-                                _        <- if (hasSpace) activeView0.put(addr, (sendMsg, disconnect)) else STM.retry
+//                                hasSpace <- activeView0.keys.map(_.size <= activeViewCapacity0)
+//                                _        <- if (hasSpace) activeView0.put(addr, (sendMsg, disconnect)) else STM.retry
+                                _ <- activeView0.put(addr, (sendMsg, disconnect))
+                                _ <- passiveView0.delete(addr)
                               } yield ()).commit
                           _ <- registerExitHook {
                                 case true  => (activeView0.delete(addr) *> passiveView0.put(addr)).commit
@@ -133,6 +145,7 @@ private[hyparview] object Views {
                               }
                         } yield ()
                       }
+                  _ <- log.info(s"Added $addr to active view.")
                   _ <- done
                 } yield ()
             }
@@ -167,18 +180,21 @@ private[hyparview] object Views {
             .commit
             .get
             .foldM(
-              _ => ZIO.fail(()),
+              _ => ZIO.fail(SendError.NotConnected),
               n =>
                 n._1(msg)
                   .foldM(
-                    _ => n._2 *> IO.fail(()),
+                    {
+                      case e: SendError.TransportFailed => n._2 *> ZIO.fail(e)
+                      case e                            => ZIO.fail(e)
+                    },
                     _ => IO.unit
                   )
             )
 
         override def addNodeToActiveView(
           node: T,
-          send: ActiveProtocol[T] => IO[Unit, Unit],
+          send: ActiveProtocol[T] => IO[SendError, Unit],
           disconnect: UIO[Unit],
           registerExitHook: (Boolean => UIO[Unit]) => UIO[Unit]
         ) =
