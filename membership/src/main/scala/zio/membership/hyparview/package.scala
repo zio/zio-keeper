@@ -9,7 +9,7 @@ import zio.stream._
 
 package object hyparview extends HyParViewConfig.Service[HyParViewConfig] {
 
-  type Enqueue[-A] = ZQueue[Any, Nothing, Any, Nothing, A, Nothing]
+  type Enqueue[-A] = ZQueue[Any, Nothing, Any, Nothing, A, Any]
 
   val getConfig =
     ZIO.accessM[HyParViewConfig](_.hyParViewConfig.getConfig)
@@ -53,7 +53,7 @@ package object hyparview extends HyParViewConfig.Service[HyParViewConfig] {
     to: T,
     msg: InitialMessage[T],
     allocate: ScopeIO,
-    connections: Queue[(T, Chunk[Byte] => IO[TransportError, Unit], Stream[Error, Chunk[Byte]], UIO[_])]
+    connections: Enqueue[(T, Chunk[Byte] => IO[TransportError, Unit], Stream[Error, Chunk[Byte]], UIO[_])]
   )(
     implicit
     ev1: TaggedCodec[InitialProtocol[T]],
@@ -135,7 +135,7 @@ package object hyparview extends HyParViewConfig.Service[HyParViewConfig] {
                                         full <- views.isActiveViewFull
                                         task <- if (full) {
                                                  views
-                                                   .addNodeToPassiveView(msg.sender)
+                                                   .addToPassiveView(msg.sender)
                                                    .as(
                                                      reject
                                                    )
@@ -197,7 +197,7 @@ package object hyparview extends HyParViewConfig.Service[HyParViewConfig] {
   def neighborProtocol[T](
     implicit ev: TaggedCodec[InitialProtocol[T]]
   ): ZStream[
-    Views[T] with Transport[T] with Logging[String],
+    Views[T] with Transport[T] with Logging[String] with TRandom,
     Nothing,
     (T, Chunk[Byte] => IO[TransportError, Unit], Stream[Error, Chunk[Byte]], UIO[_])
   ] =
@@ -207,15 +207,17 @@ package object hyparview extends HyParViewConfig.Service[HyParViewConfig] {
       )
       .flatMap { preallocate =>
         ZStream
-          .repeatEffect[Views[T], Nothing, (T, Neighbor[T])] {
+          .repeatEffect[Views[T] with TRandom, Nothing, (T, Neighbor[T])] {
             Views.using[T] { views =>
-              STM.atomically {
-                for {
-                  activeViewSize <- views.activeViewSize
-                  _              <- STM.check(activeViewSize < views.activeViewCapacity)
-                  nodeOpt        <- views.passiveView.flatMap(xs => views.selectOne(xs.toList))
-                  node           <- nodeOpt.fold[STM[Nothing, T]](STM.retry)(STM.succeed)
-                } yield (node, Neighbor(views.myself, activeViewSize <= 0))
+              TRandom.using { tRandom =>
+                STM.atomically {
+                  for {
+                    activeViewSize <- views.activeViewSize
+                    _              <- STM.check(activeViewSize < views.activeViewCapacity)
+                    nodeOpt        <- views.passiveView.flatMap(xs => tRandom.selectOne(xs.toList))
+                    node           <- nodeOpt.fold[STM[Nothing, T]](STM.retry)(STM.succeed)
+                  } yield (node, Neighbor(views.myself, activeViewSize <= 0))
+                }
               }
             }
           }
@@ -245,7 +247,7 @@ package object hyparview extends HyParViewConfig.Service[HyParViewConfig] {
           }
       }
 
-  def runActiveProtocol[R <: Views[T] with HyParViewConfig with Logging[String], E >: Error, T](
+  def runActiveProtocol[R <: Views[T] with HyParViewConfig with Logging[String] with TRandom, E >: Error, T](
     stream: ZStream[R, E, Chunk[Byte]],
     to: T,
     reply: Chunk[Byte] => IO[TransportError, Unit],
@@ -258,30 +260,45 @@ package object hyparview extends HyParViewConfig.Service[HyParViewConfig] {
     ZStream
       .managed(
         for {
-          env           <- ZManaged.environment[R]
-          keepInPassive <- Ref.make(false).toManaged_
-          finalizerRef  <- ZManaged.finalizerRef(_ => UIO.unit)
-          end           <- Promise.make[Unit, Nothing].toManaged_
-          config        <- getConfig.toManaged_
-          _ <- Views
-                .using[T] {
-                  views =>
-                    views.addNodeToActiveView(
-                      to,
-                      msg =>
-                        (for {
-                          chunk <- TaggedCodec.write[ActiveProtocol[T]](msg).mapError(SendError.SerializationFailed)
-                          _     <- reply(chunk).mapError(SendError.TransportFailed)
-                          _     <- log.debug(s"sendActiveProtocol: $to -> $msg")
-                        } yield ())
-                          .tapError(e => log.error(s"Failed sending message $msg to $to", Cause.fail(e)))
-                          .provide(env),
-                      end.fail(()).unit,
-                      f => finalizerRef.set(_ => keepInPassive.get.flatMap(f))
-                    )
-                }
-                .toManaged_
+          env <- ZManaged.environment[R]
+          end <- Promise.make[Unit, Nothing].toManaged_
+          keepInPassive <- {
+            for {
+              _ <- Views.using[T] { views =>
+                    views
+                      .addToActiveView(
+                        to,
+                        msg =>
+                          (for {
+                            chunk <- TaggedCodec.write[ActiveProtocol[T]](msg).mapError(SendError.SerializationFailed)
+                            _     <- reply(chunk).mapError(SendError.TransportFailed)
+                            _     <- log.debug(s"sendActiveProtocol: $to -> $msg")
+                          } yield ())
+                            .tapError(e => log.error(s"Failed sending message $msg to $to", Cause.fail(e)))
+                            .provide(env),
+                        end.fail(()).unit
+                      )
+                      .commit
+                  }
+              ref <- Ref.make(false)
+            } yield ref
+          }.toManaged(_.get.flatMap {
+            case true =>
+              Views.using[T] { views =>
+                (views.removeFromActiveView(to) *> views.addToPassiveView(to)).commit
+              }
+            case false =>
+              Views.using[T] { views =>
+                views.removeFromActiveView(to).commit
+              }
+          })
+          config <- getConfig.toManaged_
         } yield (keepInPassive, end, config)
+      )
+      .catchAll(
+        _ =>
+          ZStream
+            .fromEffect(log.warning(s"Not running active protocol as adding to active view failed for $to")) *> ZStream.empty
       )
       .flatMap {
         case (keepInPassive, end, config) =>
@@ -295,64 +312,26 @@ package object hyparview extends HyParViewConfig.Service[HyParViewConfig] {
                     keepInPassive.set(msg.alive).as((false, None))
                   case msg: ForwardJoin[T] =>
                     Views.using[T] { views =>
-                      val accept =
-                        log.info(s"Joining ${msg.originalSender} via ForwardJoin.") *>
-                          sendInitial(msg.originalSender, InitialMessage.ForwardJoinReply(views.myself))
+                      TRandom.using { tRandom =>
+                        val accept =
+                          log.info(s"Joining ${msg.originalSender} via ForwardJoin.") *>
+                            sendInitial(msg.originalSender, InitialMessage.ForwardJoinReply(views.myself))
 
-                      val process = views.activeViewSize.map[(Int, Option[TimeToLive])]((_, msg.ttl.step)).flatMap {
-                        case (i, _) if i <= 1 =>
-                          STM.succeed(accept)
-                        case (_, None) =>
-                          STM.succeed(accept)
-                        case (_, Some(ttl)) =>
-                          for {
-                            list <- views.activeView
-                                     .map(_.filterNot(n => n == msg.sender || n == msg.originalSender).toList)
-                            _ <- if (ttl.count == config.prwl) views.addNodeToPassiveView(msg.originalSender)
-                                else STM.unit
-                            forward = msg.copy(sender = views.myself, ttl = ttl)
-                          } yield {
-                            def go(candidates: List[T]): UIO[Unit] =
-                              views
-                                .selectOne(candidates)
-                                .commit
-                                .flatMap(
-                                  _.fold(ZIO.unit)(
-                                    c => views.send(c, forward).orElse(go(candidates.filterNot(_ == c)))
-                                  )
-                                )
-                            go(list)
-                          }
-                      }
-                      process.commit.flatten.as((true, None))
-                    }
-                  case msg: Shuffle[T] =>
-                    Views.using[T] { views =>
-                      views.activeViewSize
-                        .map[(Int, Option[TimeToLive])]((_, msg.ttl.step))
-                        .flatMap {
-                          case (0, _) | (_, None) =>
-                            for {
-                              passive   <- views.passiveView
-                              sentNodes = msg.activeNodes ++ msg.passiveNodes
-                              replyNodes <- views.selectN(
-                                             passive.filterNot(_ == msg.originalSender).toList,
-                                             config.shuffleNActive + config.shuffleNPassive
-                                           )
-                              _ <- views.addAllToPassiveView(sentNodes)
-                            } yield sendInitial(
-                              msg.originalSender,
-                              InitialMessage.ShuffleReply(replyNodes, sentNodes)
-                            ).ignore
+                        val process = views.activeViewSize.map[(Int, Option[TimeToLive])]((_, msg.ttl.step)).flatMap {
+                          case (i, _) if i <= 1 =>
+                            STM.succeed(accept)
+                          case (_, None) =>
+                            STM.succeed(accept)
                           case (_, Some(ttl)) =>
                             for {
-                              active <- views.activeView.map(
-                                         _.filterNot(n => n == msg.sender || n == msg.originalSender).toList
-                                       )
+                              list <- views.activeView
+                                       .map(_.filterNot(n => n == msg.sender || n == msg.originalSender).toList)
+                              _ <- if (ttl.count == config.prwl) views.addToPassiveView(msg.originalSender)
+                                  else STM.unit
                               forward = msg.copy(sender = views.myself, ttl = ttl)
                             } yield {
                               def go(candidates: List[T]): UIO[Unit] =
-                                views
+                                tRandom
                                   .selectOne(candidates)
                                   .commit
                                   .flatMap(
@@ -360,12 +339,54 @@ package object hyparview extends HyParViewConfig.Service[HyParViewConfig] {
                                       c => views.send(c, forward).orElse(go(candidates.filterNot(_ == c)))
                                     )
                                   )
-                              go(active)
+                              go(list)
                             }
                         }
-                        .commit
-                        .flatten
-                        .as((true, None))
+                        process.commit.flatten.as((true, None))
+                      }
+                    }
+                  case msg: Shuffle[T] =>
+                    Views.using[T] { views =>
+                      TRandom.using { tRandom =>
+                        views.activeViewSize
+                          .map[(Int, Option[TimeToLive])]((_, msg.ttl.step))
+                          .flatMap {
+                            case (0, _) | (_, None) =>
+                              for {
+                                passive   <- views.passiveView
+                                sentNodes = msg.activeNodes ++ msg.passiveNodes
+                                replyNodes <- tRandom.selectN(
+                                               passive.filterNot(_ == msg.originalSender).toList,
+                                               config.shuffleNActive + config.shuffleNPassive
+                                             )
+                                _ <- views.addAllToPassiveView(sentNodes)
+                              } yield sendInitial(
+                                msg.originalSender,
+                                InitialMessage.ShuffleReply(replyNodes, sentNodes)
+                              ).ignore
+                            case (_, Some(ttl)) =>
+                              for {
+                                active <- views.activeView.map(
+                                           _.filterNot(n => n == msg.sender || n == msg.originalSender).toList
+                                         )
+                                forward = msg.copy(sender = views.myself, ttl = ttl)
+                              } yield {
+                                def go(candidates: List[T]): UIO[Unit] =
+                                  tRandom
+                                    .selectOne(candidates)
+                                    .commit
+                                    .flatMap(
+                                      _.fold(ZIO.unit)(
+                                        c => views.send(c, forward).orElse(go(candidates.filterNot(_ == c)))
+                                      )
+                                    )
+                                go(active)
+                              }
+                          }
+                          .commit
+                          .flatten
+                          .as((true, None))
+                      }
                     }
                   case m: UserMessage => ZIO.succeed((true, Some(m.msg)))
                 }

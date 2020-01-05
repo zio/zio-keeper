@@ -9,19 +9,28 @@ import zio.test.environment.TestClock
 import zio.test.environment.Live
 import zio.stream.ZStream
 import zio.test.TestAspect._
+import zio.membership.withNoOpLogging
+import zio.logging.Logging
 
 object TransportSpec
     extends DefaultRunnableSpec({
+      type Env = Clock with Transport[Address] with Logging[String]
       val addr          = Address("localhost", 8081)
       val withTransport = tcp.withTcpTransport(10, 10.seconds, 10.seconds)
 
       val environment =
         for {
-          test <- (ZIO.environment[TestClock] @@ withTransport)
-          live <- (Live.live(ZIO.environment[Clock]) @@ withTransport).flatMap(Live.make(_))
+          test <- ZIO.environment[TestClock] @@
+                   withNoOpLogging[String] @@
+                   withTransport
+          live <- (
+                   Live.live(ZIO.environment[Clock]) @@
+                     withNoOpLogging[String] @@
+                     withTransport
+                 ).flatMap(Live.make(_))
           env = Mix[
-            Clock with Transport[Address],
-            Live[Clock with Transport[Address]]
+            Env,
+            Live[Env]
           ].mix(test, live)
         } yield env
 

@@ -2,6 +2,7 @@ package zio.membership.hyparview
 
 import zio._
 import zio.membership.transport.Transport
+import zio.membership.log
 import zio.random.Random
 import zio.macros.delegate._
 import zio.macros.delegate.syntax._
@@ -26,7 +27,7 @@ object HyParView {
       apply(localAddr, shuffleSchedule)
     )
 
-  def apply[R <: Transport[T] with Random with Logging[String] with Clock with HyParViewConfig, T](
+  def apply[R <: Transport[T] with TRandom with Logging[String] with Clock with HyParViewConfig, T](
     localAddr: T,
     shuffleSchedule: Schedule[R, ViewState, Any]
   )(
@@ -35,21 +36,23 @@ object HyParView {
     ev2: TaggedCodec[ActiveProtocol[T]],
     ev3: ByteCodec[JoinReply[T]]
   ): ZManaged[R, Error, Membership[T]] = {
-    type R1 = Clock with Random with Transport[T] with Logging[String] with HyParViewConfig with Views[T]
-
+    type R1 = Clock with TRandom with Transport[T] with Logging[String] with HyParViewConfig with Views[T]
     for {
-      r     <- ZManaged.environment[R]
-      cfg   <- getConfig.toManaged_
+      r   <- ZManaged.environment[R]
+      cfg <- getConfig.toManaged_
+      _ <- log
+            .info(s"Starting HyParView on $localAddr with configuration:\n${cfg.prettyPrint}")
+            .toManaged(_ => log.info("Shut down HyParView"))
       scope <- ScopeIO.make
       connections <- Queue
                       .bounded[(T, Chunk[Byte] => IO[TransportError, Unit], Stream[Error, Chunk[Byte]], UIO[_])](
                         cfg.connectionBuffer
                       )
-                      .toManaged_
-      userMessages <- Queue.dropping[Take[Error, Chunk[Byte]]](cfg.userMessagesBuffer).toManaged_
+                      .toManaged(_.shutdown)
+      userMessages <- Queue.dropping[Take[Error, Chunk[Byte]]](cfg.userMessagesBuffer).toManaged(_.shutdown)
       env <- {
         ZManaged.environment[
-          Clock with Random with Transport[T] with Logging[String] with HyParViewConfig
+          Clock with TRandom with Transport[T] with Logging[String] with HyParViewConfig
         ]
       } @@ {
         Views.withViews(

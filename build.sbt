@@ -66,7 +66,6 @@ lazy val membership = project
   .in(file("membership"))
   .settings(stdSettings("zio-membership"))
   .settings(
-    mainClass in (Compile, run) := Some("zio.membership.Main"),
     libraryDependencies ++= Seq(
 <<<<<<< HEAD
       "dev.zio"                %% "zio"                     % ZioVersion,

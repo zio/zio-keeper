@@ -8,6 +8,7 @@ import zio.membership.transport.{ Address, tcp }
 import zio.membership.hyparview.{ HyParView, HyParViewConfig }
 import upickle.default._
 import zio.logging.Logging
+import zio.membership.hyparview.TRandom
 
 object Main3 extends zio.App {
 
@@ -23,13 +24,14 @@ object Main3 extends zio.App {
       enrichWith[Logging[String]](new zio.logging.slf4j.Slf4jLogger.Live {
         def formatMessage(msg: String) = ZIO.succeed(msg)
       }) @@
+      TRandom.withTRandom @@
       tcp.withTcpTransport(
         64,
         10.seconds,
         10.seconds
       ) @@
       HyParViewConfig.withStaticConfig(
-        10, 10, 4, 2, 3, 3, 3, 256, 256, 16
+        10, 10, 4, 2, 3, 3, 3, 256, 256
       ) @@
       HyParView.withHyParView(
         Address("localhost", 8082),

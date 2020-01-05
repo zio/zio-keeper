@@ -9,6 +9,7 @@ import zio.membership.hyparview._
 import upickle.default._
 import zio.membership.transport.Address
 import zio.logging.Logging
+import zio.membership.hyparview.TRandom
 
 object Main1 extends zio.App {
 
@@ -22,6 +23,7 @@ object Main1 extends zio.App {
         )
 
     ZManaged.environment[ZEnv] @@
+      TRandom.withTRandom @@
       enrichWith[Logging[String]](new zio.logging.slf4j.Slf4jLogger.Live {
         def formatMessage(msg: String) = ZIO.succeed(msg)
       }) @@
@@ -31,7 +33,7 @@ object Main1 extends zio.App {
         10.seconds
       ) @@
       HyParViewConfig.withStaticConfig(
-        10, 10, 4, 2, 3, 3, 3, 256, 256, 16
+        10, 10, 4, 2, 3, 3, 3, 256, 256
       ) @@
       HyParView.withHyParView(
         Address("localhost", 8080),
@@ -40,6 +42,12 @@ object Main1 extends zio.App {
   }
 
   override def run(args: List[String]) =
-    env.useForever.catchAll(e => console.putStr(e.toString()).as(1))
+    // Fiber.dump.flatMap(ZIO.foreach(_)(_.prettyPrintM.flatMap(console.putStrLn))).delay(10.seconds).uninterruptible.fork *>
+    env
+      .use(_ => ZIO.never.unit)
+      .foldM(
+        e => console.putStrLn(e.toString()).as(1),
+        _ => ZIO.succeed(0)
+      )
 
 }
