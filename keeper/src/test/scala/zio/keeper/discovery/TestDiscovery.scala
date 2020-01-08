@@ -1,18 +1,13 @@
 package zio.keeper.discovery
 
-import zio.{ Ref, UIO, ZIO }
 import zio.keeper.membership.Member
+import zio.{ Ref, UIO, ZIO }
 
 trait TestDiscovery extends Discovery {
   override def discover: TestDiscovery.Service[Any]
 }
 
 object TestDiscovery {
-
-  trait Service[R] extends Discovery.Service[R] {
-    def addMember(m: Member): UIO[Unit]
-    def removeMember(m: Member): UIO[Unit]
-  }
 
   def test =
     Ref
@@ -24,6 +19,12 @@ object TestDiscovery {
           }
       )
 
+  trait Service[R] extends Discovery.Service[R] {
+    def addMember(m: Member): UIO[Unit]
+
+    def removeMember(m: Member): UIO[Unit]
+  }
+
   class Test(ref: Ref[Set[Member]]) extends Service[Any] {
 
     override val discoverNodes =
@@ -32,7 +33,9 @@ object TestDiscovery {
         addrs   <- ZIO.collectAll(members.map(_.addr.socketAddress))
       } yield addrs.toSet
 
-    def addMember(m: Member)    = ref.update(_ + m).unit
+    def addMember(m: Member) = ref.update(_ + m).unit
+
     def removeMember(m: Member) = ref.update(_ - m).unit
   }
+
 }

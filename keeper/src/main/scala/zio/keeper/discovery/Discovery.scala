@@ -10,10 +10,6 @@ trait Discovery {
 
 object Discovery {
 
-  trait Service[R] {
-    def discoverNodes: ZIO[R, Error, Set[zio.nio.SocketAddress]]
-  }
-
   def staticList(addresses: Set[SocketAddress]): Discovery = new Discovery {
 
     override def discover: Service[Any] = new Service[Any] {
@@ -21,5 +17,9 @@ object Discovery {
       override def discoverNodes: ZIO[Any, Error, Set[SocketAddress]] =
         ZIO.succeed(addresses)
     }
+  }
+
+  trait Service[R] {
+    def discoverNodes: ZIO[R, Error, Set[zio.nio.SocketAddress]]
   }
 }
