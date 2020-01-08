@@ -14,6 +14,9 @@ object BuildHelper {
   final private val Scala212 = "2.12.10"
   final private val Scala213 = "2.13.1"
 
+  final val ZioVersion = "1.0.0-RC17"
+  final val NioVersion = "0.4.0"
+
   final private val CommonOpts =
     Seq(
       "-encoding",
