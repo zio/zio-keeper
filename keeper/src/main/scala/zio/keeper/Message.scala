@@ -1,10 +1,10 @@
 package zio.keeper
 
 import zio.keeper.SerializationError.{ DeserializationTypeError, SerializationTypeError }
-import zio.{ Chunk, IO }
 import zio.keeper.membership.{ Member, NodeId }
 import zio.keeper.transport.ChannelOut
 import zio.nio.Buffer
+import zio.{ Chunk, IO }
 
 final case class Message(
   sender: NodeId,
