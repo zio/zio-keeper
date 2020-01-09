@@ -18,7 +18,8 @@ object HyParViewConfig {
     shuffleNPassive: Int,
     shuffleTTL: Int,
     connectionBuffer: Int,
-    userMessagesBuffer: Int
+    userMessagesBuffer: Int,
+    concurrentIncomingConnections: Int
   ) {
 
     val prettyPrint = s"""activeViewCapacity: $activeViewCapacity
@@ -29,8 +30,8 @@ object HyParViewConfig {
                          |shuffleNPassive: $shuffleNPassive
                          |shuffleTTL: $shuffleTTL
                          |connectionBuffer: $connectionBuffer
-                         |userMessagesBuffer: $userMessagesBuffer""".stripMargin
-
+                         |userMessagesBuffer: $userMessagesBuffer
+                         |concurrentIncomingConnections: $concurrentIncomingConnections""".stripMargin
   }
 
   def withStaticConfig(
@@ -42,7 +43,8 @@ object HyParViewConfig {
     shuffleNPassive: Int,
     shuffleTTL: Int,
     connectionBuffer: Int,
-    userMessagesBuffer: Int
+    userMessagesBuffer: Int,
+    concurrentIncomingConnections: Int
   ) =
     enrichWith[HyParViewConfig](
       HyParViewConfig(
@@ -55,7 +57,8 @@ object HyParViewConfig {
           shuffleNPassive,
           shuffleTTL,
           connectionBuffer,
-          userMessagesBuffer
+          userMessagesBuffer,
+          concurrentIncomingConnections
         )
       )
     )

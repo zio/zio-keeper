@@ -33,7 +33,7 @@ object Main1 extends zio.App {
         10.seconds
       ) @@
       HyParViewConfig.withStaticConfig(
-        10, 10, 4, 2, 3, 3, 3, 256, 256
+        10, 10, 4, 2, 3, 3, 3, 256, 256, 16
       ) @@
       HyParView.withHyParView(
         Address("localhost", 8080),

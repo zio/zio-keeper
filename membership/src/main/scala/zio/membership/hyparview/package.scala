@@ -90,7 +90,8 @@ package object hyparview extends HyParViewConfig.Service[HyParViewConfig] {
     )
 
   def receiveInitialProtocol[R <: Views[T] with Transport[T] with Logging[String] with HyParViewConfig, E >: Error, T](
-    stream: ZStream[R, E, Managed[Nothing, ChunkConnection]]
+    stream: ZStream[R, E, Managed[Nothing, ChunkConnection]],
+    concurrentConnections: Int = 16
   )(
     implicit
     ev1: TaggedCodec[InitialProtocol[T]],
@@ -98,7 +99,7 @@ package object hyparview extends HyParViewConfig.Service[HyParViewConfig] {
   ): ZStream[R, E, (T, Chunk[Byte] => IO[TransportError, Unit], Stream[Error, Chunk[Byte]], UIO[_])] =
     ZStream.managed(ScopeIO.make).flatMap { allocate =>
       stream
-        .mapMPar(16) { conM =>
+        .mapMPar(concurrentConnections) { conM =>
           allocate {
             conM
               .flatMap { con =>

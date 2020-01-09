@@ -62,7 +62,7 @@ object HyParView {
         )
       }
       sendInitial0 = (to: T, msg: InitialMessage[T]) => sendInitial[T](to, msg, scope, connections).provide(r)
-      _ <- receiveInitialProtocol[R1, Error, T](env.transport.bind(localAddr))
+      _ <- receiveInitialProtocol[R1, Error, T](env.transport.bind(localAddr), cfg.concurrentIncomingConnections)
             .merge(ZStream.fromQueue(connections))
             .merge(neighborProtocol.scheduleElements(Schedule.spaced(2.seconds)))
             .flatMapParSwitch(cfg.activeViewCapacity) {
