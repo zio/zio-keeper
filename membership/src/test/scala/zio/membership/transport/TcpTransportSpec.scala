@@ -4,6 +4,7 @@ import zio._
 import zio.clock.Clock
 import zio.duration._
 import zio.macros.delegate._
+import zio.macros.delegate.syntax._
 import zio.nio.SocketAddress
 import zio.test.Assertion._
 import zio.test._
