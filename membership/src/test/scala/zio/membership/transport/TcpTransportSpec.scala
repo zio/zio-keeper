@@ -1,14 +1,13 @@
 package zio.membership.transport
 
 import zio._
-import zio.test._
-import zio.test.Assertion._
 import zio.clock.Clock
 import zio.duration._
 import zio.macros.delegate._
 import zio.nio.SocketAddress
-import zio.test.environment.TestClock
-import zio.test.environment.Live
+import zio.test.Assertion._
+import zio.test._
+import zio.test.environment.{ Live, TestClock }
 
 object TransportSpec
     extends DefaultRunnableSpec({
