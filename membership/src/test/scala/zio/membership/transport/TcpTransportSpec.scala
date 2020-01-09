@@ -6,6 +6,7 @@ import zio.test.Assertion._
 import zio.clock.Clock
 import zio.duration._
 import zio.macros.delegate._
+import zio.macros.delegate.syntax._
 import zio.nio.SocketAddress
 import zio.test.environment.TestClock
 import zio.test.environment.Live

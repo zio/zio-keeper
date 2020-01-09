@@ -6,6 +6,7 @@ import zio.keeper.transport
 import zio.logging.Logging
 import zio.logging.slf4j.Slf4jLogger
 import zio.macros.delegate._
+import zio.macros.delegate.syntax._
 import zio.stream.Sink
 import zio.test.Assertion.equalTo
 import zio.test.environment.Live
