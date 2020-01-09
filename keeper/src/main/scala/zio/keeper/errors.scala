@@ -24,6 +24,7 @@ object SerializationError {
       extends SerializationError(
         msg = s"Cannot deserialize ${ct.runtimeClass.getCanonicalName} because of ${cause.getMessage}"
       )
+
 }
 
 final case class ServiceDiscoveryError(override val msg: String) extends Error
@@ -44,6 +45,7 @@ object ClusterError {
       extends ClusterError(msg = s"message [$message] with ack id: $ackId sent to: $to overdue timeout ")
 
   final case class UnknownNode(nodeId: NodeId) extends ClusterError(msg = nodeId.toString + " is not in cluster")
+
 }
 
 sealed abstract class TransportError(msg: String = "") extends Error(msg = msg)
@@ -64,4 +66,5 @@ object TransportError {
 
   final case class ChannelClosed(socketAddress: SocketAddress)
       extends TransportError(msg = s"Channel to $socketAddress is closed")
+
 }

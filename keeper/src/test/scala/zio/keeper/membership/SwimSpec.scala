@@ -53,6 +53,7 @@ object SwimSpec
 
       trait MemberHolder {
         def instance: Membership.Service[Any]
+
         def stop: UIO[Unit]
       }
 
@@ -76,7 +77,8 @@ object SwimSpec
           cluster <- start.await
         } yield new MemberHolder {
           def instance = cluster
-          def stop     = shutdown.succeed(()).unit
+
+          def stop = shutdown.succeed(()).unit
         }
 
       suite("cluster")(

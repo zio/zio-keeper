@@ -43,32 +43,10 @@ object TestNode {
     }
   )
 
-  def discoveryEnv(others: Set[Int]) =
-    ZIO.environment[zio.ZEnv] @@
-      enrichWithM[Discovery](
-        ZIO
-          .foreach(others)(
-            port => InetAddress.localHost.flatMap(addr => SocketAddress.inetSocketAddress(addr, port))
-          )
-          .orDie
-          .map(addrs => Discovery.staticList(addrs.toSet))
-      )
-
-  def membership(port: Int) =
-    ZManaged.environment[zio.ZEnv with Logging[String] with Transport with Discovery] @@
-      enrichWithManaged(
-        SWIM.join(port)
-      )
-
   val tcp =
     loggingEnv >>>
       ZIO.environment[zio.ZEnv with Logging[String]] @@
         transport.tcp.withTcpTransport(10.seconds, 10.seconds)
-
-  private def environment(port: Int, others: Set[Int]) =
-    discoveryEnv(others).toManaged_ @@
-      enrichWithManaged(tcp.toManaged_) >>>
-      membership(port)
 
   def start(port: Int, nodeName: String, otherPorts: Set[Int]) =
     (environment(port, otherPorts) >>> (for {
@@ -87,6 +65,28 @@ object TestNode {
         println(s"exit with error: $ex")
         1
       }, _ => 0)
+
+  private def environment(port: Int, others: Set[Int]) =
+    discoveryEnv(others).toManaged_ @@
+      enrichWithManaged(tcp.toManaged_) >>>
+      membership(port)
+
+  def discoveryEnv(others: Set[Int]) =
+    ZIO.environment[zio.ZEnv] @@
+      enrichWithM[Discovery](
+        ZIO
+          .foreach(others)(
+            port => InetAddress.localHost.flatMap(addr => SocketAddress.inetSocketAddress(addr, port))
+          )
+          .orDie
+          .map(addrs => Discovery.staticList(addrs.toSet))
+      )
+
+  def membership(port: Int) =
+    ZManaged.environment[zio.ZEnv with Logging[String] with Transport with Discovery] @@
+      enrichWithManaged(
+        SWIM.join(port)
+      )
 }
 
 object TcpServer extends zio.App {
