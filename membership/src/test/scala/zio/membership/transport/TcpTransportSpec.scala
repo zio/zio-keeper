@@ -1,6 +1,8 @@
 package zio.membership.transport
 
 import zio._
+import zio.test._
+import zio.test.Assertion._
 import zio.clock.Clock
 import zio.duration._
 import zio.macros.delegate._

@@ -21,11 +21,6 @@ object Membership {
     val identity: ZIO[R, Nothing, T]
 
     /**
-     * Send a message to all nodes.
-     */
-    def broadcast[R1 <: R, A](payload: A)(implicit ev: ByteCodec[R1, A]): ZIO[R1, Error, Unit]
-
-    /**
      * Get a list of all nodes that are currently considered healthy.
      * Note that depending on implementation this might only return the nodes
      * in a local view.

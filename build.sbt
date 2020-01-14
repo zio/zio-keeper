@@ -67,7 +67,6 @@ lazy val membership = project
   .settings(stdSettings("zio-membership"))
   .settings(
     libraryDependencies ++= Seq(
-<<<<<<< HEAD
       "dev.zio"                %% "zio"                     % ZioVersion,
       "dev.zio"                %% "zio-streams"             % ZioVersion,
       "dev.zio"                %% "zio-nio"                 % NioVersion,
@@ -76,21 +75,9 @@ lazy val membership = project
       "org.scala-lang.modules" %% "scala-collection-compat" % "2.1.3",
       "dev.zio"                %% "zio-logging"             % "0.0.4",
       "dev.zio"                %% "zio-logging-slf4j"       % "0.0.4",
-      "org.slf4j"               % "slf4j-log4j12"           % "1.7.26",
+      "org.slf4j"              % "slf4j-log4j12"            % "1.7.26",
       "dev.zio"                %% "zio-test"                % ZioVersion % Test,
       "dev.zio"                %% "zio-test-sbt"            % ZioVersion % Test,
-=======
-      "dev.zio"     %% "zio"               % "1.0.0-RC17",
-      "dev.zio"     %% "zio-streams"       % "1.0.0-RC17",
-      "dev.zio"     %% "zio-nio"           % "0.4.0",
-      "dev.zio"     %% "zio-macros-core"   % "0.6.2",
-      "dev.zio"     %% "zio-logging"       % "0.0.4",
-      "dev.zio"     %% "zio-logging-slf4j" % "0.0.4",
-      "org.slf4j"   % "slf4j-log4j12"      % "1.7.26",
-      "com.lihaoyi" %% "upickle"           % "0.8.0",
-      "dev.zio"     %% "zio-test"          % "1.0.0-RC17" % Test,
-      "dev.zio"     %% "zio-test-sbt"      % "1.0.0-RC17" % Test,
->>>>>>> update log messages
       ("com.github.ghik" % "silencer-lib" % "1.4.4" % Provided).cross(CrossVersion.full),
       compilerPlugin(("com.github.ghik" % "silencer-plugin" % "1.4.4").cross(CrossVersion.full))
     ),
