@@ -6,7 +6,7 @@ import scala.collection.immutable.SortedSet
 
 case class GossipState(members: SortedSet[Member]) extends AnyVal {
 
-  def addMember(member: Member) =
+  def addMember(member: Member): GossipState =
     copy(members = this.members + member)
 
   def diff(other: GossipState): StateDiff =
@@ -15,10 +15,10 @@ case class GossipState(members: SortedSet[Member]) extends AnyVal {
       other.members.diff(this.members)
     )
 
-  def merge(other: GossipState) =
+  def merge(other: GossipState): GossipState =
     copy(members = this.members ++ other.members)
 
-  def removeMember(member: Member) =
+  def removeMember(member: Member): GossipState =
     copy(members = this.members - member)
 
   override def toString: String = s"GossipState[${members.mkString(",")}] "

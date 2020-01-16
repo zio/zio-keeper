@@ -4,7 +4,7 @@ import zio.keeper.SerializationError.{ DeserializationTypeError, SerializationTy
 import zio.keeper.membership.{ Member, NodeId }
 import zio.keeper.transport.ChannelOut
 import zio.nio.Buffer
-import zio.{ Chunk, IO }
+import zio.{ Chunk, IO, ZIO }
 
 final case class Message(
   sender: NodeId,
@@ -15,7 +15,7 @@ object Message {
 
   private val HeaderSize = 24
 
-  private[keeper] def readMessage(channel: ChannelOut) =
+  private[keeper] def readMessage(channel: ChannelOut): ZIO[Any, Error, (Int, Message)] =
     channel.read.flatMap(
       headerBytes =>
         (for {

@@ -5,11 +5,11 @@ import zio.clock.Clock
 import zio.duration._
 import zio.keeper.ClusterError._
 import zio.keeper.Message.{ readMessage, serializeMessage }
-import zio.keeper.{ Message, _ }
 import zio.keeper.discovery.Discovery
 import zio.keeper.protocol.InternalProtocol
 import zio.keeper.protocol.InternalProtocol._
-import zio.keeper.transport.{ ChannelOut, Transport }
+import zio.keeper.transport.{ ChannelIn, ChannelOut, Transport }
+import zio.keeper.{ Message, _ }
 import zio.logging.Logging
 import zio.logging.slf4j._
 import zio.macros.delegate._
@@ -52,7 +52,7 @@ final class SWIM(
   override def send(data: Chunk[Byte], receipt: NodeId): IO[Error, Unit] =
     sendMessage(receipt, 2, data)
 
-  private def sendMessage(to: NodeId, msgType: Int, payload: Chunk[Byte]) =
+  private def sendMessage(to: NodeId, msgType: Int, payload: Chunk[Byte]): IO[Error, Unit] =
     for {
       node <- nodeChannels.get.map(_.get(to))
       _ <- node match {
@@ -62,7 +62,7 @@ final class SWIM(
           }
     } yield ()
 
-  private def acceptConnectionRequests =
+  private def acceptConnectionRequests: ZManaged[Transport with Logging[String] with Clock, TransportError, ChannelIn] =
     for {
       env          <- ZManaged.environment[Logging[String] with Transport with Clock]
       _            <- handleClusterMessages(ZStream.fromQueue(clusterMessageQueue)).fork.toManaged_
@@ -84,7 +84,7 @@ final class SWIM(
                }
     } yield server
 
-  private def ack(id: Long) =
+  private def ack(id: Long): ZIO[Logging[String], Nothing, Unit] =
     for {
       _ <- logger.info(s"message ack $id")
       promOpt <- acks
@@ -96,15 +96,13 @@ final class SWIM(
       _ <- promOpt.fold(ZIO.unit)(_.succeed(()).unit)
     } yield ()
 
-  private def addMember(member: Member, send: ChannelOut) =
+  private def addMember(member: Member, send: ChannelOut): ZIO[Logging[String], Nothing, Unit] =
     gossipStateRef.update(_.addMember(member)) *>
       nodeChannels.update(_ + (member.nodeId -> send)) *>
       propagateEvent(MembershipEvent.Join(member)) *>
       logger.info("add member: " + member)
 
-  private def connect(
-    addr: SocketAddress
-  ) =
+  private def connect(addr: SocketAddress): ZIO[Transport with Logging[String] with Clock, Error, Unit] =
     for {
       connectionInit <- Promise.make[Error, (Member, ChannelOut)]
       _ <- transport
@@ -134,7 +132,7 @@ final class SWIM(
       _ <- connectionInit.await
     } yield ()
 
-  private def connectToSeeds(seeds: Set[SocketAddress]) =
+  private def connectToSeeds(seeds: Set[SocketAddress]): ZIO[Transport with Logging[String] with Clock, Error, Unit] =
     for {
       _            <- ZIO.foreach(seeds)(seed => connect(seed).ignore)
       currentNodes <- nodeChannels.get
@@ -153,7 +151,9 @@ final class SWIM(
       result <- pf.lift(msg).getOrElse(ZIO.fail(UnexpectedMessage(bytes._2)))
     } yield result
 
-  private def handleClusterMessages(stream: Stream[Nothing, Message]) =
+  private def handleClusterMessages(
+    stream: Stream[Nothing, Message]
+  ): ZIO[Transport with Logging[String] with Clock, Error, Unit] =
     stream.tap { message =>
       (for {
         payload <- InternalProtocol.deserialize(message.payload)
@@ -215,7 +215,7 @@ final class SWIM(
     channel: ChannelOut,
     clusterMessageQueue: Queue[Message],
     userMessageQueue: Queue[Message]
-  ) = {
+  ): ZIO[Logging[String], Nothing, Unit] = {
     val loop = readMessage(channel)
       .flatMap {
         case (msgType, msg) =>
@@ -234,7 +234,7 @@ final class SWIM(
     loop.repeat(Schedule.doWhileM(_ => channel.isOpen.catchAll[Any, Nothing, Boolean](_ => ZIO.succeed(false))))
   }
 
-  private def runSwim =
+  private def runSwim: ZIO[Random with Logging[String] with Clock, Nothing, Int] =
     Ref.make(0).flatMap { roundRobinOffset =>
       val loop = gossipStateRef.get.map(_.members.filterNot(_ == localMember_).toIndexedSeq).flatMap { nodes =>
         if (nodes.nonEmpty) {
@@ -286,7 +286,7 @@ final class SWIM(
       loop.repeat(Schedule.spaced(10.seconds))
     }
 
-  private def removeMember(member: Member) =
+  private def removeMember(member: Member): ZIO[Logging[String], Nothing, Unit] =
     gossipStateRef.update(_.removeMember(member)) *>
       nodeChannels.modify(old => (old.get(member.nodeId), old - member.nodeId)).flatMap {
         case Some(channel) =>
@@ -298,10 +298,12 @@ final class SWIM(
       propagateEvent(MembershipEvent.Leave(member)) *>
       logger.info("remove member: " + member)
 
-  private def propagateEvent(event: MembershipEvent) =
+  private def propagateEvent(event: MembershipEvent): ZIO[Any, Nothing, Boolean] =
     clusterEventsQueue.offer(event)
 
-  private def sendInternalMessageWithAck(to: NodeId, timeout: Duration)(fn: Long => InternalProtocol) =
+  private def sendInternalMessageWithAck(to: NodeId, timeout: Duration)(
+    fn: Long => InternalProtocol
+  ): ZIO[Logging[String] with Clock, Error, Unit] =
     for {
       offset <- msgOffset.update(_ + 1)
       prom   <- Promise.make[Error, Unit]
@@ -345,7 +347,9 @@ final class SWIM(
 
 object SWIM {
 
-  def withSWIM(port: Int) =
+  def withSWIM(
+    port: Int
+  ): EnrichWithManaged[Logging[String] with Clock with Random with Transport with Discovery, Error, Membership] =
     enrichWithManaged[Membership](join(port))
 
   def join(

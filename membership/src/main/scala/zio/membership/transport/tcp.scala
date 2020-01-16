@@ -17,7 +17,8 @@ object tcp {
     maxConnections: Int,
     connectionTimeout: Duration,
     sendTimeout: Duration
-  ) = enrichWithM[Transport](tcpTransport(maxConnections, connectionTimeout, sendTimeout))
+  ): EnrichWithM[Clock, Nothing, Transport] =
+    enrichWithM[Transport](tcpTransport(maxConnections, connectionTimeout, sendTimeout))
 
   def tcpTransport(
     maxConnections: Int,

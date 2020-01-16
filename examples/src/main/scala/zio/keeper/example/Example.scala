@@ -13,22 +13,23 @@ import zio.nio.{ InetAddress, SocketAddress }
 import zio.{ Chunk, Schedule, ZIO, ZManaged }
 import zio.clock._
 import zio.keeper.membership._
+import zio.ZEnv
 
 object Node1 extends zio.ManagedApp {
 
-  def run(args: List[String]) =
+  def run(args: List[String]): ZManaged[ZEnv, Nothing, Int] =
     TestNode.start(5557, "Node1", Set.empty)
 }
 
 object Node2 extends zio.ManagedApp {
 
-  def run(args: List[String]) =
+  def run(args: List[String]): ZManaged[ZEnv, Nothing, Int] =
     TestNode.start(5558, "Node2", Set(5557))
 }
 
 object Node3 extends zio.ManagedApp {
 
-  def run(args: List[String]) =
+  def run(args: List[String]): ZManaged[ZEnv, Nothing, Int] =
     TestNode.start(5559, "Node3", Set(5558))
 }
 
@@ -47,7 +48,7 @@ object TestNode {
       ZIO.environment[zio.ZEnv with Logging[String]] @@
         transport.tcp.withTcpTransport(10.seconds, 10.seconds)
 
-  def start(port: Int, nodeName: String, otherPorts: Set[Int]) =
+  def start(port: Int, nodeName: String, otherPorts: Set[Int]): ZManaged[ZEnv, Nothing, Int] =
     (environment(port, otherPorts) >>> (for {
       _ <- sleep(5.seconds).toManaged_
       _ <- broadcast(Chunk.fromArray(nodeName.getBytes)).ignore.toManaged_

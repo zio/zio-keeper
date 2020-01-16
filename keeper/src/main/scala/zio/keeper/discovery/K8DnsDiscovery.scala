@@ -32,7 +32,7 @@ trait K8DnsDiscovery extends Discovery.Service[Any] {
   )
   val logging: Logging.Service[Any, String]
 
-  def lookup(serviceDns: InetAddress, serviceDnsTimeout: Duration) = {
+  def lookup(serviceDns: InetAddress, serviceDnsTimeout: Duration): ZIO[Any, Exception, Set[InetAddress]] = {
     import scala.jdk.CollectionConverters._
     val env = new util.Hashtable[String, String]
     env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.dns.DnsContextFactory")
@@ -55,7 +55,7 @@ trait K8DnsDiscovery extends Discovery.Service[Any] {
     } yield addresses
   }
 
-  private def extractHost(server: String) =
+  private def extractHost(server: String): ZIO[Any, Error, String] =
     logging.debug("k8 dns on response: " + server) *>
       IO.effectTotal {
         val host = server.split(" ")(3)
@@ -76,7 +76,7 @@ object K8DnsDiscovery {
     addr: zio.nio.InetAddress,
     timeout: Duration,
     port: Int
-  ) = enrichWithM[Discovery](k8DnsDiscovery(addr, timeout, port))
+  ): EnrichWithM[Logging[String], Nothing, Discovery] = enrichWithM[Discovery](k8DnsDiscovery(addr, timeout, port))
 
   def k8DnsDiscovery(
     addr: zio.nio.InetAddress,
