@@ -75,7 +75,7 @@ lazy val membership = project
       "org.scala-lang.modules" %% "scala-collection-compat" % "2.1.3",
       "dev.zio"                %% "zio-logging"             % "0.0.4",
       "dev.zio"                %% "zio-logging-slf4j"       % "0.0.4",
-      "org.slf4j"              % "slf4j-log4j12"            % "1.7.26",
+      "org.slf4j"              % "slf4j-log4j12"            % "1.7.30",
       "dev.zio"                %% "zio-test"                % ZioVersion % Test,
       "dev.zio"                %% "zio-test-sbt"            % ZioVersion % Test,
       ("com.github.ghik" % "silencer-lib" % "1.4.4" % Provided).cross(CrossVersion.full),
