@@ -54,7 +54,7 @@ lazy val keeper = project
       "dev.zio"                %% "zio-nio"                 % NioVersion,
       "dev.zio"                %% "zio-macros-core"         % "0.6.2",
       "dev.zio"                %% "zio-logging-slf4j"       % "0.0.4",
-      "com.lihaoyi"            %% "upickle"                 % "0.9.7",
+      "com.lihaoyi"            %% "upickle"                 % "0.9.8",
       "org.scala-lang.modules" %% "scala-collection-compat" % "2.1.3",
       "dev.zio"                %% "zio-test"                % ZioVersion % Test,
       "dev.zio"                %% "zio-test-sbt"            % ZioVersion % Test
@@ -71,7 +71,7 @@ lazy val membership = project
       "dev.zio"                %% "zio-streams"             % ZioVersion,
       "dev.zio"                %% "zio-nio"                 % NioVersion,
       "dev.zio"                %% "zio-macros-core"         % "0.6.2",
-      "com.lihaoyi"            %% "upickle"                 % "0.9.7",
+      "com.lihaoyi"            %% "upickle"                 % "0.9.8",
       "org.scala-lang.modules" %% "scala-collection-compat" % "2.1.3",
       "dev.zio"                %% "zio-logging"             % "0.0.4",
       "dev.zio"                %% "zio-logging-slf4j"       % "0.0.4",
