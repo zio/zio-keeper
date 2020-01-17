@@ -1,82 +1,132 @@
 package zio.membership.transport
 
 import zio._
-import zio.nio._
 import zio.nio.channels._
 import zio.stream._
 import zio.duration._
 import zio.clock.Clock
-import zio.membership.{ BindFailed, ExceptionThrown, RequestTimeout }
+import zio.membership.TransportError
+import zio.membership.log
+import TransportError._
 import java.math.BigInteger
 import zio.macros.delegate._
-import zio.membership.RequestTimeout
+import zio.logging.Logging
+import java.{ util => ju }
+import zio.membership.uuid
 
 object tcp {
 
   def withTcpTransport(
-    maxConnections: Int,
+    maxConnections: Long,
     connectionTimeout: Duration,
-    sendTimeout: Duration
-  ) = enrichWithM[Transport](tcpTransport(maxConnections, connectionTimeout, sendTimeout))
+    sendTimeout: Duration,
+    retryInterval: Duration = 50.millis
+  ) =
+    enrichWithM[Transport[Address]](
+      tcpTransport(
+        maxConnections,
+        connectionTimeout,
+        sendTimeout,
+        retryInterval
+      )
+    )
 
   def tcpTransport(
-    maxConnections: Int,
+    maxConnections: Long,
     connectionTimeout: Duration,
-    sendTimeout: Duration
-  ): ZIO[Clock, Nothing, Transport] =
-    ZIO.environment[Clock].map { env =>
-      new Transport {
-        val transport = new Transport.Service[Any] {
-          // TODO: cache connections
-          override def send(to: SocketAddress, data: Chunk[Byte]) =
-            AsynchronousSocketChannel()
-              .use { client =>
-                val size = data.size
-                for {
-                  _ <- client.connect(to)
-                  _ <- client.write(Chunk((size >>> 24).toByte, (size >>> 16).toByte, (size >>> 8).toByte, size.toByte))
-                  _ <- client.write(data)
-                } yield ()
-              }
-              .mapError(ExceptionThrown(_))
-              .timeoutFail(RequestTimeout(sendTimeout))(sendTimeout)
-              .provide(env)
+    sendTimeout: Duration,
+    retryInterval: Duration = 50.millis
+  ): URIO[Clock with Logging[String], Transport[Address]] = ZIO.access { env =>
+    def toConnection(channel: AsynchronousSocketChannel, id: ju.UUID) =
+      for {
+        writeLock <- Semaphore.make(1)
+        readLock  <- Semaphore.make(1)
+      } yield {
+        new Connection[Any, TransportError, Chunk[Byte]] {
+          def send(dataChunk: Chunk[Byte]) = {
+            val size = dataChunk.size
+            val sizeChunk = Chunk(
+              (size >>> 24).toByte,
+              (size >>> 16).toByte,
+              (size >>> 8).toByte,
+              size.toByte
+            )
 
-          override def bind(addr: SocketAddress) =
+            log.info(s"$id: Sending $size bytes") *>
+              writeLock
+                .withPermit {
+                  channel
+                    .write(sizeChunk ++ dataChunk)
+                    .mapError(ExceptionThrown(_))
+                    .timeoutFail(RequestTimeout(sendTimeout))(sendTimeout)
+                    .unit
+                }
+          }.provide(env)
+          val receive = {
             ZStream
-              .unwrapManaged {
-                AsynchronousServerSocketChannel()
-                  .flatMap(s => s.bind(addr).toManaged_.as(s))
-                  .mapError(BindFailed(addr, _))
-                  .withEarlyRelease
-                  .map {
-                    case (close, server) =>
-                      val messages = ZStream
-                        .repeatEffect(server.accept.preallocate)
-                        .flatMapPar[Clock, Throwable, Chunk[Byte]](maxConnections) { connection =>
-                          ZStream.unwrapManaged {
-                            connection.map { channel =>
-                              ZStream
-                                .repeatEffect(
-                                  for {
-                                    length <- channel
-                                               .read(4)
-                                               .flatMap(c => ZIO.effect(new BigInteger(c.toArray).intValue()))
-                                    data <- channel.read(length * 8)
-                                  } yield data
-                                )
-                                .timeout(connectionTimeout)
-                                .catchAllCause(_ => ZStream.empty)
-                            }
-                          }
-                        }
-                        .mapError(ExceptionThrown)
-                      // hack to properly handle interrupts
-                      messages.merge(ZStream.never.ensuring(close))
-                  }
+              .repeatEffect {
+                readLock.withPermit {
+                  for {
+                    length <- channel
+                               .read(4)
+                               .flatMap(
+                                 c => ZIO.effect(new BigInteger(c.toArray).intValue())
+                               )
+                    data <- channel.read(length * 8)
+                    _    <- log.debug(s"$id: Received $length bytes")
+                  } yield data
+                }
               }
-              .provide(env)
+              .catchAll(_ => ZStream.empty)
+          }.provide(env)
         }
       }
+
+    new Transport[Address] {
+      val transport = new Transport.Service[Any, Address] {
+        override def connect(to: Address) = {
+          for {
+            id <- uuid.makeRandom.toManaged_
+            _  <- log.debug(s"$id: new outbound connection to $to").toManaged_
+            connection <- AsynchronousSocketChannel()
+                           .mapM { channel =>
+                             to.toInetSocketAddres.flatMap(channel.connect(_)) *> toConnection(channel, id)
+                           }
+                           .mapError(ExceptionThrown(_))
+                           .retry[Clock, TransportError, Int](Schedule.spaced(retryInterval))
+                           .timeout(connectionTimeout)
+                           .flatMap(
+                             _.fold[Managed[TransportError, ChunkConnection]](
+                               ZManaged.fail(TransportError.ConnectionTimeout(connectionTimeout))
+                             )(ZManaged.succeed)
+                           )
+          } yield connection
+        }.provide(env)
+
+        override def bind(addr: Address) = {
+          ZStream.fromEffect(log.info(s"Binding transport to $addr")) *>
+            ZStream.unwrapManaged {
+              AsynchronousServerSocketChannel()
+                .tapM(server => addr.toInetSocketAddres.flatMap(server.bind))
+                .zip(ZManaged.fromEffect(Semaphore.make(maxConnections)))
+                .mapError(BindFailed(addr, _))
+                .withEarlyRelease
+                .map {
+                  case (close, (server, lock)) =>
+                    val accept = ZStream
+                      .repeatEffect(server.accept.preallocate)
+                      .mapM { channel =>
+                        for {
+                          id <- uuid.makeRandom
+                          _  <- log.debug(s"$id: new inbound connection")
+                        } yield (lock.withPermitManaged *> channel).mapM(toConnection(_, id))
+                      }
+                      .mapError(BindFailed(addr, _))
+                    accept.merge(ZStream.never.ensuring(close))
+                }
+            }
+        }.provide(env)
+      }
     }
+  }
 }
