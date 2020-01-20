@@ -9,6 +9,9 @@ import zio.random.Random
 import scala.collection.immutable.{ Stream => ScStream }
 import zio.macros.delegate._
 
+/**
+ * Service that allows to acesss randomness in a STM transaction.
+ */
 trait TRandom {
   val tRandom: TRandom.Service
 }
@@ -16,7 +19,15 @@ trait TRandom {
 object TRandom {
 
   trait Service {
+
+    /**
+     * Pick a random element from a list.
+     */
     def selectOne[A](values: List[A]): STM[Nothing, Option[A]]
+
+    /**
+     * Pick `n` random elements from a list without replacement.
+     */
     def selectN[A](values: List[A], n: Int): STM[Nothing, List[A]]
   }
 
@@ -45,21 +56,19 @@ object TRandom {
               } yield Some(selected)
             }
 
-          override def selectN[A](values: List[A], n: Int): STM[Nothing, List[A]] =
-            if (values.isEmpty) STM.succeed(Nil)
-            else {
-              def go(remaining: Vector[A], toPick: Int, acc: Vector[A]): STM[Nothing, Vector[A]] =
-                (remaining, toPick) match {
-                  case (Vector(), _) | (_, 0) => STM.succeed(acc)
-                  case _ =>
-                    pickRandom(remaining.size).flatMap { index =>
-                      val x  = remaining(index)
-                      val xs = remaining.patch(index, Nil, 1)
-                      go(xs, toPick - 1, x +: acc)
-                    }
-                }
-              go(values.toVector, n, Vector()).map(_.toList)
-            }
+          override def selectN[A](values: List[A], n: Int): STM[Nothing, List[A]] = {
+            def go(remaining: Vector[A], toPick: Int, acc: List[A]): STM[Nothing, List[A]] =
+              (remaining, toPick) match {
+                case (Vector(), _) | (_, 0) => STM.succeed(acc)
+                case _ =>
+                  pickRandom(remaining.size).flatMap { index =>
+                    val x  = remaining(index)
+                    val xs = remaining.patch(index, Nil, 1)
+                    go(xs, toPick - 1, x :: acc)
+                  }
+              }
+            go(values.toVector, Math.max(0, n), Nil)
+          }
         }
       }
     }
