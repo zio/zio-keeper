@@ -1,0 +1,13 @@
+<component name="libraryTable">
+  <library name="sbt: com.lihaoyi:upickle-implicits_2.12:0.9.6:jar">
+    <CLASSES>
+      <root url="jar://$USER_HOME$/.cache/coursier/v1/https/repo1.maven.org/maven2/com/lihaoyi/upickle-implicits_2.12/0.9.6/upickle-implicits_2.12-0.9.6.jar!/" />
+    </CLASSES>
+    <JAVADOC>
+      <root url="jar://$USER_HOME$/.cache/coursier/v1/https/repo1.maven.org/maven2/com/lihaoyi/upickle-implicits_2.12/0.9.6/upickle-implicits_2.12-0.9.6-javadoc.jar!/" />
+    </JAVADOC>
+    <SOURCES>
+      <root url="jar://$USER_HOME$/.cache/coursier/v1/https/repo1.maven.org/maven2/com/lihaoyi/upickle-implicits_2.12/0.9.6/upickle-implicits_2.12-0.9.6-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>

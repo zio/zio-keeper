@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/docs.iml" filepath="$PROJECT_DIR$/.idea/modules/docs.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/docs-build.iml" filepath="$PROJECT_DIR$/.idea/modules/docs-build.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/examples.iml" filepath="$PROJECT_DIR$/.idea/modules/examples.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/examples-build.iml" filepath="$PROJECT_DIR$/.idea/modules/examples-build.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/keeper.iml" filepath="$PROJECT_DIR$/.idea/modules/keeper.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/keeper-build.iml" filepath="$PROJECT_DIR$/.idea/modules/keeper-build.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/membership.iml" filepath="$PROJECT_DIR$/.idea/modules/membership.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/membership-build.iml" filepath="$PROJECT_DIR$/.idea/modules/membership-build.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/root.iml" filepath="$PROJECT_DIR$/.idea/modules/root.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/root-build.iml" filepath="$PROJECT_DIR$/.idea/modules/root-build.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/zio-keeper.iml" filepath="$PROJECT_DIR$/.idea/zio-keeper.iml" />
+    </modules>
+  </component>
+</project>

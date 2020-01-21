@@ -1,0 +1,13 @@
+<component name="libraryTable">
+  <library name="sbt: com.openhtmltopdf:openhtmltopdf-rtl-support:0.0.1-RC19:jar">
+    <CLASSES>
+      <root url="jar://$USER_HOME$/.cache/coursier/v1/https/repo1.maven.org/maven2/com/openhtmltopdf/openhtmltopdf-rtl-support/0.0.1-RC19/openhtmltopdf-rtl-support-0.0.1-RC19.jar!/" />
+    </CLASSES>
+    <JAVADOC>
+      <root url="jar://$USER_HOME$/.cache/coursier/v1/https/repo1.maven.org/maven2/com/openhtmltopdf/openhtmltopdf-rtl-support/0.0.1-RC19/openhtmltopdf-rtl-support-0.0.1-RC19-javadoc.jar!/" />
+    </JAVADOC>
+    <SOURCES>
+      <root url="jar://$USER_HOME$/.cache/coursier/v1/https/repo1.maven.org/maven2/com/openhtmltopdf/openhtmltopdf-rtl-support/0.0.1-RC19/openhtmltopdf-rtl-support-0.0.1-RC19-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>
