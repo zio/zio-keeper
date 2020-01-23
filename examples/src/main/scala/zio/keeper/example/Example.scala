@@ -48,7 +48,7 @@ object TestNode {
       ZIO.environment[zio.ZEnv with Logging[String]] @@
         transport.tcp.withTcpTransport(10.seconds, 10.seconds)
 
-  def start(port: Int, nodeName: String, otherPorts: Set[Int]): ZManaged[ZEnv, Nothing, Int] =
+  def start(port: Int, nodeName: String, otherPorts: Set[Int]) =
     (environment(port, otherPorts) >>> (for {
       _ <- sleep(5.seconds).toManaged_
       _ <- broadcast(Chunk.fromArray(nodeName.getBytes)).ignore.toManaged_
@@ -66,7 +66,7 @@ object TestNode {
         1
       }, _ => 0)
 
-  private def environment(port: Int, others: Set[Int]) =
+  private def environment(port: Int, others: Set[Int])=
     discoveryEnv(others).toManaged_ @@
       enrichWithManaged(tcp.toManaged_) >>>
       membership(port)
