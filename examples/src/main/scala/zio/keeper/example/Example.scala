@@ -51,12 +51,12 @@ object TestNode {
   def start(port: Int, nodeName: String, otherPorts: Set[Int]) =
     (environment(port, otherPorts) >>> (for {
       _ <- sleep(5.seconds).toManaged_
-      _ <- broadcast(Chunk.fromArray(nodeName.getBytes)).ignore.toManaged_
+      _ <- broadcast(nodeName, Chunk.fromArray(nodeName.getBytes)).ignore.toManaged_
       _ <- receive
             .foreach(
               message =>
-                putStrLn(new String(message.payload.toArray))
-                  *> send(message.payload, message.sender).ignore
+                putStrLn(s"id: ${message.id}, payload: ${new String(message.payload.toArray)}")
+                  *> send(message.id, message.payload, message.sender).ignore
                   *> sleep(5.seconds)
             )
             .toManaged_

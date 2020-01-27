@@ -5,8 +5,8 @@ import zio.{ Chunk, ZIO }
 
 package object membership extends Membership.Service[Membership] {
 
-  override def broadcast(data: Chunk[Byte]): ZIO[Membership, Error, Unit] =
-    ZIO.accessM[Membership](_.membership.broadcast(data))
+  override def broadcast(messageId: String, data: Chunk[Byte]): ZIO[Membership, Error, Unit] =
+    ZIO.accessM[Membership](_.membership.broadcast(messageId, data))
 
   override def events: ZStream[Membership, Error, MembershipEvent] =
     ZStream.unwrap(ZIO.access[Membership](_.membership.events))
@@ -20,6 +20,6 @@ package object membership extends Membership.Service[Membership] {
   override def receive: ZStream[Membership, Error, Message] =
     ZStream.unwrap(ZIO.access[Membership](_.membership.receive))
 
-  override def send(data: Chunk[Byte], receipt: NodeId): ZIO[Membership, Error, Unit] =
-    ZIO.accessM[Membership](_.membership.send(data, receipt))
+  override def send(messageId: String, data: Chunk[Byte], receipt: NodeId): ZIO[Membership, Error, Unit] =
+    ZIO.accessM[Membership](_.membership.send(messageId, data, receipt))
 }

@@ -11,7 +11,7 @@ trait Membership {
 object Membership {
 
   trait Service[R] {
-    def broadcast(data: Chunk[Byte]): ZIO[R, Error, Unit]
+    def broadcast(messageId: String, data: Chunk[Byte]): ZIO[R, Error, Unit]
 
     def events: ZStream[R, Error, MembershipEvent]
 
@@ -21,7 +21,7 @@ object Membership {
 
     def receive: ZStream[R, Error, Message]
 
-    def send(data: Chunk[Byte], receipt: NodeId): ZIO[R, Error, Unit]
+    def send(messageId: String, data: Chunk[Byte], receipt: NodeId): ZIO[R, Error, Unit]
   }
 
 }

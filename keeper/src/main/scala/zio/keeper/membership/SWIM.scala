@@ -39,8 +39,8 @@ final class SWIM(
   override val localMember: ZIO[Any, Nothing, Member] =
     ZIO.succeed(localMember_)
 
-  override def broadcast(data: Chunk[Byte]): IO[Error, Unit] =
-    serializeMessage(localMember_, data, 2).flatMap[Any, Error, Unit](publishToBroadcast).unit
+  override def broadcast(messageId: String, data: Chunk[Byte]): IO[Error, Unit] =
+    serializeMessage(messageId, localMember_, data, 2).flatMap[Any, Error, Unit](publishToBroadcast).unit
 
   override def nodes: ZIO[Any, Nothing, List[NodeId]] =
     nodeChannels.get
@@ -49,15 +49,15 @@ final class SWIM(
   override def receive: Stream[Error, Message] =
     zio.stream.Stream.fromQueue(userMessageQueue)
 
-  override def send(data: Chunk[Byte], receipt: NodeId): IO[Error, Unit] =
-    sendMessage(receipt, 2, data)
+  override def send(messageId: String, data: Chunk[Byte], receipt: NodeId): IO[Error, Unit] =
+    sendMessage(receipt, 2, messageId, data)
 
-  private def sendMessage(to: NodeId, msgType: Int, payload: Chunk[Byte]) =
+  private def sendMessage(to: NodeId, msgType: Int, messageId: String, payload: Chunk[Byte]) =
     for {
       node <- nodeChannels.get.map(_.get(to))
       _ <- node match {
             case Some(channel) =>
-              serializeMessage(localMember_, payload, msgType) >>= channel.send
+              serializeMessage(messageId, localMember_, payload, msgType) >>= channel.send
             case None => ZIO.fail(UnknownNode(to))
           }
     } yield ()
@@ -327,7 +327,7 @@ final class SWIM(
     for {
       _       <- logger.info(s"sending $msg")
       payload <- msg.serialize
-      msg     <- serializeMessage(localMember_, payload, 1)
+      msg     <- serializeMessage("", localMember_, payload, 1)
       _       <- to.send(msg)
     } yield ()
   }.catchAll { ex =>
