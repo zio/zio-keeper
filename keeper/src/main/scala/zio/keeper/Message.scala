@@ -33,7 +33,12 @@ object Message {
           .mapError(e => DeserializationTypeError[Message](e))
     )
 
-  private[keeper] def serializeMessage(messageId: String, member: Member, payload: Chunk[Byte], messageType: Int): IO[Error, Chunk[Byte]] = {
+  private[keeper] def serializeMessage(
+    messageId: String,
+    member: Member,
+    payload: Chunk[Byte],
+    messageType: Int
+  ): IO[Error, Chunk[Byte]] = {
     val idChunk = Chunk.fromArray(messageId.getBytes())
     for {
       byteBuffer <- Buffer.byte(HeaderSize + payload.length)
