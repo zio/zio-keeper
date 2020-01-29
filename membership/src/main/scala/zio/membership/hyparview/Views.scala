@@ -160,15 +160,8 @@ private[hyparview] object Views {
                 else {
                   for {
                     size <- passiveViewSize
-                    _ <- if (size < passiveViewCapacity) STM.unit
-                        else {
-                          for {
-                            list    <- passiveView0.toList
-                            dropped <- tRandom.selectOne(list)
-                            _       <- STM.foreach(dropped)(passiveView0.delete(_))
-                          } yield ()
-                        }
-                    _ <- passiveView0.put(node)
+                    _    <- if (size < passiveViewCapacity) STM.unit else dropOneFromPassive
+                    _    <- passiveView0.put(node)
                   } yield ()
                 }
           } yield ()
@@ -185,9 +178,21 @@ private[hyparview] object Views {
         override def addShuffledNodes(sentOriginally: Set[T], replied: Set[T]) =
           for {
             _         <- passiveView0.removeIf(sentOriginally.contains)
+            size      <- passiveViewSize
+            _         <- dropNFromPassive(replied.size - (passiveViewCapacity - size))
             _         <- addAllToPassiveView(replied.toList)
             remaining <- passiveViewSize.map(passiveViewCapacity - _)
             _         <- addAllToPassiveView(sentOriginally.take(remaining).toList)
+          } yield ()
+
+        private def dropNFromPassive(n: Int): STM[Nothing, Unit] =
+          if (n <= 0) STM.unit else dropOneFromPassive *> dropNFromPassive(n - 1)
+
+        private val dropOneFromPassive =
+          for {
+            list    <- passiveView0.toList
+            dropped <- tRandom.selectOne(list)
+            _       <- STM.foreach(dropped)(passiveView0.delete(_))
           } yield ()
       }
     }
