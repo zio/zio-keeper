@@ -4,7 +4,7 @@ import zio.test._
 import zio.test.Assertion._
 import zio.test.environment.TestRandom
 
-object TransportSpec
+object TRandomSpec
     extends DefaultRunnableSpec({
       def make(seed: Long) =
         TestRandom.setSeed(seed) *>
