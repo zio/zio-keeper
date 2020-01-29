@@ -11,7 +11,12 @@ import zio.membership.TransportError
 
 object ViewsSpec
     extends DefaultRunnableSpec({
-      def make[T](myself: T, activeCapacity: Int, passiveCapacity: Int, seed: Long = 0L) =
+      def make[T](
+        myself: T,
+        activeCapacity: Int,
+        passiveCapacity: Int,
+        seed: Long = 0L
+      ): ZIO[TestRandom, Nothing, Views.Service[Any, T]] =
         (TestRandom.setSeed(seed) *>
           TRandom.make) >>> Views.make(myself, activeCapacity, passiveCapacity).map(_.views)
 

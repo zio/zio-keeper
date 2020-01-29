@@ -160,9 +160,8 @@ private[hyparview] object Views {
                 else {
                   for {
                     size <- passiveViewSize
-                    _ <- if (size < passiveViewCapacity) STM.unit
-                        else dropOneFromPassive
-                    _ <- passiveView0.put(node)
+                    _    <- if (size < passiveViewCapacity) STM.unit else dropOneFromPassive
+                    _    <- passiveView0.put(node)
                   } yield ()
                 }
           } yield ()
@@ -186,10 +185,8 @@ private[hyparview] object Views {
             _         <- addAllToPassiveView(sentOriginally.take(remaining).toList)
           } yield ()
 
-        private def dropNFromPassive(n: Int): STM[Nothing, Unit] = n match {
-          case x if x <= 0 => STM.unit
-          case _           => dropOneFromPassive *> dropNFromPassive(n - 1)
-        }
+        private def dropNFromPassive(n: Int): STM[Nothing, Unit] =
+          if (n <= 0) STM.unit else dropOneFromPassive *> dropNFromPassive(n - 1)
 
         private val dropOneFromPassive =
           for {
