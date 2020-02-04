@@ -72,7 +72,7 @@ final class SWIM(
       server <- transport.bind(localAddress) { channelOut =>
                  (for {
                    state <- gossipStateRef.get
-                   _     <- sendInternalMessage(channelOut, NewConnection(state, localMember_))
+                   _     <- sendInternalMessage(channelOut, UUID.randomUUID(), NewConnection(state, localMember_))
                    _ <- expects(channelOut) {
                          case JoinCluster(remoteState, remoteMember) =>
                            logger.info(remoteMember.toString + " joined cluster") *>
@@ -142,7 +142,7 @@ final class SWIM(
       currentNodes <- nodeChannels.get
       currentState <- gossipStateRef.get
       _ <- ZIO.foreach(currentNodes.values)(
-            channel => sendInternalMessage(channel, JoinCluster(currentState, localMember_))
+            channel => sendInternalMessage(channel, UUID.randomUUID(), JoinCluster(currentState, localMember_))
           )
     } yield ()
 
@@ -168,7 +168,7 @@ final class SWIM(
                 for {
                   _     <- updateState(state)
                   state <- gossipStateRef.get
-                  _     <- sendInternalMessage(message.sender, Ack(ackId, state))
+                  _     <- sendInternalMessage(message.sender, message.id, Ack(ackId, state))
                 } yield ()
               case PingReq(target, originalAckId, state) =>
                 for {
@@ -179,7 +179,7 @@ final class SWIM(
                           _ => ZIO.unit,
                           _ =>
                             gossipStateRef.get
-                              .flatMap(state => sendInternalMessage(message.sender, Ack(originalAckId, state)))
+                              .flatMap(state => sendInternalMessage(message.sender, message.id, Ack(originalAckId, state)))
                         )
                         .fork
                 } yield ()
@@ -309,27 +309,27 @@ final class SWIM(
       prom   <- Promise.make[Error, Unit]
       _      <- acks.put(offset, prom).commit
       msg    = fn(offset)
-      _      <- sendInternalMessage(to, fn(offset))
+      _      <- sendInternalMessage(to, UUID.randomUUID, fn(offset))
       _ <- prom.await
             .ensuring(acks.delete(offset).commit)
             .timeoutFail(AckMessageFail(offset, msg, to))(timeout)
     } yield ()
 
-  private def sendInternalMessage(to: NodeId, msg: InternalProtocol): ZIO[Logging[String], Error, Unit] =
+  private def sendInternalMessage(to: NodeId, correlationId: UUID, msg: InternalProtocol): ZIO[Logging[String], Error, Unit] =
     for {
       node <- nodeChannels.get.map(_.get(to))
       _ <- node match {
             case Some(channel) =>
-              sendInternalMessage(channel, msg)
+              sendInternalMessage(channel, correlationId, msg)
             case None => ZIO.fail(UnknownNode(to))
           }
     } yield ()
 
-  private def sendInternalMessage(to: ChannelOut, msg: InternalProtocol): ZIO[Logging[String], Error, Unit] = {
+  private def sendInternalMessage(to: ChannelOut, correlationId: UUID, msg: InternalProtocol): ZIO[Logging[String], Error, Unit] = {
     for {
       _       <- logger.info(s"sending $msg")
       payload <- msg.serialize
-      msg     <- serializeMessage(UUID.randomUUID(), localMember_, payload, 1)
+      msg     <- serializeMessage(correlationId, localMember_, payload, 1)
       _       <- to.send(msg)
     } yield ()
   }.catchAll { ex =>
