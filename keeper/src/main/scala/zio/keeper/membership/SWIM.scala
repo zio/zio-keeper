@@ -179,7 +179,9 @@ final class SWIM(
                           _ => ZIO.unit,
                           _ =>
                             gossipStateRef.get
-                              .flatMap(state => sendInternalMessage(message.sender, message.id, Ack(originalAckId, state)))
+                              .flatMap(
+                                state => sendInternalMessage(message.sender, message.id, Ack(originalAckId, state))
+                              )
                         )
                         .fork
                 } yield ()
@@ -315,7 +317,11 @@ final class SWIM(
             .timeoutFail(AckMessageFail(offset, msg, to))(timeout)
     } yield ()
 
-  private def sendInternalMessage(to: NodeId, correlationId: UUID, msg: InternalProtocol): ZIO[Logging[String], Error, Unit] =
+  private def sendInternalMessage(
+    to: NodeId,
+    correlationId: UUID,
+    msg: InternalProtocol
+  ): ZIO[Logging[String], Error, Unit] =
     for {
       node <- nodeChannels.get.map(_.get(to))
       _ <- node match {
@@ -325,7 +331,11 @@ final class SWIM(
           }
     } yield ()
 
-  private def sendInternalMessage(to: ChannelOut, correlationId: UUID, msg: InternalProtocol): ZIO[Logging[String], Error, Unit] = {
+  private def sendInternalMessage(
+    to: ChannelOut,
+    correlationId: UUID,
+    msg: InternalProtocol
+  ): ZIO[Logging[String], Error, Unit] = {
     for {
       _       <- logger.info(s"sending $msg")
       payload <- msg.serialize
