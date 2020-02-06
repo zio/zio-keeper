@@ -2,14 +2,13 @@ package zio.membership.hyparview
 
 import zio._
 import zio.membership.transport.Transport
-import zio.membership.log
+import zio.membership.{ByteCodec, Error, Membership, SendError, TaggedCodec, TransportError, log}
 import zio.random.Random
 import zio.macros.delegate._
 import zio.macros.delegate.syntax._
-import zio.membership.{ ByteCodec, Error, Membership, SendError, TransportError }
 import zio.duration._
 import zio.clock.Clock
-import zio.stream.{ Stream, Take, ZStream }
+import zio.stream.{Stream, Take, ZStream}
 import zio.logging.Logging
 
 object HyParView {

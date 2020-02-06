@@ -89,6 +89,7 @@ lazy val examples = project
   .settings(stdSettings("zio-keeper-examples"))
   .dependsOn(keeper)
   .settings(
+    fork := true,
     libraryDependencies ++= Seq(
       "ch.qos.logback" % "logback-classic" % "1.2.3"
     )

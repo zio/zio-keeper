@@ -1,14 +1,13 @@
-package zio.membership.hyparview
+package zio.membership
 
 import zio._
-import zio.membership.{ ByteCodec, DeserializationError, SerializationError }
 
-private[hyparview] trait TaggedCodec[A] {
+private[membership] trait TaggedCodec[A] {
   def tagOf(a: A): Byte
   def codecFor(tag: Byte): IO[Unit, ByteCodec[A]]
 }
 
-private[hyparview] object TaggedCodec {
+private[membership] object TaggedCodec {
 
   def apply[A](implicit ev: TaggedCodec[A]) = ev
 

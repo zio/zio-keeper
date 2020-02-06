@@ -123,8 +123,8 @@ object TcpServer extends zio.App {
       _ <- putStrLn("public address: " + publicAddress.toString())
       _ <- bind(publicAddress)(handler)
             .provide(tcp)
-            .use(ch => ZIO.never.ensuring(ch.close.ignore))
-            .fork
+            .use(ch => ZIO.never.ensuring(ch.close.ignore)).fork
+            
 
     } yield ()).ignore.as(0)
 }

@@ -30,3 +30,5 @@ object SendError {
   final case class SerializationFailed(err: zio.membership.SerializationError) extends SendError(cause = err)
   final case class TransportFailed(err: zio.membership.TransportError)         extends SendError(cause = err)
 }
+
+final case class ServiceDiscoveryError(msg: String) extends Error(msg)

@@ -103,9 +103,7 @@ package object hyparview extends HyParViewConfig.Service[HyParViewConfig] {
           allocate {
             conM
               .flatMap { con =>
-                con.receive.process.mapM[R, E, Option[
-                  (T, Chunk[Byte] => IO[TransportError, Unit], Stream[Error, Chunk[Byte]])
-                ]] { pull =>
+                con.receive.process.mapM[R, E, Option[(T, Chunk[Byte] => IO[TransportError, Unit], Stream[Error, Chunk[Byte]])]] { pull =>
                   pull
                     .foldM(
                       _.fold[ZIO[R, E, Option[T]]](ZIO.succeed(None))(ZIO.fail), { raw =>
@@ -179,7 +177,7 @@ package object hyparview extends HyParViewConfig.Service[HyParViewConfig] {
                           }
                       }
                     )
-                    .map(_.map((_, con.send(_), ZStream.fromPull(pull))))
+                    .map(_.map((_, con.send, ZStream.fromPull(pull))))
                 }
               }
 

@@ -4,6 +4,7 @@ import zio.IO
 import zio.nio.SocketAddress
 import zio.nio.InetSocketAddress
 import zio.membership.ResolutionFailed
+import upickle.default._
 
 final case class Address(
   host: String,
@@ -16,4 +17,8 @@ final case class Address(
   override def toString() =
     s"$host:$port"
 
+}
+
+object Address {
+  implicit val addressRW = macroRW[Address]
 }
