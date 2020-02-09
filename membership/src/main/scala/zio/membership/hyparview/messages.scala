@@ -4,6 +4,7 @@ import upickle.default._
 import zio.Chunk
 import zio.membership.{ByteCodec, TaggedCodec}
 
+
 sealed trait ActiveProtocol[+T]
 
 object ActiveProtocol {

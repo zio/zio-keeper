@@ -1,8 +1,15 @@
-//package zio.membership
+//package zio.keeper.membership.swim
 //
+//import FailureDetection.Ping
 //import zio._
 //import zio.clock.Clock
 //import zio.duration._
+//import zio.keeper.ClusterError._
+//import zio.keeper.Message.{readMessage, serializeMessage}
+//import zio.keeper.discovery.Discovery
+//import zio.keeper.membership.{swim, _}
+//import zio.keeper.transport.{Connection, Transport}
+//import zio.keeper.{Message, _}
 //import zio.logging.Logging
 //import zio.logging.slf4j._
 //import zio.macros.delegate._
@@ -12,168 +19,58 @@
 //import zio.stream.{Stream, ZStream}
 //
 //import scala.collection.immutable.SortedSet
-//import zio.membership.Member
-//import zio.membership.NodeId
-//import zio.membership.discovery.Discovery
-//import zio.membership.swim.InitialProtocol.Join
-//import zio.membership.swim.{GossipState, InitialProtocol}
-//import zio.membership.transport._
 //
 //final class SWIM[A](
-//                  localAddr : A,
-//                  nodeChannels: Ref[Map[NodeId, ChunkConnection]],//this should be connection state new, init, disconected
-//                  gossipStateRef: Ref[GossipState[A]],
-//                  userMessageQueue: zio.Queue[Message],
-//                  clusterMessageQueue: zio.Queue[Message],
-//                  clusterEventsQueue: zio.Queue[MembershipEvent[A]],
-//                  subscribeToBroadcast: UIO[Stream[Nothing, Chunk[Byte]]],
-//                  publishToBroadcast: Chunk[Byte] => UIO[Unit],
-//                  msgOffset: Ref[Long],
-//                  acks: TMap[Long, Promise[Error, Unit]]
+//                     localMember_ : Member[A],
+//                     nodeChannels: Ref[Map[NodeId, Connection]],
+//                     gossipStateRef: Ref[GossipState[A]],
+//                     userMessageQueue: zio.Queue[Message],
+//                     clusterMessageQueue: zio.Queue[Message],
+//                     clusterEventsQueue: zio.Queue[MembershipEvent[A]],
+//                     subscribeToBroadcast: UIO[Stream[Nothing, Chunk[Byte]]],
+//                     publishToBroadcast: Chunk[Byte] => UIO[Unit],
+//                     msgOffset: Ref[Long],
+//                     acks: TMap[Long, Promise[Error, Unit]]
 //) extends Membership.Service[Any, A] {
 //
-////  override val events: ZStream[Any, Error, MembershipEvent] =
-////    ZStream.fromQueue(clusterEventsQueue)
+//  override val events: ZStream[Any, Error, MembershipEvent[A]] =
+//    ZStream.fromQueue(clusterEventsQueue)
 //
-//  override val identity: ZIO[Any, Nothing, A] =
-//    ZIO.succeed(localAddr)
+//  override val localMember: ZIO[Any, Nothing, Member[A]] =
+//    ZIO.succeed(localMember_)
 //
-////  override def broadcast(data: Chunk[Byte]): IO[Error, Unit] =
-////    serializeMessage(localMember_, data, 2).flatMap[Any, Error, Unit](publishToBroadcast).unit
+//  override def broadcast(data: Chunk[Byte]): IO[Error, Unit] =
+//    serializeMessage(localMember_.nodeId, data, 2).flatMap[Any, Error, Unit](publishToBroadcast).unit
 //
-////  override def nodes: ZIO[Any, Nothing, List[A]] =
-////    nodeChannels.get
-////      .map(_.keys.toList)
+//  override def nodes: ZIO[Any, Nothing, List[NodeId]] =
+//    nodeChannels.get
+//      .map(_.keys.toList)
 //
-////  override def receive: Stream[Error, Message] =
-////    zio.stream.Stream.fromQueue(userMessageQueue)
-////
-////  override def send(data: Chunk[Byte], receipt: NodeId): IO[Error, Unit] =
-////    sendMessage(receipt, 2, data)
+//  override def receive: Stream[Error, Message] =
+//    zio.stream.Stream.fromQueue(userMessageQueue)
 //
-////  private def sendMessage(to: NodeId, msgType: Int, payload: Chunk[Byte]) =
-////    for {
-////      node <- nodeChannels.get.map(_.get(to))
-////      _ <- node match {
-////            case Some(channel) =>
-////              serializeMessage(localMember_, payload, msgType) >>= channel.send
-////            case None => ZIO.fail(UnknownNode(to))
-////          }
-////    } yield ()
+//  override def send(data: Chunk[Byte], receipt: NodeId): IO[Error, Unit] =
+//    sendMessage(receipt, 2, data)
 //
-//  def receiveInitialProtocol[R <: Transport[T] with Logging[String], E >: Error, T](
-//                                                                                                                        stream: ZStream[R, E, Managed[Nothing, ChunkConnection]],
-//                                                                                                                        concurrentConnections: Int = 16
-//                                                                                                                      )(
-//                                                                                                                        implicit
-//                                                                                                                        ev1: TaggedCodec[InitialProtocol[A]],
-//                                                                                                                        ev2: ByteCodec[JoinReply[T]]
-//                                                                                                                      ): ZStream[R, E, (A, Chunk[Byte] => IO[TransportError, Unit], Stream[Error, Chunk[Byte]], UIO[_])] =
-//    ZStream.managed(ScopeIO.make).flatMap { allocate =>
-//      stream
-//        .mapMPar(concurrentConnections) { conM =>
-//          allocate {
-//            conM
-//              .flatMap { con =>
-//                con.receive.process.mapM[R, E, Option[(A, Chunk[Byte] => IO[TransportError, Unit], Stream[Error, Chunk[Byte]])]] { pull =>
-//                  pull
-//                    .foldM(
-//                      _.fold[ZIO[R, E, Option[A]]](ZIO.succeed(None))(ZIO.fail), { raw =>
-//                        TaggedCodec
-//                          .read[InitialProtocol[A]](raw)
-//                          .tap(msg => log.debug(s"receiveInitialProtocol: $msg"))
-//                          .flatMap {
-//                            case msg: Join[A] =>
-//                              Views.using[T] {
-//                                views =>
-//                                  val accept = for {
-//                                    reply <- TaggedCodec.write[NeighborReply](NeighborReply.Accept)
-//                                    _     <- log.debug(s"Accepting neighborhood request from ${msg.sender}")
-//                                    _     <- con.send(reply)
-//                                  } yield Some(msg.sender)
-//
-//                                  val reject = for {
-//                                    reply <- TaggedCodec.write[NeighborReply](NeighborReply.Reject)
-//                                    _     <- log.debug(s"Rejecting neighborhood request from ${msg.sender}")
-//                                    _     <- con.send(reply)
-//                                  } yield None
-//
-//                                  if (msg.isHighPriority) {
-//                                    accept
-//                                  } else {
-//                                    STM.atomically {
-//                                      for {
-//                                        full <- views.isActiveViewFull
-//                                        task <- if (full) {
-//                                          views
-//                                            .addToPassiveView(msg.sender)
-//                                            .as(
-//                                              reject
-//                                            )
-//                                        } else {
-//                                          STM.succeed(accept)
-//                                        }
-//                                      } yield task
-//                                    }.flatten
-//                                  }
-//                              }
-//                            case msg: InitialMessage.Join[T] =>
-//                              Views.using[T] { views =>
-//                                for {
-//                                  others <- views.activeView.map(_.filterNot(_ == msg.sender)).commit
-//                                  config <- getConfig
-//                                  _ <- ZIO
-//                                    .foreachPar_(others)(
-//                                      node =>
-//                                        views
-//                                          .send(
-//                                            node,
-//                                            ActiveProtocol
-//                                              .ForwardJoin(views.myself, msg.sender, TimeToLive(config.arwl))
-//                                          )
-//                                    )
-//                                  reply <- ByteCodec[JoinReply[T]].toChunk(JoinReply(views.myself))
-//                                  _     <- con.send(reply)
-//                                } yield Some(msg.sender)
-//                              }
-//                            case msg: InitialMessage.ForwardJoinReply[T] =>
-//                              // nothing to do here, we just continue to the next protocol
-//                              ZIO.succeed(Some(msg.sender))
-//                            case msg: InitialMessage.ShuffleReply[T] =>
-//                              Views.using[T] { views =>
-//                                views
-//                                  .addShuffledNodes(msg.sentOriginally.toSet, msg.passiveNodes.toSet)
-//                                  .commit
-//                                  .as(None)
-//                              }
-//                          }
-//                      }
-//                    )
-//                    .map(_.map((_, con.send, ZStream.fromPull(pull))))
-//                }
-//              }
-//
-//          }.foldM(
-//            e => log.error("Failure while running initial protocol", Cause.fail(e)).as(None), {
-//              case (None, release)                        => release.as(None)
-//              case (Some((addr, send, receive)), release) => ZIO.succeed(Some((addr, send, receive, release)))
-//            }
-//          )
-//        }
-//        .collect {
-//          case Some(x) => x
-//        }
-//    }
+//  private def sendMessage(to: NodeId, msgType: Int, payload: Chunk[Byte]) =
+//    for {
+//      node <- nodeChannels.get.map(_.get(to))
+//      _ <- node match {
+//            case Some(channel) =>
+//              serializeMessage(localMember_.nodeId, payload, msgType) >>= channel.send
+//            case None => ZIO.fail(UnknownNode(to))
+//          }
+//    } yield ()
 //
 //  private def acceptConnectionRequests =
 //    for {
 //      env          <- ZManaged.environment[Logging[String] with Transport[A] with Clock]
 //      _            <- handleClusterMessages(ZStream.fromQueue(clusterMessageQueue)).fork.toManaged_
-//      //localAddress <- localMember.flatMap(_.addr.socketAddress).toManaged_
-//      server <- env.transport.bind(localAddr) { channelOut =>
+//      localAddress <- localMember.flatMap(_.addr).toManaged_
+//      server <- transport.bind(localAddress) { channelOut =>
 //                 (for {
 //                   state <- gossipStateRef.get
-//                   _     <- sendInternalMessage(channelOut, Join(state, localMember_))
+//                   _     <- sendInternalMessage(channelOut, NewConnection(state, localMember_))
 //                   _ <- expects(channelOut) {
 //                         case JoinCluster(remoteState, remoteMember) =>
 //                           logger.info(remoteMember.toString + " joined cluster") *>
@@ -199,23 +96,23 @@
 //      _ <- promOpt.fold(ZIO.unit)(_.succeed(()).unit)
 //    } yield ()
 //
-//  private def addMember(member: Member, send: ChannelOut) =
+//  private def addMember(member: Member, send: Connection) =
 //    gossipStateRef.update(_.addMember(member)) *>
 //      nodeChannels.update(_ + (member.nodeId -> send)) *>
 //      propagateEvent(MembershipEvent.Join(member)) *>
 //      logger.info("add member: " + member)
 //
 //  private def connect(
-//    addr: SocketAddress
+//    addr: A
 //  ) =
 //    for {
-//      connectionInit <- Promise.make[Error, (Member, ChannelOut)]
+//      connectionInit <- Promise.make[Error, (Member[A], Connection)]
 //      _ <- transport
 //            .connect(addr)
 //            .use { channel =>
 //              logger.info(s"Initiating handshake with node at ${addr}") *>
 //                expects(channel) {
-//                  case Join(remoteState, remoteMember) =>
+//                  case NewConnection(remoteState, remoteMember) =>
 //                    (for {
 //                      state    <- gossipStateRef.get
 //                      newState = state.merge(remoteState)
@@ -248,7 +145,7 @@
 //    } yield ()
 //
 //  private def expects[R, A](
-//    channel: ChannelOut
+//    channel: Connection
 //  )(pf: PartialFunction[InternalProtocol, ZIO[R, Error, A]]): ZIO[R, Error, A] =
 //    for {
 //      bytes  <- readMessage(channel)
@@ -295,8 +192,8 @@
 //    }.runDrain
 //
 //  private def listenOnChannel(
-//    channel: ChannelOut,
-//    partner: Member
+//                               channel: Connection,
+//                               partner: Member
 //  ): ZIO[Transport with Logging[String] with Clock, Error, Unit] = {
 //
 //    def handleSends(messages: Stream[Nothing, Chunk[Byte]]) =
@@ -315,9 +212,9 @@
 //  }
 //
 //  private def routeMessages(
-//    channel: ChannelOut,
-//    clusterMessageQueue: Queue[Message],
-//    userMessageQueue: Queue[Message]
+//                             channel: Connection,
+//                             clusterMessageQueue: Queue[Message],
+//                             userMessageQueue: Queue[Message]
 //  ) = {
 //    val loop = readMessage(channel)
 //      .flatMap {
@@ -426,7 +323,7 @@
 //          }
 //    } yield ()
 //
-//  private def sendInternalMessage(to: ChannelOut, msg: InternalProtocol): ZIO[Logging[String], Error, Unit] = {
+//  private def sendInternalMessage(to: Connection, msg: InternalProtocol): ZIO[Logging[String], Error, Unit] = {
 //    for {
 //      _       <- logger.info(s"sending $msg")
 //      payload <- msg.serialize
@@ -441,30 +338,30 @@
 //    for {
 //      current <- gossipStateRef.get
 //      diff    = newState.diff(current)
-//      _       <- ZIO.foreach(diff.local)(n => (n.addr.socketAddress >>= connect).ignore)
+//      _       <- ZIO.foreach(diff.local)(n => (n.addr >>= connect).ignore)
 //    } yield ()
 //
 //}
 //
 //object SWIM {
 //
-//  def withSWIM[A](port: Int) =
-//    enrichWithManaged[Membership[A]](join[A](port))
+//  def withSWIM(port: Int) =
+//    enrichWithManaged[Membership](join(port))
 //
-//  def join[A](
+//  def join(
 //    port: Int
-//  ): ZManaged[Logging[String] with Clock with Random with Transport[A] with Discovery, Error, Membership[A]] =
+//  ): ZManaged[Logging[String] with Clock with Random with Transport with Discovery, Error, Membership] =
 //    for {
 //      localHost            <- InetAddress.localHost.toManaged_.orDie
 //      localMember          = Member(NodeId.generateNew, NodeAddress(localHost.address, port))
 //      _                    <- logger.info(s"Starting node [ ${localMember.nodeId} ]").toManaged_
-//      nodes                <- zio.Ref.make(Map.empty[NodeId, ChannelOut]).toManaged_
+//      nodes                <- zio.Ref.make(Map.empty[NodeId, Connection]).toManaged_
 //      seeds                <- discovery.discoverNodes.toManaged_
 //      _                    <- logger.info("seeds: " + seeds).toManaged_
 //      userMessagesQueue    <- ZManaged.make(zio.Queue.bounded[Message](1000))(_.shutdown)
 //      clusterEventsQueue   <- ZManaged.make(zio.Queue.sliding[MembershipEvent](100))(_.shutdown)
 //      clusterMessagesQueue <- ZManaged.make(zio.Queue.bounded[Message](1000))(_.shutdown)
-//      gossipState          <- Ref.make(GossipState(SortedSet(localMember))).toManaged_
+//      gossipState          <- Ref.make(swim.GossipState(SortedSet(localMember))).toManaged_
 //      broadcastQueue       <- ZManaged.make(zio.Queue.bounded[Chunk[Byte]](1000))(_.shutdown)
 //      subscriberBroadcast <- ZStream
 //                              .fromQueue(broadcastQueue)
@@ -500,8 +397,8 @@
 //            .fork
 //      _ <- logger.info("Starting SWIM membership protocol").toManaged_
 //      _ <- swimMembership.runSwim.fork.toManaged_
-//    } yield new Membership[A] {
-//      override def membership: Membership.Service[Any, A] = swimMembership
+//    } yield new Membership {
+//      override def membership: Membership.Service[Any] = swimMembership
 //    }
 //
 //}

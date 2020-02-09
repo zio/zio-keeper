@@ -1,6 +1,6 @@
-package zio.membership.hyparview
+package zio.membership
 
-import zio.{ Exit, Ref, Reservation, UIO, ZIO, ZManaged }
+import zio._
 
 trait ScopeIO {
   def apply[R, E, A](managed: ZManaged[R, E, A]): ZIO[R, E, (A, UIO[_])]

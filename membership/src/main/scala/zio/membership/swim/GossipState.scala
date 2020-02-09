@@ -1,10 +1,10 @@
 package zio.membership.swim
 
+import upickle.default._
+import zio.membership.Member
 import zio.membership.swim.GossipState.StateDiff
 
 import scala.collection.immutable.SortedSet
-import zio.membership.{ByteCodec, Member}
-import upickle.default._
 
 case class GossipState[A](members: SortedSet[Member[A]]) extends AnyVal {
 
@@ -32,10 +32,4 @@ object GossipState {
   final case class StateDiff[A](local: SortedSet[Member[A]], remote: SortedSet[Member[A]])
 
   implicit def gossipStateRw[A: ReadWriter] = macroRW[GossipState[A]]
-
-  implicit def codec[A: ReadWriter]: ByteCodec[GossipState[A]] = {
-    ByteCodec.fromReadWriter(gossipStateRw[A])
-  }
-
-
 }

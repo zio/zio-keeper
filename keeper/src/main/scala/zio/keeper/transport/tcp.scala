@@ -19,12 +19,12 @@ object tcp {
     connectionTimeout: Duration,
     sendTimeout: Duration
   ) =
-    enrichWithM[Transport](tcpTransport(connectionTimeout, sendTimeout))
+    enrichWithM[Transport[SocketAddress]](tcpTransport(connectionTimeout, sendTimeout))
 
   def tcpTransport(
     connectionTimeout: Duration,
     requestTimeout: Duration
-  ): ZIO[Clock with Logging[String], Nothing, Transport] = {
+  ): ZIO[Clock with Logging[String], Nothing, Transport[SocketAddress]] = {
     val connectionTimeout_ = connectionTimeout
     val requestTimeout_    = requestTimeout
     ZIO.environment[Clock with Logging[String]].map { env =>
@@ -37,14 +37,14 @@ object tcp {
     }
   }
 
-  trait Live extends Transport {
+  trait Live extends Transport[SocketAddress] {
     self: Clock =>
     val connectionTimeout: Duration
     val requestTimeout: Duration
 
     val logger: Logging.Service[Any, String]
 
-    val transport = new Transport.Service[Any] {
+    val transport = new Transport.Service[Any, SocketAddress] {
 
       override def connect(to: SocketAddress) =
         (for {
@@ -59,7 +59,7 @@ object tcp {
         } yield new NioChannelOut(socketChannel, to, requestTimeout, close, self))
           .provide(self)
 
-      override def bind(addr: SocketAddress)(connectionHandler: ChannelOut => UIO[Unit]) =
+      override def bind(addr: SocketAddress)(connectionHandler: Connection => UIO[Unit]) =
         AsynchronousServerSocketChannel()
           .flatMap(s => s.bind(addr).toManaged_.as(s))
           .mapError(BindFailed(addr, _))
@@ -90,7 +90,7 @@ object tcp {
 
                 _ <- cur.use(connectionHandler).fork
               } yield ()).forever.fork
-                .as(new NioChannelIn(server, close))
+                .as(new NioBind(server, close))
           }
 
     }
@@ -105,7 +105,7 @@ class NioChannelOut(
   requestTimeout: Duration,
   finalizer: URIO[Any, Any],
   clock: Clock
-) extends ChannelOut {
+) extends Connection {
 
   override def isOpen: ZIO[Any, TransportError, Boolean] =
     socket.isOpen
@@ -144,10 +144,10 @@ class NioChannelOut(
 
 }
 
-class NioChannelIn(
+class NioBind(
   serverSocket: AsynchronousServerSocketChannel,
   finalizer: URIO[Any, Any]
-) extends ChannelIn {
+) extends Bind {
 
   override def close: ZIO[Any, TransportError, Unit] =
     finalizer.ignore

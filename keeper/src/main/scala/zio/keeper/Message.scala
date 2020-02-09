@@ -1,10 +1,10 @@
 package zio.keeper
 
-import zio.keeper.SerializationError.{ DeserializationTypeError, SerializationTypeError }
-import zio.keeper.membership.{ Member, NodeId }
-import zio.keeper.transport.ChannelOut
+import zio.keeper.SerializationError.{DeserializationTypeError, SerializationTypeError}
+import zio.keeper.membership.NodeId
+import zio.keeper.transport.Connection
 import zio.nio.Buffer
-import zio.{ Chunk, IO }
+import zio.{Chunk, IO}
 
 final case class Message(
   sender: NodeId,
@@ -15,7 +15,7 @@ object Message {
 
   private val HeaderSize = 24
 
-  private[keeper] def readMessage(channel: ChannelOut) =
+  private[keeper] def readMessage(channel: Connection) =
     channel.read.flatMap(
       headerBytes =>
         (for {
@@ -26,18 +26,18 @@ object Message {
           payloadByte            <- byteBuffer.getChunk()
           sender                 = NodeId(new java.util.UUID(senderMostSignificant, senderLeastSignificant))
         } yield (messageType, Message(sender, payloadByte)))
-          .mapError(e => DeserializationTypeError[Message](e))
+          .mapError(e => DeserializationTypeError(e))
     )
 
-  private[keeper] def serializeMessage(member: Member, payload: Chunk[Byte], messageType: Int): IO[Error, Chunk[Byte]] = {
+  private[keeper] def serializeMessage(nodeId: NodeId, payload: Chunk[Byte], messageType: Int): IO[Error, Chunk[Byte]] = {
     for {
       byteBuffer <- Buffer.byte(HeaderSize + payload.length)
-      _          <- byteBuffer.putLong(member.nodeId.value.getMostSignificantBits)
-      _          <- byteBuffer.putLong(member.nodeId.value.getLeastSignificantBits)
+      _          <- byteBuffer.putLong(nodeId.value.getMostSignificantBits)
+      _          <- byteBuffer.putLong(nodeId.value.getLeastSignificantBits)
       _          <- byteBuffer.putInt(messageType)
       _          <- byteBuffer.putChunk(payload)
       _          <- byteBuffer.flip
       bytes      <- byteBuffer.getChunk()
     } yield bytes
-  }.mapError(ex => SerializationTypeError[Message](ex))
+  }.mapError(ex => SerializationTypeError(ex))
 }

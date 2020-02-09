@@ -1,7 +1,8 @@
-package zio.membership.swim
+package zio.keeper.membership.swim
 
 import upickle.default._
-import zio.membership.{ByteCodec, Member, TaggedCodec}
+import zio.keeper.membership.Member
+import zio.keeper.{ByteCodec, TaggedCodec}
 
 sealed trait FailureDetectionProtocol[+A]
 
@@ -57,42 +58,3 @@ object SuspicionProtocol {
   final case class Alive[A](member: Member[A]) extends SuspicionProtocol[A]
 }
 
-sealed trait InitialProtocol[A]
-
-object InitialProtocol {
-
-  sealed trait Reply[A]
-
-  implicit def taggedRequests[A](
-                          implicit
-                          c4: ByteCodec[Join[A]],
-                          c5: ByteCodec[JoinCluster[A]]
-                        ): TaggedCodec[InitialProtocol[A]] =
-    TaggedCodec.instance(
-      {
-        case _: Join[A]    => 13
-        case _: JoinCluster[A]    => 14
-      }, {
-        case 13 => c4.asInstanceOf[ByteCodec[InitialProtocol[A]]]
-        case 14 => c5.asInstanceOf[ByteCodec[InitialProtocol[A]]]
-      }
-    )
-
-  final case class Join[A](state: GossipState[A], address: A) extends InitialProtocol[A]
-
-  object Join {
-    implicit def codec[A: ReadWriter]: ByteCodec[Join[A]] =
-      ByteCodec.fromReadWriter(macroRW[Join[A]])
-
-    case class Accept[A](state: GossipState[A], address: A) extends Reply[A]
-    case class Reject[A](msg: String) extends Reply[A]
-  }
-
-  final case class JoinCluster[A](state: GossipState[A], address: A) extends InitialProtocol[A]
-
-  object JoinCluster {
-    implicit def codec[A: ReadWriter]: ByteCodec[JoinCluster[A]] =
-      ByteCodec.fromReadWriter(macroRW[JoinCluster[A]])
-  }
-
-}

@@ -2,10 +2,8 @@ package zio.keeper
 
 import zio.duration.Duration
 import zio.keeper.membership.NodeId
-import zio.keeper.protocol.InternalProtocol
 import zio.nio.SocketAddress
 
-import scala.reflect.ClassTag
 
 sealed abstract class Error(val msg: String = "") {
   override def toString: String = msg
@@ -15,15 +13,25 @@ sealed abstract class SerializationError(msg: String = "") extends Error(msg = m
 
 object SerializationError {
 
-  final case class SerializationTypeError[A](val cause: Throwable)(implicit ct: ClassTag[A])
+  final case class SerializationTypeError(msg0: String)
       extends SerializationError(
-        msg = s"Cannot serialize ${ct.runtimeClass.getCanonicalName} because of ${cause.getMessage}"
+        msg = msg0
       )
 
-  final case class DeserializationTypeError[A](val cause: Throwable)(implicit ct: ClassTag[A])
+  object SerializationTypeError {
+    def apply(cause: Throwable): SerializationTypeError =
+      SerializationTypeError(s"Cannot serialize because of ${cause.getMessage}")
+  }
+
+  final case class DeserializationTypeError(msg0: String)
       extends SerializationError(
-        msg = s"Cannot deserialize ${ct.runtimeClass.getCanonicalName} because of ${cause.getMessage}"
+        msg = msg0
       )
+
+  object DeserializationTypeError {
+    def apply(cause: Throwable): DeserializationTypeError =
+      new DeserializationTypeError(s"Cannot deserialize because of ${cause.getMessage}")
+  }
 
 }
 
@@ -41,8 +49,8 @@ object ClusterError {
 
   final case class UnexpectedMessage(message: Message) extends ClusterError
 
-  final case class AckMessageFail(ackId: Long, message: InternalProtocol, to: NodeId)
-      extends ClusterError(msg = s"message [$message] with ack id: $ackId sent to: $to overdue timeout ")
+//  final case class AckMessageFail(ackId: Long, message: InternalProtocol, to: NodeId)
+//      extends ClusterError(msg = s"message [$message] with ack id: $ackId sent to: $to overdue timeout ")
 
   final case class UnknownNode(nodeId: NodeId) extends ClusterError(msg = nodeId.toString + " is not in cluster")
 
