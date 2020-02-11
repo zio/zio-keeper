@@ -1,10 +1,9 @@
 package zio.keeper.membership.swim.protocols
 
 import upickle.default._
-import zio.ZIO
+import zio.keeper.membership.NodeId
+import zio.keeper.membership.swim.GossipState
 import zio.keeper.{ByteCodec, TaggedCodec}
-import zio.keeper.membership.{Member, NodeId}
-import zio.keeper.membership.swim.{Gossip, GossipState, NodeState, Protocol}
 
 sealed trait Initial[A]
 
@@ -60,20 +59,20 @@ object Initial {
       ByteCodec.fromReadWriter(macroRW[JoinCluster[A]])
   }
 
-  def protocol[A](localMember: Member[A])(implicit tg: TaggedCodec[Initial[A]]) =
-    Protocol[Gossip[A], Initial[A]] {
-      case Initial.Join(nodeId, _, _) => for {
-        gossip <- ZIO.access[Gossip[A]](_.gossip)
-        nodeState <- gossip.nodeState(nodeId)
-        reply <- nodeState match {
-          case NodeState.New =>
-            gossip.modifyNodeState(nodeId, _ => NodeState.Healthy) *>
-              gossip.state.flatMap(state => Protocol.reply[Initial[A]](Accept[A](state, localMember.addr)))
-          case NodeState.Healthy =>
-            Protocol.reply[Initial[A]](Reject[A]("duplicate Node Id"))
-        }
-      } yield reply
-    }
+//  def protocol[A](localMember: Member[A])(implicit tg: TaggedCodec[Initial[A]]) =
+//    Protocol[Gossip[A], Initial[A]] {
+//      case Initial.Join(nodeId, _, _) => for {
+//        gossip <- ZIO.access[Gossip[A]](_.gossip)
+//        nodeState <- gossip.nodeState(nodeId)
+//        reply <- nodeState match {
+//          case NodeState.New =>
+//            gossip.modifyNodeState(nodeId, _ => NodeState.Healthy) *>
+//              gossip.state.flatMap(state => Protocol.reply[Initial[A]](Accept[A](state, localMember.addr)))
+//          case NodeState.Healthy =>
+//            Protocol.reply[Initial[A]](Reject[A]("duplicate Node Id"))
+//        }
+//      } yield reply
+//    }
 
 }
 

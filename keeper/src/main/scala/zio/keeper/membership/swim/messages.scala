@@ -1,7 +1,7 @@
 package zio.keeper.membership.swim
 
 import upickle.default._
-import zio.keeper.membership.Member
+import zio.keeper.membership.{Member, NodeId}
 import zio.keeper.{ByteCodec, TaggedCodec}
 
 sealed trait FailureDetectionProtocol[+A]
@@ -41,7 +41,7 @@ object FailureDetectionProtocol {
       ByteCodec.fromReadWriter(macroRW[Ping[A]])
   }
 
-  final case class PingReq[A](target: A, ackConversation: Long, state: GossipState[A]) extends FailureDetectionProtocol[A]
+  final case class PingReq[A](target: NodeId, ackConversation: Long, state: GossipState[A]) extends FailureDetectionProtocol[A]
 
   object PingReq {
     implicit def codec[A: ReadWriter]: ByteCodec[PingReq[A]] =

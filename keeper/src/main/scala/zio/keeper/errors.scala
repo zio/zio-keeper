@@ -49,8 +49,8 @@ object ClusterError {
 
   final case class UnexpectedMessage(message: Message) extends ClusterError
 
-//  final case class AckMessageFail(ackId: Long, message: InternalProtocol, to: NodeId)
-//      extends ClusterError(msg = s"message [$message] with ack id: $ackId sent to: $to overdue timeout ")
+  final case class AckMessageFail[A](ackId: Long, message: A, to: NodeId)
+      extends ClusterError(msg = s"message [$message] with ack id: $ackId sent to: $to overdue timeout ")
 
   final case class UnknownNode(nodeId: NodeId) extends ClusterError(msg = nodeId.toString + " is not in cluster")
 

@@ -20,6 +20,8 @@ object Gossip {
     def updateState(newState: GossipState[A]): ZIO[R, Error, Unit]
     def nodeState(nodeId: NodeId): ZIO[R, Error, NodeState]
     def modifyNodeState(nodeId: NodeId, mod: NodeState => NodeState): ZIO[R, Error, Unit]
+    def nextNode: ZIO[R, Error, NodeId]
+    def registerAck[A](fn: Long => A): A
   }
 }
 
