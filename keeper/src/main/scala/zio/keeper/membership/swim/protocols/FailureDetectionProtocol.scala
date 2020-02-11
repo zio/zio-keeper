@@ -13,9 +13,9 @@ import zio.keeper.transport.Connection
 import zio.stm.TMap
 import zio.stream.ZStream
 
-trait Runner[A] extends Protocol[FailureDetection[A]] {
+trait FailureDetectionProtocol[A] extends Protocol[FailureDetection[A]] {
 
-  case class _Ack(nodeId: NodeId, timestamp: Long)
+  case class _Ack(nodeId: NodeId, timestamp: Long, onBehalf: Option[(NodeId, Long)])
 
   val acks: TMap[Long, _Ack]
   val state: Ref[GossipState[A]]
@@ -40,36 +40,40 @@ trait Runner[A] extends Protocol[FailureDetection[A]] {
 //        _       <- ZIO.foreach(diff.local)(n => (n.addr >>= connect).ignore)
     } yield ()
 
-  private def withAck(fn: Long => (NodeId, FailureDetection[A])) =
+  private def withAck(onBehalf: Option[(NodeId, Long)], fn: Long => (NodeId, FailureDetection[A])) =
     for {
       ackId      <- ackId.update(_ + 1)
       timestamp  <- currentTime(TimeUnit.MILLISECONDS)
       nodeAndMsg = fn(ackId)
-      _          <- acks.put(ackId, _Ack(nodeAndMsg._1, timestamp)).commit
+      _          <- acks.put(ackId, _Ack(nodeAndMsg._1, timestamp, onBehalf)).commit
     } yield nodeAndMsg
 
   private def ack(id: Long) =
-    acks
-      .delete(id)
-      .commit
+    acks.get(id).commit <*
+      acks
+        .delete(id)
+        .commit
 
   override def onMessage = {
     case (_, Ack(ackId, state)) =>
       updateState(state.asInstanceOf[GossipState[A]]) *>
-        ack(ackId)
-          .as(
-            noReply
-          )
+        ack(ackId).map {
+          case Some(_Ack(_, _, Some((node, originalAckId)))) =>
+            Some((node, Ack(originalAckId, state)))
+          case _ =>
+            None
+        }
 
-    case (_, Ping(ackId, state0)) =>
+    case (sender, Ping(ackId, state0)) =>
       updateState(state0.asInstanceOf[GossipState[A]]) *>
-        state.get.flatMap(state => reply(Ack[A](ackId, state)))
+        state.get.map(state => Some((sender, Ack[A](ackId, state))))
 
-    case (_, PingReq(to, ackId, state0)) =>
+    case (sender, PingReq(to, originalAck, state0)) =>
       updateState(state0.asInstanceOf[GossipState[A]]) *>
         state.get
-          .flatMap(state => forward[FailureDetection[A]](to, Ack[A](ackId, state)))
-          .flatMap(r => withAck(ackId, r, 5.seconds))
+          .flatMap(state => withAck(Some((sender, originalAck)), ackId => (to, Ping(ackId, state))))
+          .map(Some(_))
+          .provideM(dependencies)
 
   }
 
@@ -99,10 +103,9 @@ trait Runner[A] extends Protocol[FailureDetection[A]] {
           )
           .collectM {
             case (Some(next), state) =>
-              withAck(ackId => (next, Ping(ackId, state)))
+              withAck(None, ackId => (next, Ping(ackId, state)))
           }
       )
       .provideM(dependencies)
 
-  override def onError(err: keeper.Error): ZIO[Any, keeper.Error, Unit] = ???
 }
