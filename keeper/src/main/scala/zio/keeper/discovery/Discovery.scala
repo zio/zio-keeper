@@ -2,24 +2,23 @@ package zio.keeper.discovery
 
 import zio.ZIO
 import zio.keeper.Error
-import zio.nio.SocketAddress
 
-trait Discovery {
-  def discover: Discovery.Service[Any]
+trait Discovery[A] {
+  def discover: Discovery.Service[Any, A]
 }
 
 object Discovery {
 
-  def staticList(addresses: Set[SocketAddress]): Discovery = new Discovery {
+  def staticList[A](addresses: Set[A]): Discovery[A] = new Discovery[A] {
 
-    override def discover: Service[Any] = new Service[Any] {
+    override def discover = new Service[Any, A] {
 
-      override def discoverNodes: ZIO[Any, Error, Set[SocketAddress]] =
+      override def discoverNodes: ZIO[Any, Error, Set[A]] =
         ZIO.succeed(addresses)
     }
   }
 
-  trait Service[R] {
-    def discoverNodes: ZIO[R, Error, Set[zio.nio.SocketAddress]]
+  trait Service[R, A] {
+    def discoverNodes: ZIO[R, Error, Set[A]]
   }
 }

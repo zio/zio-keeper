@@ -2,13 +2,12 @@ package zio.keeper.membership.swim
 
 import zio.ZIO
 import zio.keeper.Error
-import zio.keeper.membership.NodeId
 
-trait Protocol[M] {
+trait Protocol[A, M] {
 
-  def onMessage: PartialFunction[(NodeId, M), ZIO[Any, Error, Option[(NodeId, M)]]]
+  def onMessage: PartialFunction[(A, M), ZIO[Any, Error, Option[(A, M)]]]
 
-  def produceMessages: zio.stream.ZStream[Any, Error, (NodeId, M)]
+  def produceMessages: zio.stream.ZStream[Any, Error, (A, M)]
 
 }
 

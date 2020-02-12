@@ -1,63 +1,69 @@
 package zio.keeper.membership.swim.protocols
 
 import upickle.default._
-import zio.keeper.membership.NodeId
-import zio.keeper.membership.swim.GossipState
-import zio.keeper.{ByteCodec, TaggedCodec}
+import zio.keeper.discovery.Discovery
+import zio.keeper.membership.swim.{ Nodes, Protocol }
+import zio.keeper.{ ByteCodec, TaggedCodec }
+import zio.stream.ZStream
+import zio.{ ZIO, keeper }
 
-sealed trait Initial[A]
+sealed trait Initial
 
 object Initial {
 
-  implicit def taggedRequests[A](
-                                  implicit
-                                  c4: ByteCodec[Join[A]],
-                                  c5: ByteCodec[JoinCluster[A]],
-                                  c6: ByteCodec[Accept[A]],
-                                  c7: ByteCodec[Reject[A]]
-
-                                ): TaggedCodec[Initial[A]] =
+  implicit def taggedRequests(
+    implicit
+    c4: ByteCodec[Join.type],
+    c6: ByteCodec[Accept.type],
+    c7: ByteCodec[Reject]
+  ): TaggedCodec[Initial] =
     TaggedCodec.instance(
       {
-        case _: Join[A]    => 13
-        case _: JoinCluster[A]    => 14
-        case _: Accept[A] => 15
-        case _: Reject[A] => 16
+        case Join      => 13
+        case Accept    => 15
+        case _: Reject => 16
       }, {
-        case 13 => c4.asInstanceOf[ByteCodec[Initial[A]]]
-        case 14 => c5.asInstanceOf[ByteCodec[Initial[A]]]
-        case 15 => c6.asInstanceOf[ByteCodec[Initial[A]]]
-        case 16 => c7.asInstanceOf[ByteCodec[Initial[A]]]
+        case 13 => c4.asInstanceOf[ByteCodec[Initial]]
+        case 15 => c6.asInstanceOf[ByteCodec[Initial]]
+        case 16 => c7.asInstanceOf[ByteCodec[Initial]]
       }
     )
 
-  final case class Join[A](nodeId: NodeId, state: GossipState[A], address: A) extends Initial[A]
+  final case object Join extends Initial
 
-  object Join {
-    implicit def codec[A: ReadWriter]: ByteCodec[Join[A]] =
-      ByteCodec.fromReadWriter(macroRW[Join[A]])
-  }
+  implicit def codecJoin[A: ReadWriter]: ByteCodec[Join.type] =
+    ByteCodec.fromReadWriter(macroRW[Join.type])
 
-  case class Accept[A](state: GossipState[A], address: A) extends Initial[A]
+  case object Accept extends Initial
 
-  object Accept {
-    implicit def codec[A: ReadWriter]: ByteCodec[Accept[A]] =
-      ByteCodec.fromReadWriter(macroRW[Accept[A]])
-  }
+  implicit def codecAccept[A: ReadWriter]: ByteCodec[Accept.type] =
+    ByteCodec.fromReadWriter(macroRW[Accept.type])
 
-  case class Reject[A](msg: String) extends Initial[A]
+  case class Reject(msg: String) extends Initial
 
   object Reject {
-    implicit def codec[A: ReadWriter]: ByteCodec[Reject[A]] =
-      ByteCodec.fromReadWriter(macroRW[Reject[A]])
+
+    implicit def codec[A: ReadWriter]: ByteCodec[Reject] =
+      ByteCodec.fromReadWriter(macroRW[Reject])
   }
 
-  final case class JoinCluster[A](state: GossipState[A], address: A) extends Initial[A]
+  def protocol[A](nodes: Nodes[A]) =
+    ZIO.access[Discovery[A]](
+      env =>
+        new Protocol[A, Initial] {
 
-  object JoinCluster {
-    implicit def codec[A: ReadWriter]: ByteCodec[JoinCluster[A]] =
-      ByteCodec.fromReadWriter(macroRW[JoinCluster[A]])
-  }
+          override def onMessage = {
+            case (sender, Join)   => nodes.established(sender).as(Some((sender, Accept)))
+            case (sender, Accept) => nodes.established(sender).as(None)
+          }
+
+          override def produceMessages: ZStream[Any, keeper.Error, (A, Initial)] =
+            ZStream
+              .fromIterator(
+                env.discover.discoverNodes.map(_.iterator)
+              )
+              .mapM(node => nodes.connect(node).as((node, Join)))
+        }
+    )
 
 }
-

@@ -1,9 +1,14 @@
 package zio.keeper.membership.swim.protocols
 
+import java.util.concurrent.TimeUnit
+
 import upickle.default._
-import zio.keeper.membership.NodeId
-import zio.keeper.membership.swim.GossipState
+import zio.clock.{Clock, currentTime}
+import zio.{Ref, Schedule, ZIO, keeper}
+import zio.keeper.membership.swim.{GossipState, Nodes, Protocol}
 import zio.keeper.{ByteCodec, TaggedCodec}
+import zio.stm.TMap
+import zio.stream.ZStream
 
 sealed trait FailureDetection[+A]
 
@@ -44,12 +49,90 @@ object FailureDetection {
       ByteCodec.fromReadWriter(macroRW[Ping[A]])
   }
 
-  final case class PingReq[A](target: NodeId, ackConversation: Long, state: GossipState[A]) extends FailureDetection[A]
+  final case class PingReq[A](target: A, ackConversation: Long, state: GossipState[A]) extends FailureDetection[A]
 
   object PingReq {
 
     implicit def codec[A: ReadWriter]: ByteCodec[PingReq[A]] =
       ByteCodec.fromReadWriter(macroRW[PingReq[A]])
   }
+
+  private case class _Ack[A](nodeId: A, timestamp: Long, onBehalf: Option[(A, Long)])
+
+  def protocol[A](nodes: Nodes[A]) =
+    for {
+      deps  <- ZIO.environment[Clock]
+      acks  <- TMap.empty[Long, _Ack[A]].commit
+      ackId <- Ref.make(0L)
+    } yield new Protocol[A, FailureDetection[A]] {
+
+      private def ack(id: Long) =
+        (acks.get(id) <*
+          acks
+            .delete(id)).commit
+
+      override def onMessage = {
+        case (_, Ack(ackId, state)) =>
+          nodes.updateState(state.asInstanceOf[GossipState[A]]) *>
+            ack(ackId).map {
+              case Some(_Ack(_, _, Some((node, originalAckId)))) =>
+                Some((node, Ack(originalAckId, state)))
+              case _ =>
+                None
+            }
+
+        case (sender, Ping(ackId, state0)) =>
+          nodes.updateState(state0.asInstanceOf[GossipState[A]]) *>
+            nodes.currentState.map(state => Some((sender, Ack[A](ackId, state))))
+
+        case (sender, PingReq(to, originalAck, state0)) =>
+          nodes.updateState(state0.asInstanceOf[GossipState[A]]) *>
+            nodes.currentState
+              .flatMap(state => withAck(Some((sender, originalAck)), ackId => (to, Ping(ackId, state))))
+              .map(Some(_))
+              .provide(deps)
+
+      }
+
+      override def produceMessages: ZStream[Any, keeper.Error, (A, FailureDetection[A])] =
+        ZStream
+          .fromIterator(
+            acks.toList.commit.map(_.iterator)
+          )
+          .zip(ZStream.repeatEffectWith(currentTime(TimeUnit.MICROSECONDS), Schedule.spaced(1.second)))
+          .collectM {
+            case ((ackId, ack), current) if current - ack.timestamp > 5.seconds.toMillis =>
+              nodes.next
+                .zip(nodes.currentState)
+                .map {
+                  case (node, state) =>
+                    node.map(next => (next, PingReq(ack.nodeId, ackId, state)))
+                }
+          }
+          .collect {
+            case Some(req) => req
+          }
+          .merge(
+            ZStream
+              .repeatEffectWith(
+                nodes.next <*> nodes.currentState,
+                Schedule.spaced(3.seconds)
+              )
+              .collectM {
+                case (Some(next), state) =>
+                  withAck(None, ackId => (next, Ping(ackId, state)))
+              }
+          )
+          .provide(deps)
+
+      private def withAck(onBehalf: Option[(A, Long)], fn: Long => (A, FailureDetection[A])) =
+        for {
+          ackId      <- ackId.update(_ + 1)
+          timestamp  <- currentTime(TimeUnit.MILLISECONDS)
+          nodeAndMsg = fn(ackId)
+          _          <- acks.put(ackId, _Ack(nodeAndMsg._1, timestamp, onBehalf)).commit
+        } yield nodeAndMsg
+
+    }
 
 }
