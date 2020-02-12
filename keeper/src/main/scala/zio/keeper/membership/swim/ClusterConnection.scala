@@ -11,11 +11,9 @@ private [swim] class ClusterConnection(tConn: Connection) {
 
   def sendInternal(data: Message): ZIO[Any, Error, Unit] =
     serializeMessage(data.sender, data.payload, 1)>>= tConn.send
+
+  def close: ZIO[Any, Error, Unit] =
+    tConn.close
 }
 
-object ClusterConnection {
-  def apply(tConn: Connection)(fn: ClusterConnection => ZIO[Any, Error, Unit]): ZIO[Any, Error, ClusterConnection] = {
-    val cc = new ClusterConnection(tConn)
-    fn(cc).as(cc)
-  }
-}
+

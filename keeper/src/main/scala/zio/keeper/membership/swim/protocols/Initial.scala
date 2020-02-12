@@ -59,20 +59,5 @@ object Initial {
       ByteCodec.fromReadWriter(macroRW[JoinCluster[A]])
   }
 
-//  def protocol[A](localMember: Member[A])(implicit tg: TaggedCodec[Initial[A]]) =
-//    Protocol[Gossip[A], Initial[A]] {
-//      case Initial.Join(nodeId, _, _) => for {
-//        gossip <- ZIO.access[Gossip[A]](_.gossip)
-//        nodeState <- gossip.nodeState(nodeId)
-//        reply <- nodeState match {
-//          case NodeState.New =>
-//            gossip.modifyNodeState(nodeId, _ => NodeState.Healthy) *>
-//              gossip.state.flatMap(state => Protocol.reply[Initial[A]](Accept[A](state, localMember.addr)))
-//          case NodeState.Healthy =>
-//            Protocol.reply[Initial[A]](Reject[A]("duplicate Node Id"))
-//        }
-//      } yield reply
-//    }
-
 }
 
