@@ -59,7 +59,7 @@ object tcp {
         } yield new NioChannelOut(socketChannel, to, requestTimeout, close, self))
           .provide(self)
 
-      override def bind(addr: SocketAddress)(connectionHandler: Connection => UIO[Unit]) =
+      override def bind(addr: SocketAddress)(connectionHandler: Connection[SocketAddress] => UIO[Unit]) =
         AsynchronousServerSocketChannel()
           .flatMap(s => s.bind(addr).toManaged_.as(s))
           .mapError(BindFailed(addr, _))
@@ -90,13 +90,10 @@ object tcp {
 
                 _ <- cur.use(connectionHandler).fork
               } yield ()).forever.fork
-                .as(new NioBind(server, close))
+                .as(new NioBind(addr, server, close))
           }
-
     }
-
   }
-
 }
 
 class NioChannelOut(
@@ -105,7 +102,7 @@ class NioChannelOut(
   requestTimeout: Duration,
   finalizer: URIO[Any, Any],
   clock: Clock
-) extends Connection {
+) extends Connection[SocketAddress] {
 
   override def isOpen: ZIO[Any, TransportError, Boolean] =
     socket.isOpen
@@ -142,12 +139,14 @@ class NioChannelOut(
   override def close: ZIO[Any, TransportError, Unit] =
     finalizer.ignore
 
+  override def address: SocketAddress = remoteAddress
 }
 
 class NioBind(
+  local: SocketAddress,
   serverSocket: AsynchronousServerSocketChannel,
   finalizer: URIO[Any, Any]
-) extends Bind {
+) extends Bind[SocketAddress] {
 
   override def close: ZIO[Any, TransportError, Unit] =
     finalizer.ignore
@@ -155,4 +154,5 @@ class NioBind(
   override def isOpen: ZIO[Any, TransportError, Boolean] =
     serverSocket.isOpen
 
+  override def address: SocketAddress = local
 }

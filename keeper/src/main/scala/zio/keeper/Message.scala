@@ -15,7 +15,7 @@ object Message {
 
   private val HeaderSize = 24
 
-  private[keeper] def readMessage(channel: Connection) =
+  private[keeper] def readMessage(channel: Connection[_]) =
     channel.read.flatMap(
       headerBytes =>
         (for {

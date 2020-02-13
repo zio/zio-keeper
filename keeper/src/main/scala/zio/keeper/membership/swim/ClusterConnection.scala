@@ -5,7 +5,7 @@ import zio.keeper.Message._
 import zio.keeper.transport.Connection
 import zio.keeper.{Error, Message}
 
-private [swim] class ClusterConnection(tConn: Connection) {
+private [swim] class ClusterConnection[A](tConn: Connection[A]) {
   def read: ZIO[Any, Error, Message] =
     readMessage(tConn).map(_._2)
 

@@ -12,24 +12,26 @@ object Transport {
   trait Service[R, A] {
 
     def bind(localAddr: A)(
-      connectionHandler: Connection => UIO[Unit]
-    ): ZManaged[R, TransportError, Bind]
+      connectionHandler: Connection[A] => UIO[Unit]
+    ): ZManaged[R, TransportError, Bind[A]]
 
-    def connect(to: A): ZManaged[R, TransportError, Connection]
+    def connect(to: A): ZManaged[R, TransportError, Connection[A]]
   }
 
 }
 
-sealed trait Channel {
+sealed trait Channel[A] {
+  def address: A
+
   def close: ZIO[Any, TransportError, Unit]
 
   def isOpen: ZIO[Any, TransportError, Boolean]
 }
 
-trait Connection extends Channel {
+trait Connection[A] extends Channel[A] {
   def read: ZIO[Any, TransportError, Chunk[Byte]]
 
   def send(data: Chunk[Byte]): ZIO[Any, TransportError, Unit]
 }
 
-trait Bind extends Channel {}
+trait Bind[A] extends Channel[A] {}

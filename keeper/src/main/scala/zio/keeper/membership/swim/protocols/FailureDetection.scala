@@ -9,6 +9,7 @@ import zio.keeper.membership.swim.{GossipState, Nodes, Protocol}
 import zio.keeper.{ByteCodec, TaggedCodec}
 import zio.stm.TMap
 import zio.stream.ZStream
+import zio.duration._
 
 sealed trait FailureDetection[+A]
 

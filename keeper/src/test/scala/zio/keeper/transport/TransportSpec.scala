@@ -44,11 +44,11 @@ object TransportSpec
       def bindAndWaitForValue(
         addr: SocketAddress,
         startPromise: Promise[Nothing, Unit],
-        handler: Connection => UIO[Unit] = _ => ZIO.unit
+        handler: Connection[SocketAddress] => UIO[Unit] = _ => ZIO.unit
       ) =
         for {
           q <- Queue.bounded[Chunk[Byte]](10)
-          h = (out: Connection) => {
+          h = (out: Connection[SocketAddress]) => {
             for {
               _    <- handler(out)
               data <- out.read

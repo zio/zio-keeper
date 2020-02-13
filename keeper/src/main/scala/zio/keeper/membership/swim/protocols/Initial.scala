@@ -53,8 +53,10 @@ object Initial {
         new Protocol[A, Initial] {
 
           override def onMessage = {
-            case (sender, Join)   => nodes.established(sender).as(Some((sender, Accept)))
-            case (sender, Accept) => nodes.established(sender).as(None)
+            case (sender, Join)   =>
+              nodes.established(sender).as(Some((sender, Accept)))
+            case (sender, Accept) =>
+              nodes.established(sender).as(None)
           }
 
           override def produceMessages: ZStream[Any, keeper.Error, (A, Initial)] =
