@@ -259,7 +259,6 @@ workflows:
           context: Website
           requires:
             - mdoc
-            - release
             - test_212_jdk8
             - test_212_jdk11
             - test_213_jdk8
