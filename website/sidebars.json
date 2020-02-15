@@ -13,7 +13,7 @@
   "library-sidebar": {
     "Library": [
       "library/library_index",
-      "library/library_gossip",
+      "library/library_membership",
       "library/library_crdts"
     ]
   }
