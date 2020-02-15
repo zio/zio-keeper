@@ -12,7 +12,7 @@ jdk_8: &jdk_8
 jdk_11: &jdk_11
   JDK_VERSION: 11
 
-tags_filter: &tags_filter
+filter_tags: &filter_tags
   tags:
     only: /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
 
@@ -208,31 +208,31 @@ workflows:
     jobs:
       - lint:
           filters:
-            <<: *tags_filter
+            <<: *filter_tags
 
       - mdoc:
           requires:
             - lint
           filters:
-            <<: *tags_filter
+            <<: *filter_tags
 
       - test_212_jdk8:
           requires:
             - lint
           filters:
-            <<: *tags_filter
+            <<: *filter_tags
 
       - test_212_jdk11:
           requires:
             - lint
           filters:
-            <<: *tags_filter
+            <<: *filter_tags
 
       - test_213_jdk8:
           requires:
             - lint
           filters:
-            <<: *tags_filter
+            <<: *filter_tags
 
       - microsite:
           context: Website
@@ -242,7 +242,7 @@ workflows:
             - test_212_jdk11
             - test_213_jdk8
           filters:
-            <<: *tags_filter
+            <<: *filter_tags
             branches:
               only: 
                 - master
@@ -252,6 +252,6 @@ workflows:
           requires:
             - microsite
           filters:
-            <<: *tags_filter
+            <<: *filter_tags
             branches:
               ignore: /.*/
