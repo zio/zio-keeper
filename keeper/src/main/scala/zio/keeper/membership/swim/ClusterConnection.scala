@@ -1,16 +1,16 @@
 package zio.keeper.membership.swim
 
-import zio.ZIO
+import zio.{Chunk, ZIO}
 import zio.keeper.Message._
 import zio.keeper.transport.Connection
-import zio.keeper.{Error, Message}
+import zio.keeper.{ByteCodec, Error, Message}
 
-private [swim] class ClusterConnection[A](tConn: Connection[A]) {
+private [swim] class ClusterConnection[A: ByteCodec](tConn: Connection[A]) {
   def read: ZIO[Any, Error, Message] =
-    readMessage(tConn).map(_._2)
+    readMessage(tConn)
 
-  def sendInternal(data: Message): ZIO[Any, Error, Unit] =
-    serializeMessage(data.sender, data.payload, 1)>>= tConn.send
+  def send(data: Chunk[Byte]): ZIO[Any, Error, Unit] =
+    serializeMessage(tConn.address, data, 1)>>= tConn.send
 
   def close: ZIO[Any, Error, Unit] =
     tConn.close

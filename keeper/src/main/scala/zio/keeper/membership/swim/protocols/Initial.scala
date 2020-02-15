@@ -1,11 +1,13 @@
 package zio.keeper.membership.swim.protocols
 
 import upickle.default._
+import zio.ZIO
 import zio.keeper.discovery.Discovery
 import zio.keeper.membership.swim.{ Nodes, Protocol }
 import zio.keeper.{ ByteCodec, TaggedCodec }
+import zio.logging.Logging
+import zio.logging.slf4j._
 import zio.stream.ZStream
-import zio.{ ZIO, keeper }
 
 sealed trait Initial
 
@@ -47,25 +49,25 @@ object Initial {
       ByteCodec.fromReadWriter(macroRW[Reject])
   }
 
-  def protocol[A](nodes: Nodes[A]) =
-    ZIO.access[Discovery[A]](
+  def protocol[A: ReadWriter](nodes: Nodes[A])(implicit codec: TaggedCodec[Initial]) =
+    ZIO.access[Discovery[A] with Logging[String]](
       env =>
-        new Protocol[A, Initial] {
-
-          override def onMessage = {
-            case (sender, Join)   =>
+        Protocol[A, Initial](
+          {
+            case (sender, Join) =>
               nodes.established(sender).as(Some((sender, Accept)))
             case (sender, Accept) =>
               nodes.established(sender).as(None)
-          }
-
-          override def produceMessages: ZStream[Any, keeper.Error, (A, Initial)] =
-            ZStream
-              .fromIterator(
-                env.discover.discoverNodes.map(_.iterator)
-              )
-              .mapM(node => nodes.connect(node).as((node, Join)))
-        }
+            case (sender, Reject(msg)) =>
+              logger.error("Rejected from cluster: " + msg)
+              nodes.disconnect(sender).as(None)
+          },
+          ZStream
+            .fromIterator(
+              env.discover.discoverNodes.map(_.iterator)
+            )
+            .mapM(node => nodes.connect(node).as((node, Join)))
+        )
     )
 
 }

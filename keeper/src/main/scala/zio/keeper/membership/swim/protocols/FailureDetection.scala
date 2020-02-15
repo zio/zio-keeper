@@ -3,13 +3,13 @@ package zio.keeper.membership.swim.protocols
 import java.util.concurrent.TimeUnit
 
 import upickle.default._
-import zio.clock.{Clock, currentTime}
-import zio.{Ref, Schedule, ZIO, keeper}
-import zio.keeper.membership.swim.{GossipState, Nodes, Protocol}
-import zio.keeper.{ByteCodec, TaggedCodec}
+import zio.clock.{ Clock, currentTime }
+import zio.duration._
+import zio.keeper.membership.swim.{ GossipState, Nodes, Protocol }
+import zio.keeper.{ ByteCodec, TaggedCodec }
 import zio.stm.TMap
 import zio.stream.ZStream
-import zio.duration._
+import zio.{ Ref, Schedule, ZIO }
 
 sealed trait FailureDetection[+A]
 
@@ -60,42 +60,48 @@ object FailureDetection {
 
   private case class _Ack[A](nodeId: A, timestamp: Long, onBehalf: Option[(A, Long)])
 
-  def protocol[A](nodes: Nodes[A]) =
+  def protocol[A](nodes: Nodes[A])(implicit codec: TaggedCodec[FailureDetection[A]]) =
     for {
       deps  <- ZIO.environment[Clock]
       acks  <- TMap.empty[Long, _Ack[A]].commit
       ackId <- Ref.make(0L)
-    } yield new Protocol[A, FailureDetection[A]] {
-
-      private def ack(id: Long) =
+    } yield {
+      def ack(id: Long) =
         (acks.get(id) <*
           acks
             .delete(id)).commit
 
-      override def onMessage = {
-        case (_, Ack(ackId, state)) =>
-          nodes.updateState(state.asInstanceOf[GossipState[A]]) *>
-            ack(ackId).map {
-              case Some(_Ack(_, _, Some((node, originalAckId)))) =>
-                Some((node, Ack(originalAckId, state)))
-              case _ =>
-                None
-            }
+      def withAck(onBehalf: Option[(A, Long)], fn: Long => (A, FailureDetection[A])) =
+        for {
+          ackId      <- ackId.update(_ + 1)
+          timestamp  <- currentTime(TimeUnit.MILLISECONDS)
+          nodeAndMsg = fn(ackId)
+          _          <- acks.put(ackId, _Ack(nodeAndMsg._1, timestamp, onBehalf)).commit
+        } yield nodeAndMsg
 
-        case (sender, Ping(ackId, state0)) =>
-          nodes.updateState(state0.asInstanceOf[GossipState[A]]) *>
-            nodes.currentState.map(state => Some((sender, Ack[A](ackId, state))))
+      Protocol[A, FailureDetection[A]](
+        {
+          case (_, Ack(ackId, state)) =>
+            nodes.updateState(state.asInstanceOf[GossipState[A]]) *>
+              ack(ackId).map {
+                case Some(_Ack(_, _, Some((node, originalAckId)))) =>
+                  Some((node, Ack(originalAckId, state)))
+                case _ =>
+                  None
+              }
 
-        case (sender, PingReq(to, originalAck, state0)) =>
-          nodes.updateState(state0.asInstanceOf[GossipState[A]]) *>
-            nodes.currentState
-              .flatMap(state => withAck(Some((sender, originalAck)), ackId => (to, Ping(ackId, state))))
-              .map(Some(_))
-              .provide(deps)
+          case (sender, Ping(ackId, state0)) =>
+            nodes.updateState(state0.asInstanceOf[GossipState[A]]) *>
+              nodes.currentState.map(state => Some((sender, Ack[A](ackId, state))))
 
-      }
+          case (sender, PingReq(to, originalAck, state0)) =>
+            nodes.updateState(state0.asInstanceOf[GossipState[A]]) *>
+              nodes.currentState
+                .flatMap(state => withAck(Some((sender, originalAck)), ackId => (to, Ping(ackId, state))))
+                .map(Some(_))
+                .provide(deps)
 
-      override def produceMessages: ZStream[Any, keeper.Error, (A, FailureDetection[A])] =
+        },
         ZStream
           .fromIterator(
             acks.toList.commit.map(_.iterator)
@@ -125,15 +131,7 @@ object FailureDetection {
               }
           )
           .provide(deps)
-
-      private def withAck(onBehalf: Option[(A, Long)], fn: Long => (A, FailureDetection[A])) =
-        for {
-          ackId      <- ackId.update(_ + 1)
-          timestamp  <- currentTime(TimeUnit.MILLISECONDS)
-          nodeAndMsg = fn(ackId)
-          _          <- acks.put(ackId, _Ack(nodeAndMsg._1, timestamp, onBehalf)).commit
-        } yield nodeAndMsg
-
+      )
     }
 
 }

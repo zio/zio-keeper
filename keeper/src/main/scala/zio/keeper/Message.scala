@@ -8,6 +8,7 @@ import zio.{Chunk, IO}
 
 final case class Message(
   sender: NodeId,
+  messageType: Int,
   payload: Chunk[Byte]
 )
 
@@ -25,15 +26,16 @@ object Message {
           messageType            <- byteBuffer.getInt
           payloadByte            <- byteBuffer.getChunk()
           sender                 = NodeId(new java.util.UUID(senderMostSignificant, senderLeastSignificant))
-        } yield (messageType, Message(sender, payloadByte)))
+        } yield Message(sender, messageType, payloadByte))
           .mapError(e => DeserializationTypeError(e))
     )
 
-  private[keeper] def serializeMessage(nodeId: NodeId, payload: Chunk[Byte], messageType: Int): IO[Error, Chunk[Byte]] = {
+  private[keeper] def serializeMessage[A](nodeId: A, payload: Chunk[Byte], messageType: Int): IO[Error, Chunk[Byte]] = {
     for {
       byteBuffer <- Buffer.byte(HeaderSize + payload.length)
-      _          <- byteBuffer.putLong(nodeId.value.getMostSignificantBits)
-      _          <- byteBuffer.putLong(nodeId.value.getLeastSignificantBits)
+      _ = nodeId.toString
+//      _          <- byteBuffer.putLong(nodeId.value.getMostSignificantBits)
+//      _          <- byteBuffer.putLong(nodeId.value.getLeastSignificantBits)
       _          <- byteBuffer.putInt(messageType)
       _          <- byteBuffer.putChunk(payload)
       _          <- byteBuffer.flip
