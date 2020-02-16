@@ -55,7 +55,7 @@ object TestNode {
       _ <- receive
             .foreach(
               message =>
-                putStrLn(new String(message.payload.toArray))
+                putStrLn(s"id: ${message.id}, payload: ${new String(message.payload.toArray)}")
                   *> send(message.payload, message.sender).ignore
                   *> sleep(5.seconds)
             )
