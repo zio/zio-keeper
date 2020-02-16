@@ -65,73 +65,76 @@ object FailureDetection {
       deps  <- ZIO.environment[Clock]
       acks  <- TMap.empty[Long, _Ack[A]].commit
       ackId <- Ref.make(0L)
-    } yield {
-      def ack(id: Long) =
-        (acks.get(id) <*
-          acks
-            .delete(id)).commit
+      protocol <- {
 
-      def withAck(onBehalf: Option[(A, Long)], fn: Long => (A, FailureDetection[A])) =
-        for {
-          ackId      <- ackId.update(_ + 1)
-          timestamp  <- currentTime(TimeUnit.MILLISECONDS)
-          nodeAndMsg = fn(ackId)
-          _          <- acks.put(ackId, _Ack(nodeAndMsg._1, timestamp, onBehalf)).commit
-        } yield nodeAndMsg
+        def ack(id: Long) =
+          (acks.get(id) <*
+            acks
+              .delete(id)).commit
 
-      Protocol[A, FailureDetection[A]](
-        {
-          case (_, Ack(ackId, state)) =>
-            nodes.updateState(state.asInstanceOf[GossipState[A]]) *>
-              ack(ackId).map {
-                case Some(_Ack(_, _, Some((node, originalAckId)))) =>
-                  Some((node, Ack(originalAckId, state)))
-                case _ =>
-                  None
-              }
+        def withAck(onBehalf: Option[(A, Long)], fn: Long => (A, FailureDetection[A])) =
+          for {
+            ackId      <- ackId.update(_ + 1)
+            timestamp  <- currentTime(TimeUnit.MILLISECONDS)
+            nodeAndMsg = fn(ackId)
+            _          <- acks.put(ackId, _Ack(nodeAndMsg._1, timestamp, onBehalf)).commit
+          } yield nodeAndMsg
 
-          case (sender, Ping(ackId, state0)) =>
-            nodes.updateState(state0.asInstanceOf[GossipState[A]]) *>
-              nodes.currentState.map(state => Some((sender, Ack[A](ackId, state))))
-
-          case (sender, PingReq(to, originalAck, state0)) =>
-            nodes.updateState(state0.asInstanceOf[GossipState[A]]) *>
-              nodes.currentState
-                .flatMap(state => withAck(Some((sender, originalAck)), ackId => (to, Ping(ackId, state))))
-                .map(Some(_))
-                .provide(deps)
-
-        },
-        ZStream
-          .fromIterator(
-            acks.toList.commit.map(_.iterator)
-          )
-          .zip(ZStream.repeatEffectWith(currentTime(TimeUnit.MICROSECONDS), Schedule.spaced(1.second)))
-          .collectM {
-            case ((ackId, ack), current) if current - ack.timestamp > 5.seconds.toMillis =>
-              nodes.next
-                .zip(nodes.currentState)
-                .map {
-                  case (node, state) =>
-                    node.map(next => (next, PingReq(ack.nodeId, ackId, state)))
+        Protocol[A, FailureDetection[A]].apply(
+          {
+            case (_, Ack(ackId, state)) =>
+              nodes.updateState(state.asInstanceOf[GossipState[A]]) *>
+                ack(ackId).map {
+                  case Some(_Ack(_, _, Some((node, originalAckId)))) =>
+                    Some((node, Ack(originalAckId, state)))
+                  case _ =>
+                    None
                 }
-          }
-          .collect {
-            case Some(req) => req
-          }
-          .merge(
-            ZStream
-              .repeatEffectWith(
-                nodes.next <*> nodes.currentState,
-                Schedule.spaced(3.seconds)
-              )
-              .collectM {
-                case (Some(next), state) =>
-                  withAck(None, ackId => (next, Ping(ackId, state)))
-              }
-          )
-          .provide(deps)
-      )
-    }
+
+            case (sender, Ping(ackId, state0)) =>
+              nodes.updateState(state0.asInstanceOf[GossipState[A]]) *>
+                nodes.currentState.map(state => Some((sender, Ack[A](ackId, state))))
+
+            case (sender, PingReq(to, originalAck, state0)) =>
+              nodes.updateState(state0.asInstanceOf[GossipState[A]]) *>
+                nodes.currentState
+                  .flatMap(state => withAck(Some((sender, originalAck)), ackId => (to, Ping(ackId, state))))
+                  .map(Some(_))
+                  .provide(deps)
+
+          },
+          ZStream
+            .fromIterator(
+              acks.toList.commit.map(_.iterator)
+            )
+            .zip(ZStream.repeatEffectWith(currentTime(TimeUnit.MICROSECONDS), Schedule.spaced(1.second)))
+            .collectM {
+              case ((ackId, ack), current) if current - ack.timestamp > 5.seconds.toMillis =>
+                nodes.next
+                  .zip(nodes.currentState)
+                  .map {
+                    case (node, state) =>
+                      node.map(next => (next, PingReq(ack.nodeId, ackId, state)))
+                  }
+            }
+            .collect {
+              case Some(req) => req
+            }
+            .merge(
+              ZStream
+                .repeatEffectWith(
+                  nodes.next <*> nodes.currentState,
+                  Schedule.spaced(3.seconds)
+                )
+                .collectM {
+                  case (Some(next), state) =>
+                    withAck(None, ackId => (next, Ping(ackId, state)))
+                }
+            )
+        )
+
+      }
+
+    } yield protocol
 
 }

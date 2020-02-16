@@ -42,7 +42,7 @@ object TaggedCodec {
               )(
                 implicit
                 tagged: TaggedCodec[A]
-              ): ZIO[Any, SerializationError, Chunk[Byte]] = {
+              ): ZIO[Any, SerializationTypeError, Chunk[Byte]] = {
     val tag = tagged.tagOf(data)
     for {
       codec <- tagged.codecFor(tag).mapError(_ => SerializationTypeError(s"No codec found for tag $tag"))

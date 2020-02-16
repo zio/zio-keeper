@@ -28,27 +28,35 @@ trait Protocol[A, M] {
 
 object Protocol {
 
-  def apply[A, M: TaggedCodec](
-    in: (A, M) => ZIO[Any, Error, Option[(A, M)]],
-    out: zio.stream.ZStream[Any, Error, (A, M)]
-  ): Protocol[A, Chunk[Byte]] = new Protocol[A, Chunk[Byte]] {
+  class ProtocolBuilder[A, M: TaggedCodec]{
+    def apply[R](in: (A, M) => ZIO[R, Error, Option[(A, M)]],
+                 out: zio.stream.ZStream[R, Error, (A, M)]
+                ): ZIO[R, Error, Protocol[A, Chunk[Byte]]] =
+      ZIO.access[R](env =>
+        new Protocol[A, Chunk[Byte]] {
 
-    override def onMessage: (A, Chunk[Byte]) => ZIO[Any, Error, Option[(A, Chunk[Byte])]] =
-      (sender, payload) =>
-        TaggedCodec
-          .read[M](payload)
-          .flatMap(m => in(sender, m))
-          .flatMap {
-            case Some((addr, msg)) => TaggedCodec.write(msg).map(chunk => Some((addr, chunk)))
-            case _                 => ZIO.succeed[Option[(A, Chunk[Byte])]](None)
-          }
+          override def onMessage: (A, Chunk[Byte]) => ZIO[Any, Error, Option[(A, Chunk[Byte])]] =
+            (sender, payload) =>
+              TaggedCodec
+                .read[M](payload)
+                .flatMap(m => in(sender, m))
+                .flatMap {
+                  case Some((addr, msg)) => TaggedCodec.write(msg).map(chunk => Some((addr, chunk)))
+                  case _                 => ZIO.succeed[Option[(A, Chunk[Byte])]](None)
+                }.provide(env)
 
-    override def produceMessages: ZStream[Any, Error, (A, Chunk[Byte])] =
-      out.mapM {
-        case (recipient, msg) =>
-          TaggedCodec
-            .write[M](msg)
-            .map((recipient, _))
-      }
+          override def produceMessages: ZStream[Any, Error, (A, Chunk[Byte])] =
+            out.mapM {
+              case (recipient, msg) =>
+                TaggedCodec
+                  .write[M](msg)
+                  .map((recipient, _))
+            }.provide(env)
+        }
+      )
   }
+
+  def apply[A, M: TaggedCodec]: ProtocolBuilder[A, M] =
+    new ProtocolBuilder[A, M]
+
 }

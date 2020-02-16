@@ -50,9 +50,9 @@ object Initial {
   }
 
   def protocol[A: ReadWriter](nodes: Nodes[A])(implicit codec: TaggedCodec[Initial]) =
-    ZIO.access[Discovery[A] with Logging[String]](
+    ZIO.accessM[Discovery[A] with Logging[String]](
       env =>
-        Protocol[A, Initial](
+        Protocol[A, Initial].apply(
           {
             case (sender, Join) =>
               nodes.established(sender).as(Some((sender, Accept)))

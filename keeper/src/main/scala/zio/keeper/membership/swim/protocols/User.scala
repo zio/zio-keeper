@@ -1,8 +1,9 @@
 package zio.keeper.membership.swim.protocols
 
 import upickle.default._
+import zio.keeper.SerializationError._
 import zio.keeper.membership.swim.Protocol
-import zio.keeper.{ByteCodec, SerializationError, TaggedCodec}
+import zio.keeper.{ByteCodec, TaggedCodec}
 import zio.stream.ZStream
 import zio.{Chunk, IO}
 
@@ -25,9 +26,11 @@ object User {
 
   implicit def codec[A: TaggedCodec]: ByteCodec[User[A]] =
     new ByteCodec[User[A]] {
-      override def fromChunk(chunk: Chunk[Byte]): IO[SerializationError.DeserializationTypeError, User[A]] = ???
+      override def fromChunk(chunk: Chunk[Byte]): IO[DeserializationTypeError, User[A]] =
+        TaggedCodec.read[A](chunk).map(User(_))
 
-      override def toChunk(a: User[A]): IO[SerializationError.SerializationTypeError, Chunk[Byte]] = ???
+      override def toChunk(a: User[A]): IO[SerializationTypeError, Chunk[Byte]] =
+        TaggedCodec.write[A](a.msg)
     }
 
 
@@ -35,7 +38,7 @@ object User {
                                                userIn: zio.Queue[(A, B)],
                                                userOut: zio.Queue[(A, B)]
                                              ) =
-    Protocol[A, User[B]](
+    Protocol[A, User[B]].apply(
       (s, u: User[B]) => userIn.offer((s, u.msg)).as(None),
       ZStream.fromQueue(userOut)
         .map{

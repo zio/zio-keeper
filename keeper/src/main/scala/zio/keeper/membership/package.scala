@@ -1,3 +1,4 @@
+/*
 package zio.keeper
 
 import zio.stream.ZStream
@@ -23,3 +24,4 @@ package object membership extends Membership.Service[Membership[NodeAddress], No
   override def send(data: Chunk[Byte], receipt: NodeId): ZIO[Membership[NodeAddress], Error, Unit] =
     ZIO.accessM[Membership[NodeAddress]](_.membership.send(data, receipt))
 }
+*/

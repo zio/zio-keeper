@@ -2,10 +2,9 @@ package zio.keeper.membership.swim.protocols
 
 import zio.keeper.membership.swim.Protocol
 import zio.keeper.{ByteCodec, SerializationError, TaggedCodec}
-import zio.logging.Logging
+import zio.logging.slf4j._
 import zio.stream.ZStream
 import zio.{Chunk, IO, ZIO}
-import zio.logging.slf4j._
 
 object DeadLetter {
 
@@ -24,17 +23,14 @@ object DeadLetter {
   )
 
   def protocol[A] =
-    ZIO.access[Logging[String]]{
-      env =>
-        Protocol[A, Chunk[Byte]](
-          {
-            case (sender, _) =>
-              logger.error("message from: " + sender + " in dead letter")
-                .as(None).provide(env)
-          },
-          ZStream.empty
-        )
-    }
+    Protocol[A, Chunk[Byte]].apply(
+      {
+        case (sender, _) =>
+          logger.error("message from: " + sender + " in dead letter")
+            .as(None)
+      },
+      ZStream.empty
+    )
 
 
 }

@@ -14,6 +14,9 @@ private [swim] class ClusterConnection[A: ByteCodec](tConn: Connection[A]) {
 
   def close: ZIO[Any, Error, Unit] =
     tConn.close
+
+  def address: A  =
+    tConn.address
 }
 
 

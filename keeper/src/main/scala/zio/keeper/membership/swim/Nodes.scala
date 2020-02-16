@@ -1,10 +1,13 @@
 package zio.keeper.membership.swim
 
+import zio.keeper.ClusterError.UnknownNode
 import zio.keeper.transport.Transport
 import zio.keeper.{ByteCodec, Error, Message}
+import zio.logging.Logging
 import zio.stm.TMap
 import zio.stream.{Take, ZStream}
 import zio.{Queue, Ref, UIO, ZIO}
+import zio.logging.slf4j._
 
 class Nodes[A: ByteCodec](
   val local: A,
@@ -15,9 +18,11 @@ class Nodes[A: ByteCodec](
   messages: zio.Queue[Take[Error, (ClusterConnection[A], Message)]]
 ) {
 
-  final def accept(connection: ClusterConnection[A]): ZIO[Any, Error, Unit] = ???
+  final def accept(connection: ClusterConnection[A]): ZIO[Any, Error, Unit] =
+    nodeChannels.put(connection.address, connection).commit
 
-  final def connect(addr: A): ZIO[Any, Error, Unit] =
+  final def connect(addr: A): ZIO[Logging[String], Error, Unit] =
+    logger.info("New connection: " + addr) *>
     transport
       .connect(addr)
       .map(new ClusterConnection(_))
@@ -29,10 +34,11 @@ class Nodes[A: ByteCodec](
       .fork
       .unit
 
-  final def connection(addr: A): ZIO[Any, Error, ClusterConnection[A]] = ???
-  //nodeChannels.getOrElse(addr, STM.fail(UnknownNode(addr)).commit)
+  final def connection(addr: A): ZIO[Any, Error, ClusterConnection[A]] =
+    nodeChannels.get(addr).commit.get.asError(UnknownNode(addr))
 
-  def currentState: UIO[GossipState[A]] = state.get
+  def currentState: UIO[GossipState[A]] =
+    state.get
 
   def disconnect(sender: A): _root_.zio.ZIO[Any, Error, Unit] =
     nodeChannels.delete(sender).commit
@@ -46,7 +52,7 @@ class Nodes[A: ByteCodec](
       nextIndex <- roundRobinOffset.update(old => if (old < nodes.size - 1) old + 1 else 0)
     } yield nodes.drop(nextIndex).headOption
 
-  def updateState(newState: GossipState[A]): ZIO[Any, Nothing, Unit] =
+  def updateState(newState: GossipState[A]): ZIO[Logging[String], Nothing, Unit] =
     for {
       current <- state.get
       diff    = newState.diff(current)
