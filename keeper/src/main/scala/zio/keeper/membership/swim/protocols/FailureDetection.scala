@@ -3,6 +3,7 @@ package zio.keeper.membership.swim.protocols
 import upickle.default._
 import zio.duration._
 import zio.keeper.membership.NodeAddress
+import zio.keeper.membership.swim.Nodes.NodeState
 import zio.keeper.membership.swim.{ GossipState, Nodes, Protocol }
 import zio.keeper.{ ByteCodec, TaggedCodec }
 import zio.logging.slf4j._
@@ -57,7 +58,7 @@ object FailureDetection {
       ByteCodec.fromReadWriter(macroRW[PingReq])
   }
 
-  private case class _Ack(nodeId: NodeAddress, onBehalf: Option[(NodeAddress, Long)])
+  private case class _Ack(target: NodeAddress, onBehalf: Option[(NodeAddress, Long)])
 
   def protocol(nodes: Nodes, protocolPeriod: Duration) =
     for {
@@ -122,12 +123,20 @@ object FailureDetection {
                       acks.toList.commit.map(_.iterator)
                     )
                     .collectM {
-                      case (ackId, ack) =>
+                      case (ackId, ack0) =>
                         nodes.next
+                          .zip(nodes.nodeState(ack0.target))
                           .zip(nodes.currentState)
-                          .map {
-                            case (node, state) =>
-                              node.map(next => (next, PingReq(ack.nodeId, ackId, state)))
+                          .flatMap {
+                            case ((Some(next), NodeState.Healthy), state) =>
+                              nodes
+                                .changeNodeState(ack0.target, NodeState.Unreachable)
+                                .as(Some((next, PingReq(ack0.target, ackId, state))))
+                            case ((Some(_), NodeState.Unreachable), _) =>
+                              ack(ackId) *>
+                                nodes
+                                  .changeNodeState(ack0.target, NodeState.Suspicion)
+                                  .as(None) //this should send suspicion message
                           }
                     }
                     .collect {
