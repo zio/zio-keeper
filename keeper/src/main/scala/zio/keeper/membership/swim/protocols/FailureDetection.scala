@@ -11,6 +11,7 @@ import zio.keeper.{ByteCodec, TaggedCodec}
 import zio.stm.TMap
 import zio.stream.ZStream
 import zio.{Ref, Schedule, ZIO}
+import zio.logging.slf4j._
 
 sealed trait FailureDetection
 
@@ -94,6 +95,7 @@ object FailureDetection {
 
             case (sender, Ping(ackId, state0)) =>
               nodes.updateState(state0.asInstanceOf[GossipState]) *>
+                logger.info("Send Ack " + ackId + " to: " + sender)
                 nodes.currentState.map(state => Some((sender, Ack(ackId, state))))
 
             case (sender, PingReq(to, originalAck, state0)) =>
@@ -129,6 +131,7 @@ object FailureDetection {
                 )
                 .collectM {
                   case (Some(next), state) =>
+                    logger.info("Send Ping to: " + next) *>
                     withAck(None, ackId => (next, Ping(ackId, state)))
                 }
             )

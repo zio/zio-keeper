@@ -3,7 +3,7 @@ package zio.keeper
 import zio.keeper.SerializationError.{DeserializationTypeError, SerializationTypeError}
 import zio.keeper.membership.NodeId
 import zio.keeper.transport.Connection
-import zio.nio.Buffer
+import zio.nio.core.Buffer
 import zio.{Chunk, IO}
 
 final case class Message(

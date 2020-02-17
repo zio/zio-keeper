@@ -2,7 +2,7 @@ package zio.keeper.discovery
 
 import zio.ZIO
 import zio.keeper.Error
-import zio.nio.InetSocketAddress
+import zio.nio.core.InetSocketAddress
 
 trait Discovery {
   def discover: Discovery.Service[Any]

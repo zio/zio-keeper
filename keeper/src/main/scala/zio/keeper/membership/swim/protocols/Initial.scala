@@ -55,10 +55,10 @@ object Initial {
       env =>
         Protocol[NodeAddress, Initial].apply(
           {
-            case (sender, Join(_)) =>
-              nodes.established(sender).as(Some((sender, Accept)))
+            case (sender, Join(alias)) =>
+              nodes.established(sender, alias).as(Some((sender, Accept)))
             case (sender, Accept) =>
-              nodes.established(sender).as(None)
+              nodes.established(sender, sender).as(None)
             case (sender, Reject(msg)) =>
               logger.error("Rejected from cluster: " + msg) *>
                 nodes.disconnect(sender).as(None)

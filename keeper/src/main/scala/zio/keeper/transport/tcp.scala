@@ -10,7 +10,7 @@ import zio.keeper.TransportError
 import zio.keeper.TransportError._
 import zio.logging.Logging
 import zio.macros.delegate._
-import zio.nio._
+import zio.nio.core._
 import zio.nio.channels._
 
 object tcp {
@@ -82,7 +82,6 @@ object tcp {
                                     new NioChannelOut(socket, addr, connectionTimeout, close, self)
                                   )
                               case _ =>
-                                // This is almost impossible here but still we need to handle it.
                                 ZIO.fail(ExceptionWrapper(new RuntimeException("cannot obtain address")))
                             }
                         }

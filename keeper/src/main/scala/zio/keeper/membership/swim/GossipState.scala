@@ -28,13 +28,6 @@ case class GossipState(members: Vector[NodeAddress]) extends AnyVal {
 object GossipState {
   val Empty = swim.GossipState(Vector.empty[NodeAddress])
 
-  final case class StateDiff(local: Vector[NodeAddress], remote: Vector[NodeAddress])
   implicit val gossipStateRw = macroRW[GossipState]
-}
-
-sealed trait NodeState
-
-object NodeState {
-  case object New     extends NodeState
-  case object Healthy extends NodeState
+  final case class StateDiff(local: Vector[NodeAddress], remote: Vector[NodeAddress])
 }

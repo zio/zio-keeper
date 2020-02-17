@@ -9,7 +9,7 @@ import zio.logging.Logging
 import zio.logging.slf4j.Slf4jLogger
 import zio.macros.delegate._
 import zio.macros.delegate.syntax._
-import zio.nio.{InetSocketAddress, SocketAddress}
+import zio.nio.core.{InetSocketAddress, SocketAddress}
 import zio.test.Assertion._
 import zio.test._
 import zio.test.environment.Live

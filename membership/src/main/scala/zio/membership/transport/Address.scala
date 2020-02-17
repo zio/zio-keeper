@@ -1,8 +1,8 @@
 package zio.membership.transport
 
 import zio.IO
-import zio.nio.SocketAddress
-import zio.nio.InetSocketAddress
+import zio.nio.core.SocketAddress
+import zio.nio.core.InetSocketAddress
 import zio.membership.ResolutionFailed
 import upickle.default._
 

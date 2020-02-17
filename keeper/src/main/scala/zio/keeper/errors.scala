@@ -2,7 +2,7 @@ package zio.keeper
 
 import zio.duration.Duration
 import zio.keeper.membership.NodeId
-import zio.nio.SocketAddress
+import zio.nio.core.SocketAddress
 
 
 sealed abstract class Error(val msg: String = "") {

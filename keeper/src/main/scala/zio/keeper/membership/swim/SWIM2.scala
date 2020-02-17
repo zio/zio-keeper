@@ -38,7 +38,9 @@ object SWIM2 {
       _ <- swim.produceMessages
             .mapM {
               case (to, payload) =>
-                nodes0.connection(to).flatMap(_.send(payload))
+                nodes0
+                  .connection(to)
+                  .flatMap(_.send(payload))
             }
             .runDrain
             .toManaged_
@@ -51,11 +53,13 @@ object SWIM2 {
                   ZStream
                     .repeatEffect(cc.read)
                     .mapM(
-                      msg => swim.onMessage(local, msg.payload)
+                      msg => swim.onMessage(cc.address, msg.payload)
                     )
                     .collectM {
                       case Some((to, payload)) =>
-                        nodes0.connection(to).flatMap(_.send(payload))
+                        nodes0
+                          .connection(to)
+                          .flatMap(_.send(payload))
                     }
                     //.catchAll()
                     .runDrain
@@ -69,7 +73,7 @@ object SWIM2 {
 
           override def events: ZStream[Any, keeper.Error, MembershipEvent[NodeAddress]] = ???
 
-          override def localMember: NodeAddress = ???
+          override def localMember: NodeAddress = local
 
           override def nodes: ZIO[Any, Nothing, List[NodeAddress]] =
             nodes0.currentState.map(_.members.toList)
