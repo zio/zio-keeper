@@ -1,6 +1,5 @@
 package zio.keeper.membership.swim
 
-import zio._
 import zio.clock.Clock
 import zio.keeper.TaggedCodec
 import zio.keeper.discovery.Discovery
@@ -9,7 +8,9 @@ import zio.keeper.membership.{ Membership, MembershipEvent, NodeAddress }
 import zio.keeper.transport.Transport
 import zio.logging.Logging
 import zio.logging.slf4j._
-import zio.stream.ZStream
+import zio.stream.{ Take, ZStream }
+import zio.{ keeper, _ }
+import zio.duration._
 
 object SWIM2 {
 
@@ -22,11 +23,12 @@ object SWIM2 {
     for {
       _                <- logger.info("starting SWIM on port: " + port).toManaged_
       env              <- ZManaged.environment[Transport with Discovery]
+      messages         <- Queue.bounded[Take[keeper.Error, (NodeAddress, Chunk[Byte])]](1000).toManaged(_.awaitShutdown)
       local            <- NodeAddress.local(port).toManaged_
       localAddress     <- local.socketAddress.toManaged_
-      nodes0           <- Nodes.make(local).toManaged_
+      nodes0           <- Nodes.make(local, messages).toManaged_
       initial          <- Initial.protocol(nodes0).toManaged_
-      failureDetection <- FailureDetection.protocol(nodes0).toManaged_
+      failureDetection <- FailureDetection.protocol(nodes0, 3.seconds).toManaged_
       userIn           <- Queue.bounded[(NodeAddress, B)](1000).toManaged(_.awaitShutdown)
       userOut          <- Queue.bounded[(NodeAddress, B)](1000).toManaged(_.awaitShutdown)
       user             <- User.protocol[B](userIn, userOut).toManaged_
@@ -45,26 +47,47 @@ object SWIM2 {
             .runDrain
             .toManaged_
             .fork
+      _ <- ZStream
+            .fromQueue(messages)
+          .tap(x => logger.info(x.toString))
+            .mapM {
+              case Take.Value((node, msg)) =>
+                swim.onMessage(node, msg)
+              case _ => ZIO.succeed(None)
+            }
+            .collectM {
+              case Some((to, payload)) =>
+                nodes0
+                  .connection(to)
+                  .flatMap(_.send(payload))
+            }
+            //.catchAll()
+            .runDrain
+            .toManaged_
+            .fork
       _ <- env.transport.bind(localAddress) { conn =>
-            nodes0
-              .accept(conn)
-              .flatMap(
-                cc =>
-                  ZStream
-                    .repeatEffect(cc.read)
-                    .mapM(
-                      msg => swim.onMessage(cc.address, msg.payload)
-                    )
-                    .collectM {
-                      case Some((to, payload)) =>
-                        nodes0
-                          .connection(to)
-                          .flatMap(_.send(payload))
-                    }
-                    //.catchAll()
-                    .runDrain
-              )
-              .ignore
+            NodeAddress(conn.address).flatMap(
+              addr =>
+                nodes0
+                  .accept(addr, conn)
+                  .flatMap(
+                    cc =>
+                      ZStream
+                        .repeatEffect(cc.read)
+                        .mapM(
+                          msg => swim.onMessage(addr, msg)
+                        )
+                        .collectM {
+                          case Some((to, payload)) =>
+                            nodes0
+                              .connection(to)
+                              .flatMap(_.send(payload))
+                        }
+                        //.catchAll()
+                        .runDrain
+                  )
+                  .ignore
+            )
           }
     } yield new Membership[NodeAddress, B] {
 

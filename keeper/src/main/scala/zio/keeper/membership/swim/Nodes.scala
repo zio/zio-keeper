@@ -1,29 +1,27 @@
 package zio.keeper.membership.swim
 
+import zio._
 import zio.keeper.ClusterError.UnknownNode
+import zio.keeper.Error
 import zio.keeper.membership.NodeAddress
-import zio.keeper.transport.{ Connection, Transport }
-import zio.keeper.{ Error, Message }
+import zio.keeper.transport.{Connection, Transport}
 import zio.logging.Logging
 import zio.logging.slf4j._
 import zio.nio.core.InetSocketAddress
-import zio.stm.{ STM, TMap }
-import zio.stream.{ Take, ZStream }
-import zio._
+import zio.stm.{STM, TMap}
+import zio.stream.{Take, ZStream}
 
 class Nodes(
   val local: NodeAddress,
-  nodeChannels: TMap[NodeAddress, ClusterConnection],
+  nodeChannels: TMap[NodeAddress, Connection],
   state: Ref[GossipState],
   roundRobinOffset: Ref[Int],
   transport: Transport.Service[Any],
-  messages: zio.Queue[Take[Error, (ClusterConnection, Message)]]
+  messages: zio.Queue[Take[Error, (NodeAddress, Chunk[Byte])]]
 ) {
 
-  final def accept(connection: Connection): ZIO[Any, Error, ClusterConnection] =
-    NodeAddress(connection.address)
-      .map(addr => new ClusterConnection(connection, addr))
-      .tap(conn => nodeChannels.put(conn.address, conn).commit)
+  final def accept(nodeAddress: NodeAddress, connection: Connection): ZIO[Any, Error, Connection] =
+    nodeChannels.put(nodeAddress, connection).commit.as(connection)
 
   final def connect(addr: InetSocketAddress): ZIO[Logging[String], Error, Unit] =
     logger.info("New connection: " + addr) *>
@@ -31,20 +29,19 @@ class Nodes(
         case (nodeAddress, init) =>
           transport
             .connect(addr)
-            .map(new ClusterConnection(_, nodeAddress))
             .use(
               conn =>
                 nodeChannels.put(nodeAddress, conn).commit *>
                   logger.info("Node: " + nodeAddress + " added to cluster.") *>
                   init.succeed(()) *>
-                  ZStream.repeatEffect(conn.read.map(msg => (conn, msg))).into(messages)
+                  ZStream.repeatEffect(conn.read.map(msg => (nodeAddress, msg))).into(messages)
 
             )
             .fork *>
             init.await
       }
 
-  final def connection(addr: NodeAddress): ZIO[Any, Error, ClusterConnection] =
+  final def connection(addr: NodeAddress): ZIO[Any, Error, Connection] =
     nodeChannels.get(addr).commit.get.asError(UnknownNode(addr))
 
   def currentState: UIO[GossipState] =
@@ -69,13 +66,7 @@ class Nodes(
     } yield nodes.drop(nextIndex).headOption
 
   def updateState(newState: GossipState): ZIO[Logging[String], Nothing, Unit] =
-    for {
-      current <- state.get
-      diff    = newState.diff(current)
-      _       <- state.set(newState.merge(current))
-      _       <- ZIO.foreach(diff.local)(n => n.socketAddress.flatMap(connect).ignore)
-    } yield ()
-
+    logger.info(newState.toString).unit
 }
 
 object Nodes {
@@ -88,12 +79,11 @@ object Nodes {
     case object Established extends NodeState
   }
 
-  def make(local: NodeAddress) =
+  def make(local: NodeAddress, messages: Queue[Take[Error, (NodeAddress, Chunk[Byte])]]) =
     for {
-      nodeChannels     <- TMap.empty[NodeAddress, ClusterConnection].commit
+      nodeChannels     <- TMap.empty[NodeAddress, Connection].commit
       gossipState      <- Ref.make(GossipState.Empty)
       roundRobinOffset <- Ref.make(0)
-      messages         <- Queue.unbounded[Take[Error, (ClusterConnection, Message)]]
       env              <- ZIO.environment[Transport]
     } yield new Nodes(
       local,

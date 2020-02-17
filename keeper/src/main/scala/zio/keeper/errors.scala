@@ -1,5 +1,6 @@
 package zio.keeper
 
+import zio.Chunk
 import zio.duration.Duration
 import zio.keeper.membership.NodeId
 import zio.nio.core.SocketAddress
@@ -47,7 +48,7 @@ object ClusterError {
   final case class HandshakeError(addr: SocketAddress, error: Error)
       extends ClusterError(msg = s"Connection handshake for $addr failed with ${error.msg}")
 
-  final case class UnexpectedMessage(message: Message) extends ClusterError
+  final case class UnexpectedMessage(message: Chunk[Byte]) extends ClusterError
 
   final case class AckMessageFail[A](ackId: Long, message: A, to: NodeId)
       extends ClusterError(msg = s"message [$message] with ack id: $ackId sent to: $to overdue timeout ")
