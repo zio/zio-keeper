@@ -10,8 +10,8 @@ import zio.keeper.TransportError
 import zio.keeper.TransportError._
 import zio.logging.Logging
 import zio.macros.delegate._
-import zio.nio.core._
 import zio.nio.channels._
+import zio.nio.core._
 
 object tcp {
 
@@ -50,13 +50,15 @@ object tcp {
         (for {
           socketChannelAndClose  <- AsynchronousSocketChannel().withEarlyRelease.mapError(ExceptionWrapper)
           (close, socketChannel) = socketChannelAndClose
+          writeLock              <- Semaphore.make(1).toManaged_
+          readLock               <- Semaphore.make(1).toManaged_
           _ <- socketChannel
                 .connect(to)
                 .mapError(ExceptionWrapper)
                 .timeoutFail(ConnectionTimeout(to, connectionTimeout))(connectionTimeout)
                 .toManaged_
           _ <- logger.info("transport connected to " + to).toManaged_
-        } yield new NioChannelOut(socketChannel, to, requestTimeout, close, self))
+        } yield new NioChannelOut(socketChannel, to, requestTimeout, close, self, readLock, writeLock))
           .provide(self)
 
       override def bind(addr: InetSocketAddress)(connectionHandler: Connection => UIO[Unit]) =
@@ -70,6 +72,8 @@ object tcp {
           .mapM {
             case (close, server) =>
               (for {
+                writeLock              <- Semaphore.make(1)
+                readLock               <- Semaphore.make(1)
                 cur <- server.accept.withEarlyRelease
                         .mapError(ExceptionWrapper)
                         .mapM {
@@ -79,7 +83,7 @@ object tcp {
                                 logger
                                   .info("connection accepted from: " + addr)
                                   .as(
-                                    new NioChannelOut(socket, addr, connectionTimeout, close, self)
+                                    new NioChannelOut(socket, addr, connectionTimeout, close, self, readLock, writeLock)
                                   )
                               case _ =>
                                 ZIO.fail(ExceptionWrapper(new RuntimeException("cannot obtain address")))
@@ -100,20 +104,25 @@ class NioChannelOut(
   remoteAddress: InetSocketAddress,
   requestTimeout: Duration,
   finalizer: URIO[Any, Any],
-  clock: Clock
+  clock: Clock,
+  readLock: Semaphore,
+  writeLock: Semaphore
 ) extends Connection {
 
   override def isOpen: ZIO[Any, TransportError, Boolean] =
     socket.isOpen
 
   override def read: ZIO[Any, TransportError, Chunk[Byte]] =
-    (for {
-      length <- socket
-                 .read(4)
-                 .flatMap(c => ZIO.effect(new BigInteger(c.toArray).intValue()))
-                 .mapError(ExceptionWrapper)
-      data <- socket.read(length).mapError(ExceptionWrapper)
-    } yield data)
+    readLock
+      .withPermit(
+        for {
+          length <- socket
+                     .read(4)
+                     .flatMap(c => ZIO.effect(new BigInteger(c.toArray).intValue()))
+                     .mapError(ExceptionWrapper)
+          data <- socket.read(length).mapError(ExceptionWrapper)
+        } yield data
+      )
       .catchSome {
         case ExceptionWrapper(ex: IOException) if ex.getMessage == "Connection reset by peer" =>
           close *> ZIO.fail(ExceptionWrapper(ex))
@@ -121,18 +130,20 @@ class NioChannelOut(
 
   override def send(data: Chunk[Byte]): ZIO[Any, TransportError, Unit] = {
     val size = data.size
-    (for {
-      _ <- socket
-            .write(Chunk((size >>> 24).toByte, (size >>> 16).toByte, (size >>> 8).toByte, size.toByte))
-            .mapError(ExceptionWrapper(_))
-      _ <- socket.write(data).retry(Schedule.recurs(3)).mapError(ExceptionWrapper(_))
-    } yield ())
+    writeLock
+      .withPermit(
+        socket
+          .write(Chunk((size >>> 24).toByte, (size >>> 16).toByte, (size >>> 8).toByte, size.toByte))
+          .mapError(ExceptionWrapper(_)) *>
+          socket.write(data).retry(Schedule.recurs(3)).mapError(ExceptionWrapper(_))
+      )
       .catchSome {
         case ExceptionWrapper(ex: IOException) if ex.getMessage == "Connection reset by peer" =>
           close *> ZIO.fail(ExceptionWrapper(ex))
       }
       .timeoutFail(RequestTimeout(remoteAddress, requestTimeout))(requestTimeout)
       .provide(clock)
+      .unit
   }
 
   override def close: ZIO[Any, TransportError, Unit] =
