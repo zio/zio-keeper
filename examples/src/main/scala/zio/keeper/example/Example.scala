@@ -6,6 +6,7 @@ import zio.console._
 import zio.duration._
 import zio.keeper.discovery.Discovery
 import zio.keeper.example.TestNode.PingPong.Pong
+import zio.keeper.membership.{Membership, NodeAddress}
 import zio.keeper.membership.swim.SWIM2
 import zio.keeper.transport.Transport
 import zio.keeper.{ByteCodec, TaggedCodec, transport}
@@ -50,6 +51,7 @@ object TestNode {
         transport.tcp.withTcpTransport(10.seconds, 10.seconds)
 
   sealed trait PingPong
+
   object PingPong {
     case object Ping extends PingPong
     case object Pong extends PingPong
@@ -62,35 +64,23 @@ object TestNode {
 
     implicit def tagged(implicit p1: ByteCodec[Ping.type], p2: ByteCodec[Pong.type]) =
       TaggedCodec.instance[PingPong]({
-      case Pong => 1
-      case Ping => 2
-    },
-    {
-      case 1 => p1.asInstanceOf[ByteCodec[PingPong]]
-      case 2 => p2.asInstanceOf[ByteCodec[PingPong]]
-    })
+        case Pong => 1
+        case Ping => 2
+      }, {
+        case 1 => p1.asInstanceOf[ByteCodec[PingPong]]
+        case 2 => p2.asInstanceOf[ByteCodec[PingPong]]
+      })
   }
-
-  implicit val socketAddressRW: ReadWriter[SocketAddress] = ???
-//    macroRW[SocketAddress]
-
-  implicit val socketAddressCodec: ByteCodec[SocketAddress] =
-    ByteCodec.fromReadWriter(socketAddressRW)
-
 
   def start(port: Int, otherPorts: Set[Int]) =
     (environment(port, otherPorts) >>> (for {
-      localHost            <- InetAddress.localHost.toManaged_.orDie
-      localAddress <- SocketAddress.inetSocketAddress(localHost, port).toManaged_
-      membership <- SWIM2.run[SocketAddress, PingPong](localAddress)
-      _ <- sleep(5.seconds).toManaged_
+      env <- ZManaged.environment[Membership[NodeAddress, PingPong]]
+      _            <- sleep(5.seconds).toManaged_
 //      _ <- broadcast(Chunk.fromArray(nodeName.getBytes)).ignore.toManaged_
-      _ <- membership.receive
-            .foreach {
-              case (sender, message) =>
-                putStrLn("receive message: " + message) *> membership.send(Pong, sender).ignore *> sleep (5.seconds)
-            }
-            .toManaged_
+      _ <- env.membership.receive.foreach {
+            case (sender, message) =>
+              putStrLn("receive message: " + message) *> env.membership.send(Pong, sender).ignore *> sleep(5.seconds)
+          }.toManaged_
     } yield ()))
       .fold(ex => {
         println(s"exit with error: $ex")
@@ -104,7 +94,7 @@ object TestNode {
 
   def discoveryEnv(others: Set[Int]) =
     ZIO.environment[zio.ZEnv] @@
-      enrichWithM[Discovery[SocketAddress]](
+      enrichWithM[Discovery](
         ZIO
           .foreach(others)(
             port => InetAddress.localHost.flatMap(addr => SocketAddress.inetSocketAddress(addr, port))
@@ -114,11 +104,9 @@ object TestNode {
       )
 
   def membership(port: Int) =
-    ZManaged.environment[zio.ZEnv with Logging[String] with Transport[SocketAddress] with Discovery[SocketAddress]] @@
+    ZManaged.environment[zio.ZEnv with Logging[String] with Transport with Discovery] @@
       enrichWithManaged(
-        InetAddress.localHost.flatMap(SocketAddress.inetSocketAddress(_, port)).toManaged_.flatMap(
-          SWIM2.run[SocketAddress, PingPong](_)
-        )
+        SWIM2.run[PingPong](port)
       )
 }
 //

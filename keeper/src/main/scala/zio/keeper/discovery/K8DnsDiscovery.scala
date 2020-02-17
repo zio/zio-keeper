@@ -4,13 +4,13 @@ import java.net.UnknownHostException
 import java.util
 
 import javax.naming.directory.InitialDirContext
-import javax.naming.{ Context, NamingException }
+import javax.naming.{Context, NamingException}
 import zio.duration.Duration
 import zio.keeper.ServiceDiscoveryError
 import zio.logging.Logging
 import zio.macros.delegate._
-import zio.nio.{ InetAddress, SocketAddress }
-import zio.{ IO, URIO, ZIO, keeper }
+import zio.nio.{InetAddress, InetSocketAddress}
+import zio.{IO, URIO, ZIO, keeper}
 
 /**
  * This discovery strategy uses K8 service headless service dns to find other members of the cluster.
@@ -18,13 +18,13 @@ import zio.{ IO, URIO, ZIO, keeper }
  * Headless service is a service of type ClusterIP with the clusterIP property set to None.
  *
  */
-trait K8DnsDiscovery extends Discovery.Service[Any, SocketAddress] {
+trait K8DnsDiscovery extends Discovery.Service[Any] {
 
-  final override val discoverNodes: ZIO[Any, keeper.Error, Set[SocketAddress]] = {
+  final override val discoverNodes: ZIO[Any, keeper.Error, Set[InetSocketAddress]] = {
     for {
       addresses <- lookup(serviceDns, serviceDnsTimeout)
       nodes     <- ZIO.foreach(addresses)(addr => zio.nio.SocketAddress.inetSocketAddress(addr, servicePort))
-    } yield nodes.toSet: Set[zio.nio.SocketAddress]
+    } yield nodes.toSet: Set[zio.nio.InetSocketAddress]
   }.catchAll(
     ex =>
       logging.error("discovery strategy " + this.getClass.getSimpleName + " failed.") *>
@@ -76,18 +76,18 @@ object K8DnsDiscovery {
     addr: zio.nio.InetAddress,
     timeout: Duration,
     port: Int
-  ) = enrichWithM[Discovery[SocketAddress]](k8DnsDiscovery(addr, timeout, port))
+  ) = enrichWithM[Discovery](k8DnsDiscovery(addr, timeout, port))
 
   def k8DnsDiscovery(
     addr: zio.nio.InetAddress,
     timeout: Duration,
     port: Int
-  ): URIO[Logging[String], Discovery[SocketAddress]] =
+  ): URIO[Logging[String], Discovery] =
     ZIO.access[Logging[String]](
       env =>
-        new Discovery[SocketAddress] {
+        new Discovery {
 
-          override def discover: Discovery.Service[Any, SocketAddress] = new K8DnsDiscovery {
+          override def discover: Discovery.Service[Any] = new K8DnsDiscovery {
             override val logging: Logging.Service[Any, String] = env.logging
 
             override def serviceDns: InetAddress = addr

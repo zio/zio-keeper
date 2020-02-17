@@ -19,12 +19,12 @@ object tcp {
     connectionTimeout: Duration,
     sendTimeout: Duration
   ) =
-    enrichWithM[Transport[SocketAddress]](tcpTransport(connectionTimeout, sendTimeout))
+    enrichWithM[Transport](tcpTransport(connectionTimeout, sendTimeout))
 
   def tcpTransport(
     connectionTimeout: Duration,
     requestTimeout: Duration
-  ): ZIO[Clock with Logging[String], Nothing, Transport[SocketAddress]] = {
+  ): ZIO[Clock with Logging[String], Nothing, Transport] = {
     val connectionTimeout_ = connectionTimeout
     val requestTimeout_    = requestTimeout
     ZIO.environment[Clock with Logging[String]].map { env =>
@@ -37,16 +37,16 @@ object tcp {
     }
   }
 
-  trait Live extends Transport[SocketAddress] {
+  trait Live extends Transport {
     self: Clock =>
     val connectionTimeout: Duration
     val requestTimeout: Duration
 
     val logger: Logging.Service[Any, String]
 
-    val transport = new Transport.Service[Any, SocketAddress] {
+    val transport = new Transport.Service[Any] {
 
-      override def connect(to: SocketAddress) =
+      override def connect(to: InetSocketAddress) =
         (for {
           socketChannelAndClose  <- AsynchronousSocketChannel().withEarlyRelease.mapError(ExceptionWrapper)
           (close, socketChannel) = socketChannelAndClose
@@ -59,7 +59,7 @@ object tcp {
         } yield new NioChannelOut(socketChannel, to, requestTimeout, close, self))
           .provide(self)
 
-      override def bind(addr: SocketAddress)(connectionHandler: Connection[SocketAddress] => UIO[Unit]) =
+      override def bind(addr: InetSocketAddress)(connectionHandler: Connection => UIO[Unit]) =
         AsynchronousServerSocketChannel()
           .flatMap(s => s.bind(addr).toManaged_.as(s))
           .mapError(BindFailed(addr, _))
@@ -75,15 +75,15 @@ object tcp {
                         .mapM {
                           case (close, socket) =>
                             socket.remoteAddress.flatMap {
-                              case None =>
-                                // This is almost impossible here but still we need to handle it.
-                                ZIO.fail(ExceptionWrapper(new RuntimeException("cannot obtain address")))
-                              case Some(addr) =>
+                              case Some(addr: InetSocketAddress) =>
                                 logger
                                   .info("connection accepted from: " + addr)
                                   .as(
                                     new NioChannelOut(socket, addr, connectionTimeout, close, self)
                                   )
+                              case _ =>
+                                // This is almost impossible here but still we need to handle it.
+                                ZIO.fail(ExceptionWrapper(new RuntimeException("cannot obtain address")))
                             }
                         }
                         .preallocate
@@ -98,11 +98,11 @@ object tcp {
 
 class NioChannelOut(
   socket: AsynchronousSocketChannel,
-  remoteAddress: SocketAddress,
+  remoteAddress: InetSocketAddress,
   requestTimeout: Duration,
   finalizer: URIO[Any, Any],
   clock: Clock
-) extends Connection[SocketAddress] {
+) extends Connection {
 
   override def isOpen: ZIO[Any, TransportError, Boolean] =
     socket.isOpen
@@ -139,14 +139,14 @@ class NioChannelOut(
   override def close: ZIO[Any, TransportError, Unit] =
     finalizer.ignore
 
-  override def address: SocketAddress = remoteAddress
+  override def address: InetSocketAddress = remoteAddress
 }
 
 class NioBind(
-  local: SocketAddress,
+  local: InetSocketAddress,
   serverSocket: AsynchronousServerSocketChannel,
   finalizer: URIO[Any, Any]
-) extends Bind[SocketAddress] {
+) extends Bind {
 
   override def close: ZIO[Any, TransportError, Unit] =
     finalizer.ignore
@@ -154,5 +154,5 @@ class NioBind(
   override def isOpen: ZIO[Any, TransportError, Boolean] =
     serverSocket.isOpen
 
-  override def address: SocketAddress = local
+  override def address: InetSocketAddress = local
 }

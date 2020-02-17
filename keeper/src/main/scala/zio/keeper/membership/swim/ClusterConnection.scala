@@ -1,11 +1,12 @@
 package zio.keeper.membership.swim
 
-import zio.{Chunk, ZIO}
 import zio.keeper.Message._
+import zio.keeper.membership.NodeAddress
 import zio.keeper.transport.Connection
-import zio.keeper.{ByteCodec, Error, Message}
+import zio.keeper.{Error, Message}
+import zio.{Chunk, ZIO}
 
-private [swim] class ClusterConnection[A: ByteCodec](tConn: Connection[A]) {
+private [swim] class ClusterConnection(tConn: Connection, val address: NodeAddress) {
   def read: ZIO[Any, Error, Message] =
     readMessage(tConn)
 
@@ -15,8 +16,6 @@ private [swim] class ClusterConnection[A: ByteCodec](tConn: Connection[A]) {
   def close: ZIO[Any, Error, Unit] =
     tConn.close
 
-  def address: A  =
-    tConn.address
 }
 
 

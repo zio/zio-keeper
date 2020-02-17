@@ -3,67 +3,68 @@ package zio.keeper.membership.swim.protocols
 import java.util.concurrent.TimeUnit
 
 import upickle.default._
-import zio.clock.{ Clock, currentTime }
+import zio.clock.{Clock, currentTime}
 import zio.duration._
-import zio.keeper.membership.swim.{ GossipState, Nodes, Protocol }
-import zio.keeper.{ ByteCodec, TaggedCodec }
+import zio.keeper.membership.NodeAddress
+import zio.keeper.membership.swim.{GossipState, Nodes, Protocol}
+import zio.keeper.{ByteCodec, TaggedCodec}
 import zio.stm.TMap
 import zio.stream.ZStream
-import zio.{ Ref, Schedule, ZIO }
+import zio.{Ref, Schedule, ZIO}
 
-sealed trait FailureDetection[+A]
+sealed trait FailureDetection
 
 object FailureDetection {
 
-  implicit def tagged[A](
+  implicit def tagged(
     implicit
-    c1: ByteCodec[Ack[A]],
-    c2: ByteCodec[Ping[A]],
-    c3: ByteCodec[PingReq[A]]
-  ): TaggedCodec[FailureDetection[A]] =
+    c1: ByteCodec[Ack],
+    c2: ByteCodec[Ping],
+    c3: ByteCodec[PingReq]
+  ): TaggedCodec[FailureDetection] =
     TaggedCodec.instance(
       {
-        case _: Ack[A]     => 10
-        case _: Ping[A]    => 11
-        case _: PingReq[A] => 12
+        case _: Ack    => 10
+        case _: Ping    => 11
+        case _: PingReq => 12
       }, {
-        case 10 => c1.asInstanceOf[ByteCodec[FailureDetection[A]]]
-        case 11 => c2.asInstanceOf[ByteCodec[FailureDetection[A]]]
-        case 12 => c3.asInstanceOf[ByteCodec[FailureDetection[A]]]
+        case 10 => c1.asInstanceOf[ByteCodec[FailureDetection]]
+        case 11 => c2.asInstanceOf[ByteCodec[FailureDetection]]
+        case 12 => c3.asInstanceOf[ByteCodec[FailureDetection]]
       }
     )
 
-  final case class Ack[A](conversation: Long, state: GossipState[A]) extends FailureDetection[A]
+  final case class Ack(conversation: Long, state: GossipState) extends FailureDetection
 
   object Ack {
 
-    implicit def codec[A: ReadWriter]: ByteCodec[Ack[A]] =
-      ByteCodec.fromReadWriter(macroRW[Ack[A]])
+    implicit val codec: ByteCodec[Ack] =
+      ByteCodec.fromReadWriter(macroRW[Ack])
 
   }
 
-  final case class Ping[A](ackConversation: Long, state: GossipState[A]) extends FailureDetection[A]
+  final case class Ping(ackConversation: Long, state: GossipState) extends FailureDetection
 
   object Ping {
 
-    implicit def codec[A: ReadWriter]: ByteCodec[Ping[A]] =
-      ByteCodec.fromReadWriter(macroRW[Ping[A]])
+    implicit val codec: ByteCodec[Ping] =
+      ByteCodec.fromReadWriter(macroRW[Ping])
   }
 
-  final case class PingReq[A](target: A, ackConversation: Long, state: GossipState[A]) extends FailureDetection[A]
+  final case class PingReq(target: NodeAddress, ackConversation: Long, state: GossipState) extends FailureDetection
 
   object PingReq {
 
-    implicit def codec[A: ReadWriter]: ByteCodec[PingReq[A]] =
-      ByteCodec.fromReadWriter(macroRW[PingReq[A]])
+    implicit val codec: ByteCodec[PingReq] =
+      ByteCodec.fromReadWriter(macroRW[PingReq])
   }
 
-  private case class _Ack[A](nodeId: A, timestamp: Long, onBehalf: Option[(A, Long)])
+  private case class _Ack(nodeId: NodeAddress, timestamp: Long, onBehalf: Option[(NodeAddress, Long)])
 
-  def protocol[A](nodes: Nodes[A])(implicit codec: TaggedCodec[FailureDetection[A]]) =
+  def protocol(nodes: Nodes) =
     for {
       deps  <- ZIO.environment[Clock]
-      acks  <- TMap.empty[Long, _Ack[A]].commit
+      acks  <- TMap.empty[Long, _Ack].commit
       ackId <- Ref.make(0L)
       protocol <- {
 
@@ -72,7 +73,7 @@ object FailureDetection {
             acks
               .delete(id)).commit
 
-        def withAck(onBehalf: Option[(A, Long)], fn: Long => (A, FailureDetection[A])) =
+        def withAck(onBehalf: Option[(NodeAddress, Long)], fn: Long => (NodeAddress, FailureDetection)) =
           for {
             ackId      <- ackId.update(_ + 1)
             timestamp  <- currentTime(TimeUnit.MILLISECONDS)
@@ -80,10 +81,10 @@ object FailureDetection {
             _          <- acks.put(ackId, _Ack(nodeAndMsg._1, timestamp, onBehalf)).commit
           } yield nodeAndMsg
 
-        Protocol[A, FailureDetection[A]].apply(
+        Protocol[NodeAddress, FailureDetection].apply(
           {
             case (_, Ack(ackId, state)) =>
-              nodes.updateState(state.asInstanceOf[GossipState[A]]) *>
+              nodes.updateState(state.asInstanceOf[GossipState]) *>
                 ack(ackId).map {
                   case Some(_Ack(_, _, Some((node, originalAckId)))) =>
                     Some((node, Ack(originalAckId, state)))
@@ -92,11 +93,11 @@ object FailureDetection {
                 }
 
             case (sender, Ping(ackId, state0)) =>
-              nodes.updateState(state0.asInstanceOf[GossipState[A]]) *>
-                nodes.currentState.map(state => Some((sender, Ack[A](ackId, state))))
+              nodes.updateState(state0.asInstanceOf[GossipState]) *>
+                nodes.currentState.map(state => Some((sender, Ack(ackId, state))))
 
             case (sender, PingReq(to, originalAck, state0)) =>
-              nodes.updateState(state0.asInstanceOf[GossipState[A]]) *>
+              nodes.updateState(state0.asInstanceOf[GossipState]) *>
                 nodes.currentState
                   .flatMap(state => withAck(Some((sender, originalAck)), ackId => (to, Ping(ackId, state))))
                   .map(Some(_))

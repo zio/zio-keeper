@@ -1,5 +1,6 @@
 package zio.keeper.membership.swim.protocols
 
+import zio.keeper.membership.NodeAddress
 import zio.keeper.membership.swim.Protocol
 import zio.keeper.{ByteCodec, SerializationError, TaggedCodec}
 import zio.logging.slf4j._
@@ -22,8 +23,8 @@ object DeadLetter {
 
   )
 
-  def protocol[A] =
-    Protocol[A, Chunk[Byte]].apply(
+  def protocol =
+    Protocol[NodeAddress, Chunk[Byte]].apply(
       {
         case (sender, _) =>
           logger.error("message from: " + sender + " in dead letter")

@@ -3,6 +3,7 @@ package zio.keeper.membership.swim.protocols
 import upickle.default._
 import zio.ZIO
 import zio.keeper.discovery.Discovery
+import zio.keeper.membership.NodeAddress
 import zio.keeper.membership.swim.{ Nodes, Protocol }
 import zio.keeper.{ ByteCodec, TaggedCodec }
 import zio.logging.Logging
@@ -15,13 +16,13 @@ object Initial {
 
   implicit def taggedRequests(
     implicit
-    c4: ByteCodec[Join.type],
+    c4: ByteCodec[Join],
     c6: ByteCodec[Accept.type],
     c7: ByteCodec[Reject]
   ): TaggedCodec[Initial] =
     TaggedCodec.instance(
       {
-        case Join      => 13
+        case _: Join   => 13
         case Accept    => 15
         case _: Reject => 16
       }, {
@@ -31,42 +32,47 @@ object Initial {
       }
     )
 
-  final case object Join extends Initial
+  final case class Join(nodeAddress: NodeAddress) extends Initial
 
-  implicit def codecJoin[A: ReadWriter]: ByteCodec[Join.type] =
-    ByteCodec.fromReadWriter(macroRW[Join.type])
+  implicit val codecJoin: ByteCodec[Join] =
+    ByteCodec.fromReadWriter(macroRW[Join])
 
   case object Accept extends Initial
 
-  implicit def codecAccept[A: ReadWriter]: ByteCodec[Accept.type] =
+  implicit val codecAccept: ByteCodec[Accept.type] =
     ByteCodec.fromReadWriter(macroRW[Accept.type])
 
   case class Reject(msg: String) extends Initial
 
   object Reject {
 
-    implicit def codec[A: ReadWriter]: ByteCodec[Reject] =
+    implicit val codec: ByteCodec[Reject] =
       ByteCodec.fromReadWriter(macroRW[Reject])
   }
 
-  def protocol[A: ReadWriter](nodes: Nodes[A])(implicit codec: TaggedCodec[Initial]) =
-    ZIO.accessM[Discovery[A] with Logging[String]](
+  def protocol(nodes: Nodes) =
+    ZIO.accessM[Discovery with Logging[String]](
       env =>
-        Protocol[A, Initial].apply(
+        Protocol[NodeAddress, Initial].apply(
           {
-            case (sender, Join) =>
+            case (sender, Join(_)) =>
               nodes.established(sender).as(Some((sender, Accept)))
             case (sender, Accept) =>
               nodes.established(sender).as(None)
             case (sender, Reject(msg)) =>
-              logger.error("Rejected from cluster: " + msg)
-              nodes.disconnect(sender).as(None)
+              logger.error("Rejected from cluster: " + msg) *>
+                nodes.disconnect(sender).as(None)
           },
           ZStream
             .fromIterator(
               env.discover.discoverNodes.map(_.iterator)
             )
-            .mapM(node => nodes.connect(node).as((node, Join)))
+            .mapM(
+              node =>
+                nodes.connect(node) *>
+                  NodeAddress(node)
+                    .map(addr => (addr, Join(nodes.local)))
+            )
         )
     )
 

@@ -1,7 +1,7 @@
 package zio.keeper.transport
 
 import zio._
-import zio.console.{ Console, _ }
+import zio.console.{Console, _}
 import zio.duration._
 import zio.keeper.TransportError.ExceptionWrapper
 import zio.keeper.transport
@@ -9,7 +9,7 @@ import zio.logging.Logging
 import zio.logging.slf4j.Slf4jLogger
 import zio.macros.delegate._
 import zio.macros.delegate.syntax._
-import zio.nio.SocketAddress
+import zio.nio.{InetSocketAddress, SocketAddress}
 import zio.test.Assertion._
 import zio.test._
 import zio.test.environment.Live
@@ -42,13 +42,13 @@ object TransportSpec
         } yield r
 
       def bindAndWaitForValue(
-        addr: SocketAddress,
-        startPromise: Promise[Nothing, Unit],
-        handler: Connection[SocketAddress] => UIO[Unit] = _ => ZIO.unit
+                               addr: InetSocketAddress,
+                               startPromise: Promise[Nothing, Unit],
+                               handler: Connection => UIO[Unit] = _ => ZIO.unit
       ) =
         for {
           q <- Queue.bounded[Chunk[Byte]](10)
-          h = (out: Connection[SocketAddress]) => {
+          h = (out: Connection) => {
             for {
               _    <- handler(out)
               data <- out.read

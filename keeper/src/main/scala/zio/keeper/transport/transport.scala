@@ -1,37 +1,38 @@
 package zio.keeper.transport
 
 import zio.keeper.TransportError
+import zio.nio.InetSocketAddress
 import zio.{Chunk, UIO, ZIO, ZManaged}
 
-trait Transport[A] {
-  val transport: Transport.Service[Any, A]
+trait Transport {
+  val transport: Transport.Service[Any]
 }
 
 object Transport {
 
-  trait Service[R, A] {
+  trait Service[R] {
 
-    def bind(localAddr: A)(
-      connectionHandler: Connection[A] => UIO[Unit]
-    ): ZManaged[R, TransportError, Bind[A]]
+    def bind(localAddr: InetSocketAddress)(
+      connectionHandler: Connection => UIO[Unit]
+    ): ZManaged[R, TransportError, Bind]
 
-    def connect(to: A): ZManaged[R, TransportError, Connection[A]]
+    def connect(to: InetSocketAddress): ZManaged[R, TransportError, Connection]
   }
 
 }
 
-sealed trait Channel[A] {
-  def address: A
+sealed trait Channel {
+  def address: InetSocketAddress
 
   def close: ZIO[Any, TransportError, Unit]
 
   def isOpen: ZIO[Any, TransportError, Boolean]
 }
 
-trait Connection[A] extends Channel[A] {
+trait Connection extends Channel {
   def read: ZIO[Any, TransportError, Chunk[Byte]]
 
   def send(data: Chunk[Byte]): ZIO[Any, TransportError, Unit]
 }
 
-trait Bind[A] extends Channel[A] {}
+trait Bind extends Channel {}

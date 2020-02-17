@@ -40,3 +40,18 @@ final case class NodeAddress(ip: Array[Byte], port: Int) {
       sa   <- SocketAddress.inetSocketAddress(addr, port)
     } yield sa).mapError(ExceptionWrapper)
 }
+
+object NodeAddress {
+  def local(port: Int) =
+    InetAddress.localHost
+      .map(addr => NodeAddress(addr.address, port))
+      .orDie
+
+  def apply(addr: InetSocketAddress): ZIO[Any, Nothing, NodeAddress] =
+    InetAddress.byName(addr.hostString)
+      .map(inet => NodeAddress(inet.address, addr.port))
+      .orDie
+
+  implicit val nodeAddressRw = macroRW[NodeAddress]
+
+}
