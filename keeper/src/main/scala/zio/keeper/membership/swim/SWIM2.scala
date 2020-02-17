@@ -1,6 +1,7 @@
 package zio.keeper.membership.swim
 
 import zio.clock.Clock
+import zio.duration._
 import zio.keeper.TaggedCodec
 import zio.keeper.discovery.Discovery
 import zio.keeper.membership.swim.protocols.{ DeadLetter, FailureDetection, Initial, User }
@@ -10,7 +11,6 @@ import zio.logging.Logging
 import zio.logging.slf4j._
 import zio.stream.{ Take, ZStream }
 import zio.{ keeper, _ }
-import zio.duration._
 
 object SWIM2 {
 
@@ -21,18 +21,24 @@ object SWIM2 {
     B
   ]] =
     for {
-      _                <- logger.info("starting SWIM on port: " + port).toManaged_
-      env              <- ZManaged.environment[Transport with Discovery]
-      messages         <- Queue.bounded[Take[keeper.Error, (NodeAddress, Chunk[Byte])]](1000).toManaged(_.awaitShutdown)
+      _   <- logger.info("starting SWIM on port: " + port).toManaged_
+      env <- ZManaged.environment[Transport with Discovery]
+      messages <- Queue
+                   .bounded[Take[keeper.Error, (NodeAddress, Chunk[Byte])]](1000)
+                   .toManaged(_.awaitShutdown)
       local            <- NodeAddress.local(port).toManaged_
       localAddress     <- local.socketAddress.toManaged_
       nodes0           <- Nodes.make(local, messages).toManaged_
       initial          <- Initial.protocol(nodes0).toManaged_
       failureDetection <- FailureDetection.protocol(nodes0, 3.seconds).toManaged_
-      userIn           <- Queue.bounded[(NodeAddress, B)](1000).toManaged(_.awaitShutdown)
-      userOut          <- Queue.bounded[(NodeAddress, B)](1000).toManaged(_.awaitShutdown)
-      user             <- User.protocol[B](userIn, userOut).toManaged_
-      deadLetter       <- DeadLetter.protocol.toManaged_
+      userIn <- Queue
+                 .bounded[(NodeAddress, B)](1000)
+                 .toManaged(_.awaitShutdown)
+      userOut <- Queue
+                  .bounded[(NodeAddress, B)](1000)
+                  .toManaged(_.awaitShutdown)
+      user       <- User.protocol[B](userIn, userOut).toManaged_
+      deadLetter <- DeadLetter.protocol.toManaged_
       swim = initial
         .compose(failureDetection)
         .compose(user)
@@ -49,7 +55,6 @@ object SWIM2 {
             .fork
       _ <- ZStream
             .fromQueue(messages)
-          .tap(x => logger.info(x.toString))
             .mapM {
               case Take.Value((node, msg)) =>
                 swim.onMessage(node, msg)

@@ -109,6 +109,7 @@ object FailureDetection {
             *>
               ZStream
                 .repeatEffect(nodes.next <*> nodes.currentState)
+                .take(1)
                 .collectM {
                   case (Some(next), state) =>
                     logger.info("Send Ping to: " + next) *>
