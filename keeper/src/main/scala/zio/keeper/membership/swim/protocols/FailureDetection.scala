@@ -4,9 +4,8 @@ import upickle.default._
 import zio.duration._
 import zio.keeper.membership.NodeAddress
 import zio.keeper.membership.swim.Nodes.NodeState
-import zio.keeper.membership.swim.{ GossipState, Nodes, Protocol }
+import zio.keeper.membership.swim.{ Nodes, Protocol }
 import zio.keeper.{ ByteCodec, TaggedCodec }
-import zio.logging.slf4j._
 import zio.stm.TMap
 import zio.stream.ZStream
 import zio.{ Ref, Schedule, ZIO }
@@ -33,7 +32,7 @@ object FailureDetection {
       }
     )
 
-  final case class Ack(conversation: Long, state: GossipState) extends FailureDetection
+  final case class Ack(conversation: Long) extends FailureDetection
 
   object Ack {
 
@@ -42,7 +41,7 @@ object FailureDetection {
 
   }
 
-  final case class Ping(ackConversation: Long, state: GossipState) extends FailureDetection
+  final case class Ping(ackConversation: Long) extends FailureDetection
 
   object Ping {
 
@@ -50,7 +49,7 @@ object FailureDetection {
       ByteCodec.fromReadWriter(macroRW[Ping])
   }
 
-  final case class PingReq(target: NodeAddress, ackConversation: Long, state: GossipState) extends FailureDetection
+  final case class PingReq(target: NodeAddress, ackConversation: Long) extends FailureDetection
 
   object PingReq {
 
@@ -80,26 +79,20 @@ object FailureDetection {
 
         Protocol[NodeAddress, FailureDetection].apply(
           {
-            case (_, Ack(ackId, state)) =>
-              logger.info("receive ack")
-              nodes.updateState(state.asInstanceOf[GossipState]) *>
-                ack(ackId).map {
-                  case Some(_Ack(_, Some((node, originalAckId)))) =>
-                    Some((node, Ack(originalAckId, state)))
-                  case _ =>
-                    None
-                }
+            case (_, Ack(ackId)) =>
+              ack(ackId).map {
+                case Some(_Ack(_, Some((node, originalAckId)))) =>
+                  Some((node, Ack(originalAckId)))
+                case _ =>
+                  None
+              }
 
-            case (sender, Ping(ackId, state0)) =>
-              nodes.updateState(state0.asInstanceOf[GossipState]) *>
-                logger.info("Send Ack " + ackId + " to: " + sender)
-              nodes.currentState.map(state => Some((sender, Ack(ackId, state))))
+            case (sender, Ping(ackId)) =>
+              ZIO.succeed(Some((sender, Ack(ackId))))
 
-            case (sender, PingReq(to, originalAck, state0)) =>
-              nodes.updateState(state0.asInstanceOf[GossipState]) *>
-                nodes.currentState
-                  .flatMap(state => withAck(Some((sender, originalAck)), ackId => (to, Ping(ackId, state))))
-                  .map(Some(_))
+            case (sender, PingReq(to, originalAck)) =>
+              withAck(Some((sender, originalAck)), ackId => (to, Ping(ackId)))
+                .map(Some(_))
 
           },
           ZStream
@@ -109,12 +102,10 @@ object FailureDetection {
             )
             *>
               ZStream
-                .repeatEffect(nodes.next <*> nodes.currentState)
-                .take(1)
+                .fromEffect(nodes.next)
                 .collectM {
-                  case (Some(next), state) =>
-                    logger.info("Send Ping to: " + next) *>
-                      withAck(None, ackId => (next, Ping(ackId, state)))
+                  case Some(next) =>
+                    withAck(None, ackId => (next, Ping(ackId)))
                 }
                 .merge(
                   // Every protocol round check for outstanding acks
@@ -126,17 +117,20 @@ object FailureDetection {
                       case (ackId, ack0) =>
                         nodes.next
                           .zip(nodes.nodeState(ack0.target))
-                          .zip(nodes.currentState)
                           .flatMap {
-                            case ((Some(next), NodeState.Healthy), state) =>
+                            case (Some(next), NodeState.Healthy) =>
                               nodes
                                 .changeNodeState(ack0.target, NodeState.Unreachable)
-                                .as(Some((next, PingReq(ack0.target, ackId, state))))
-                            case ((Some(_), NodeState.Unreachable), _) =>
+                                .as(Some((next, PingReq(ack0.target, ackId))))
+                            case (Some(_), NodeState.Unreachable) =>
                               ack(ackId) *>
                                 nodes
                                   .changeNodeState(ack0.target, NodeState.Suspicion)
                                   .as(None) //this should send suspicion message
+                            case (_, _) =>
+                              nodes
+                                .disconnect(ack0.target)
+                                .as(None)
                           }
                     }
                     .collect {
@@ -145,7 +139,6 @@ object FailureDetection {
                 )
         )
       }
-
     } yield protocol
 
 }

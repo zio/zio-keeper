@@ -56,7 +56,8 @@ object Initial {
         Protocol[NodeAddress, Initial].apply(
           {
             case (sender, Join(alias)) =>
-              nodes.established(sender, alias).as(Some((sender, Accept)))
+              nodes.established(sender, alias)
+                .as(Some((sender, Accept)))
             case (sender, Accept) =>
               nodes.established(sender, sender).as(None)
             case (sender, Reject(msg)) =>
