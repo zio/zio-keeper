@@ -4,6 +4,7 @@ import zio.clock.Clock
 import zio.duration._
 import zio.keeper.TaggedCodec
 import zio.keeper.discovery.Discovery
+import zio.keeper.membership.swim.protocols.Initial.Join
 import zio.keeper.membership.swim.protocols.{ DeadLetter, FailureDetection, Initial, User }
 import zio.keeper.membership.{ Membership, MembershipEvent, NodeAddress }
 import zio.keeper.transport.Transport
@@ -29,14 +30,18 @@ object SWIM2 {
       local        <- NodeAddress.local(port).toManaged_
       localAddress <- local.socketAddress.toManaged_
       nodes0       <- Nodes.make(local, messages).toManaged_
-      initial <- Initial
-                  .protocol(nodes0)
-                  .flatMap(_.debug)
-                  .map(_.binary)
-                  .toManaged_
+      recordedAndInitial <- Initial
+                             .protocol(nodes0)
+                             .flatMap(_.debug)
+                             .flatMap(_.record {
+                               case (_, _: Join) => true
+                               case (_, _)       => false
+                             })
+                             .toManaged_
+
       failureDetection <- FailureDetection
                            .protocol(nodes0, 3.seconds)
-                           .flatMap(_.debug)
+                           .flatMap(_.piggyBacked(recordedAndInitial).debug)
                            .map(_.binary)
                            .toManaged_
       userIn <- Queue
@@ -45,9 +50,12 @@ object SWIM2 {
       userOut <- Queue
                   .bounded[(NodeAddress, B)](1000)
                   .toManaged(_.awaitShutdown)
-      user       <- User.protocol[B](userIn, userOut).map(_.binary).toManaged_
+      user <- User
+               .protocol[B](userIn, userOut)
+               .map(_.binary)
+               .toManaged_
       deadLetter <- DeadLetter.protocol.toManaged_
-      swim = initial
+      swim = recordedAndInitial._2.binary
         .compose(failureDetection)
         .compose(user)
         .compose(deadLetter)
