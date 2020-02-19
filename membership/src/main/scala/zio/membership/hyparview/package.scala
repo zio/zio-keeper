@@ -103,82 +103,84 @@ package object hyparview extends HyParViewConfig.Service[HyParViewConfig] {
           allocate {
             conM
               .flatMap { con =>
-                con.receive.process.mapM[R, E, Option[(T, Chunk[Byte] => IO[TransportError, Unit], Stream[Error, Chunk[Byte]])]] { pull =>
-                  pull
-                    .foldM(
-                      _.fold[ZIO[R, E, Option[T]]](ZIO.succeed(None))(ZIO.fail), { raw =>
-                        TaggedCodec
-                          .read[InitialProtocol[T]](raw)
-                          .tap(msg => log.debug(s"receiveInitialProtocol: $msg"))
-                          .flatMap {
-                            case msg: Neighbor[T] =>
-                              Views.using[T] {
-                                views =>
-                                  val accept = for {
-                                    reply <- TaggedCodec.write[NeighborReply](NeighborReply.Accept)
-                                    _     <- log.debug(s"Accepting neighborhood request from ${msg.sender}")
-                                    _     <- con.send(reply)
-                                  } yield Some(msg.sender)
+                con.receive.process
+                  .mapM[R, E, Option[(T, Chunk[Byte] => IO[TransportError, Unit], Stream[Error, Chunk[Byte]])]] {
+                    pull =>
+                      pull
+                        .foldM(
+                          _.fold[ZIO[R, E, Option[T]]](ZIO.succeed(None))(ZIO.fail), { raw =>
+                            TaggedCodec
+                              .read[InitialProtocol[T]](raw)
+                              .tap(msg => log.debug(s"receiveInitialProtocol: $msg"))
+                              .flatMap {
+                                case msg: Neighbor[T] =>
+                                  Views.using[T] {
+                                    views =>
+                                      val accept = for {
+                                        reply <- TaggedCodec.write[NeighborReply](NeighborReply.Accept)
+                                        _     <- log.debug(s"Accepting neighborhood request from ${msg.sender}")
+                                        _     <- con.send(reply)
+                                      } yield Some(msg.sender)
 
-                                  val reject = for {
-                                    reply <- TaggedCodec.write[NeighborReply](NeighborReply.Reject)
-                                    _     <- log.debug(s"Rejecting neighborhood request from ${msg.sender}")
-                                    _     <- con.send(reply)
-                                  } yield None
+                                      val reject = for {
+                                        reply <- TaggedCodec.write[NeighborReply](NeighborReply.Reject)
+                                        _     <- log.debug(s"Rejecting neighborhood request from ${msg.sender}")
+                                        _     <- con.send(reply)
+                                      } yield None
 
-                                  if (msg.isHighPriority) {
-                                    accept
-                                  } else {
-                                    STM.atomically {
-                                      for {
-                                        full <- views.isActiveViewFull
-                                        task <- if (full) {
-                                                 views
-                                                   .addToPassiveView(msg.sender)
-                                                   .as(
-                                                     reject
-                                                   )
-                                               } else {
-                                                 STM.succeed(accept)
-                                               }
-                                      } yield task
-                                    }.flatten
+                                      if (msg.isHighPriority) {
+                                        accept
+                                      } else {
+                                        STM.atomically {
+                                          for {
+                                            full <- views.isActiveViewFull
+                                            task <- if (full) {
+                                                     views
+                                                       .addToPassiveView(msg.sender)
+                                                       .as(
+                                                         reject
+                                                       )
+                                                   } else {
+                                                     STM.succeed(accept)
+                                                   }
+                                          } yield task
+                                        }.flatten
+                                      }
+                                  }
+                                case msg: InitialMessage.Join[T] =>
+                                  Views.using[T] { views =>
+                                    for {
+                                      others <- views.activeView.map(_.filterNot(_ == msg.sender)).commit
+                                      config <- getConfig
+                                      _ <- ZIO
+                                            .foreachPar_(others)(
+                                              node =>
+                                                views
+                                                  .send(
+                                                    node,
+                                                    ActiveProtocol
+                                                      .ForwardJoin(views.myself, msg.sender, TimeToLive(config.arwl))
+                                                  )
+                                            )
+                                      reply <- ByteCodec[JoinReply[T]].toChunk(JoinReply(views.myself))
+                                      _     <- con.send(reply)
+                                    } yield Some(msg.sender)
+                                  }
+                                case msg: InitialMessage.ForwardJoinReply[T] =>
+                                  // nothing to do here, we just continue to the next protocol
+                                  ZIO.succeed(Some(msg.sender))
+                                case msg: InitialMessage.ShuffleReply[T] =>
+                                  Views.using[T] { views =>
+                                    views
+                                      .addShuffledNodes(msg.sentOriginally.toSet, msg.passiveNodes.toSet)
+                                      .commit
+                                      .as(None)
                                   }
                               }
-                            case msg: InitialMessage.Join[T] =>
-                              Views.using[T] { views =>
-                                for {
-                                  others <- views.activeView.map(_.filterNot(_ == msg.sender)).commit
-                                  config <- getConfig
-                                  _ <- ZIO
-                                        .foreachPar_(others)(
-                                          node =>
-                                            views
-                                              .send(
-                                                node,
-                                                ActiveProtocol
-                                                  .ForwardJoin(views.myself, msg.sender, TimeToLive(config.arwl))
-                                              )
-                                        )
-                                  reply <- ByteCodec[JoinReply[T]].toChunk(JoinReply(views.myself))
-                                  _     <- con.send(reply)
-                                } yield Some(msg.sender)
-                              }
-                            case msg: InitialMessage.ForwardJoinReply[T] =>
-                              // nothing to do here, we just continue to the next protocol
-                              ZIO.succeed(Some(msg.sender))
-                            case msg: InitialMessage.ShuffleReply[T] =>
-                              Views.using[T] { views =>
-                                views
-                                  .addShuffledNodes(msg.sentOriginally.toSet, msg.passiveNodes.toSet)
-                                  .commit
-                                  .as(None)
-                              }
                           }
-                      }
-                    )
-                    .map(_.map((_, con.send, ZStream.fromPull(pull))))
-                }
+                        )
+                        .map(_.map((_, con.send, ZStream.fromPull(pull))))
+                  }
               }
 
           }.foldM(

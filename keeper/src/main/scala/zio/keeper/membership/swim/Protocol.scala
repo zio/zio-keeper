@@ -90,12 +90,12 @@ trait Protocol[A, M] {
       override def onMessage: (A, EnrichedMessage[M, M1]) => ZIO[Any, Error, Option[(A, EnrichedMessage[M, M1])]] =
         (sender, msg) =>
           ZIO.foreach(msg.piggyBaked)(m1 => fetch._2.onMessage(sender, m1)) *>
-          fetch._1.flatMap(
-            l =>
-              self
-                .onMessage(sender, msg.msg)
-                .map(_.map { case (addr, m) => (addr, EnrichedMessage(m, l)) })
-          )
+            fetch._1.flatMap(
+              l =>
+                self
+                  .onMessage(sender, msg.msg)
+                  .map(_.map { case (addr, m) => (addr, EnrichedMessage(m, l)) })
+            )
 
       override def produceMessages: ZStream[Any, Error, (A, EnrichedMessage[M, M1])] =
         self.produceMessages.mapM {

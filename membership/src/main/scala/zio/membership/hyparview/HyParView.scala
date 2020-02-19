@@ -2,13 +2,13 @@ package zio.membership.hyparview
 
 import zio._
 import zio.membership.transport.Transport
-import zio.membership.{ByteCodec, Error, Membership, ScopeIO, SendError, TaggedCodec, TransportError, log}
+import zio.membership.{ ByteCodec, Error, Membership, ScopeIO, SendError, TaggedCodec, TransportError, log }
 import zio.random.Random
 import zio.macros.delegate._
 import zio.macros.delegate.syntax._
 import zio.duration._
 import zio.clock.Clock
-import zio.stream.{Stream, Take, ZStream}
+import zio.stream.{ Stream, Take, ZStream }
 import zio.logging.Logging
 
 object HyParView {
@@ -79,11 +79,11 @@ object HyParView {
             .toManaged_
             .fork
       _ <- periodic
-        .doReport[T]
-        .repeat(Schedule.spaced(2.seconds))
-        .provide(env)
-        .toManaged_
-        .fork
+            .doReport[T]
+            .repeat(Schedule.spaced(2.seconds))
+            .provide(env)
+            .toManaged_
+            .fork
     } yield new Membership[T] {
       val membership = new Membership.Service[Any, T] {
 

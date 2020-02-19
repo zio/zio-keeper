@@ -4,13 +4,13 @@ import java.net.UnknownHostException
 import java.util
 
 import javax.naming.directory.InitialDirContext
-import javax.naming.{Context, NamingException}
+import javax.naming.{ Context, NamingException }
 import zio.duration.Duration
 import zio.keeper.ServiceDiscoveryError
 import zio.logging.Logging
 import zio.macros.delegate._
-import zio.nio.core.{InetAddress, InetSocketAddress, SocketAddress}
-import zio.{IO, URIO, ZIO, keeper}
+import zio.nio.core.{ InetAddress, InetSocketAddress, SocketAddress }
+import zio.{ IO, URIO, ZIO, keeper }
 
 /**
  * This discovery strategy uses K8 service headless service dns to find other members of the cluster.

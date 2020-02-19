@@ -5,7 +5,6 @@ import zio.duration.Duration
 import zio.keeper.membership.NodeAddress
 import zio.nio.core.SocketAddress
 
-
 sealed abstract class Error(val msg: String = "") {
   override def toString: String = msg
 }
@@ -20,6 +19,7 @@ object SerializationError {
       )
 
   object SerializationTypeError {
+
     def apply(cause: Throwable): SerializationTypeError =
       SerializationTypeError(s"Cannot serialize because of ${cause.getMessage}")
   }
@@ -30,6 +30,7 @@ object SerializationError {
       )
 
   object DeserializationTypeError {
+
     def apply(cause: Throwable): DeserializationTypeError =
       new DeserializationTypeError(s"Cannot deserialize because of ${cause.getMessage}")
   }

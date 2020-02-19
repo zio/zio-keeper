@@ -72,8 +72,8 @@ object tcp {
           .mapM {
             case (close, server) =>
               (for {
-                writeLock              <- Semaphore.make(1)
-                readLock               <- Semaphore.make(1)
+                writeLock <- Semaphore.make(1)
+                readLock  <- Semaphore.make(1)
                 cur <- server.accept.withEarlyRelease
                         .mapError(ExceptionWrapper)
                         .mapM {

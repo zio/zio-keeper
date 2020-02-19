@@ -4,13 +4,13 @@ import upickle.default._
 import zio.ZIO
 import zio.keeper.TransportError
 import zio.keeper.TransportError._
-import zio.nio.core.{InetAddress, InetSocketAddress, SocketAddress}
+import zio.nio.core.{ InetAddress, InetSocketAddress, SocketAddress }
 
 final case class NodeAddress(ip: Array[Byte], port: Int) {
 
   override def equals(obj: Any): Boolean = obj match {
     case NodeAddress(ip, port) => this.port == port && ip.sameElements(this.ip)
-    case _ => false
+    case _                     => false
   }
 
   override def hashCode(): Int = port
@@ -27,7 +27,8 @@ final case class NodeAddress(ip: Array[Byte], port: Int) {
 object NodeAddress {
 
   def apply(addr: InetSocketAddress): ZIO[Any, Nothing, NodeAddress] =
-    InetAddress.byName(addr.hostString)
+    InetAddress
+      .byName(addr.hostString)
       .map(inet => NodeAddress(inet.address, addr.port))
       .orDie
 

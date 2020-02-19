@@ -2,7 +2,7 @@ package zio.keeper
 
 import zio._
 import upickle.default._
-import zio.keeper.SerializationError.{DeserializationTypeError, SerializationTypeError}
+import zio.keeper.SerializationError.{ DeserializationTypeError, SerializationTypeError }
 
 trait ByteCodec[A] {
   def fromChunk(chunk: Chunk[Byte]): IO[DeserializationTypeError, A]

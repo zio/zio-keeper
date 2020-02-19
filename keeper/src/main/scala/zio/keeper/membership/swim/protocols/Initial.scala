@@ -56,10 +56,12 @@ object Initial {
         Protocol[NodeAddress, Initial].apply(
           {
             case (sender, Join(alias)) =>
-              nodes.established(sender, alias)
+              nodes
+                .established(sender, alias)
                 .as(Some((sender, Accept)))
             case (sender, Accept) =>
-              nodes.established(sender, sender)
+              nodes
+                .established(sender, sender)
                 .as(None)
             case (sender, Reject(msg)) =>
               logger.error("Rejected from cluster: " + msg) *>

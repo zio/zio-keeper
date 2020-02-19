@@ -1,7 +1,7 @@
 package zio.keeper
 
 import zio._
-import zio.keeper.SerializationError.{DeserializationTypeError, SerializationTypeError}
+import zio.keeper.SerializationError.{ DeserializationTypeError, SerializationTypeError }
 
 trait TaggedCodec[A] {
   def tagOf(a: A): Byte
@@ -22,11 +22,11 @@ object TaggedCodec {
     }
 
   def read[A](
-               from: Chunk[Byte]
-             )(
-               implicit
-               tagged: TaggedCodec[A]
-             ): ZIO[Any, DeserializationTypeError, A] =
+    from: Chunk[Byte]
+  )(
+    implicit
+    tagged: TaggedCodec[A]
+  ): ZIO[Any, DeserializationTypeError, A] =
     if (from.isEmpty) {
       ZIO.fail(DeserializationTypeError("Empty chunk"))
     } else {
@@ -38,11 +38,11 @@ object TaggedCodec {
     }
 
   def write[A](
-                data: A
-              )(
-                implicit
-                tagged: TaggedCodec[A]
-              ): ZIO[Any, SerializationTypeError, Chunk[Byte]] = {
+    data: A
+  )(
+    implicit
+    tagged: TaggedCodec[A]
+  ): ZIO[Any, SerializationTypeError, Chunk[Byte]] = {
     val tag = tagged.tagOf(data)
     for {
       codec <- tagged.codecFor(tag).mapError(_ => SerializationTypeError(s"No codec found for tag $tag"))

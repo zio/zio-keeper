@@ -5,17 +5,17 @@ import zio.clock._
 import zio.console._
 import zio.duration._
 import zio.keeper.discovery.Discovery
-import zio.keeper.example.TestNode.PingPong.{Ping, Pong}
+import zio.keeper.example.TestNode.PingPong.{ Ping, Pong }
 import zio.keeper.membership.Membership
 import zio.keeper.membership.swim.SWIM
 import zio.keeper.transport.Transport
-import zio.keeper.{ByteCodec, TaggedCodec, transport}
+import zio.keeper.{ ByteCodec, TaggedCodec, transport }
 import zio.logging.Logging
 import zio.logging.slf4j.Slf4jLogger
 import zio.macros.delegate._
 import zio.macros.delegate.syntax._
-import zio.nio.core.{InetAddress, SocketAddress}
-import zio.{ZIO, ZManaged}
+import zio.nio.core.{ InetAddress, SocketAddress }
+import zio.{ ZIO, ZManaged }
 
 object Node1 extends zio.ManagedApp {
 
@@ -74,10 +74,10 @@ object TestNode {
 
   def start(port: Int, otherPorts: Set[Int]) =
     (environment(port, otherPorts) >>> (for {
-      env <- ZManaged.environment[Membership[PingPong]]
-      _            <- sleep(5.seconds).toManaged_
+      env   <- ZManaged.environment[Membership[PingPong]]
+      _     <- sleep(5.seconds).toManaged_
       nodes <- env.membership.nodes.toManaged_
-      _ <- ZIO.foreach(nodes)(n => env.membership.send(Ping, n)).toManaged_
+      _     <- ZIO.foreach(nodes)(n => env.membership.send(Ping, n)).toManaged_
       _ <- env.membership.receive.foreach {
             case (sender, message) =>
               putStrLn("receive message: " + message) *> env.membership.send(Pong, sender).ignore *> sleep(5.seconds)

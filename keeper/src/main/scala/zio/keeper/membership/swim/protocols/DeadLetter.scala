@@ -12,11 +12,11 @@ object DeadLetter {
     Protocol[NodeAddress, Chunk[Byte]].apply(
       {
         case (sender, _) =>
-          logger.error("message from: " + sender + " in dead letter")
+          logger
+            .error("message from: " + sender + " in dead letter")
             .as(None)
       },
       ZStream.empty
     )
-
 
 }

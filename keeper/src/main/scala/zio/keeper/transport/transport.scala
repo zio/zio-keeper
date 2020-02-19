@@ -2,7 +2,7 @@ package zio.keeper.transport
 
 import zio.keeper.TransportError
 import zio.nio.core.InetSocketAddress
-import zio.{Chunk, UIO, ZIO, ZManaged}
+import zio.{ Chunk, UIO, ZIO, ZManaged }
 
 trait Transport {
   val transport: Transport.Service[Any]

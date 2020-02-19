@@ -6,13 +6,12 @@ import zio.duration._
 import zio.keeper._
 import zio.keeper.discovery.Discovery
 import zio.keeper.membership.swim.protocols.Initial.Join
-import zio.keeper.membership.swim.protocols.{DeadLetter, FailureDetection, Initial, User}
-import zio.keeper.membership.{Membership, MembershipEvent, NodeAddress}
+import zio.keeper.membership.swim.protocols.{ DeadLetter, FailureDetection, Initial, User }
+import zio.keeper.membership.{ Membership, MembershipEvent, NodeAddress }
 import zio.keeper.transport.Transport
 import zio.logging.Logging
 import zio.logging.slf4j._
-import zio.stream.{Take, ZStream}
-
+import zio.stream.{ Take, ZStream }
 
 object SWIM {
 
