@@ -4,24 +4,23 @@ import zio.ZIO
 import zio.keeper.Error
 import zio.stream.ZStream
 
-trait Membership[A, B] {
-  def membership: Membership.Service[Any, A, B]
+trait Membership[B] {
+  def membership: Membership.Service[Any, B]
 }
 
 object Membership {
 
-  trait Service[R, A, B] {
-//    def broadcast(data: Chunk[Byte]): ZIO[R, Error, Unit]
+  trait Service[R, B] {
 
-    def events: ZStream[R, Error, MembershipEvent[A]]
+    def events: ZStream[R, Error, MembershipEvent]
 
-    def localMember: A
+    def localMember: NodeAddress
 
-    def nodes: ZIO[R, Nothing, List[A]]
+    def nodes: ZIO[R, Nothing, List[NodeAddress]]
 
-    def receive: ZStream[R, Error, (A, B)]
+    def receive: ZStream[R, Error, (NodeAddress, B)]
 
-    def send(data: B, receipt: A): ZIO[R, Error, Unit]
+    def send(data: B, receipt: NodeAddress): ZIO[R, Error, Unit]
   }
 
 }

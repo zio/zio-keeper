@@ -1,13 +1,13 @@
 package zio.keeper.membership
 
-sealed trait MembershipEvent[A]
+sealed trait MembershipEvent
 
 object MembershipEvent {
 
-  final case class Join[A](member: Member[A]) extends MembershipEvent[A]
+  final case class Join(member: NodeAddress) extends MembershipEvent
 
-  final case class Leave[A](member: Member[A]) extends MembershipEvent[A]
+  final case class Leave(member: NodeAddress) extends MembershipEvent
 
-  final case class Unreachable[A](member: Member[A]) extends MembershipEvent[A]
+  final case class Unreachable(member: NodeAddress) extends MembershipEvent
 
 }

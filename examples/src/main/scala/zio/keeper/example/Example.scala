@@ -5,8 +5,8 @@ import zio.clock._
 import zio.console._
 import zio.duration._
 import zio.keeper.discovery.Discovery
-import zio.keeper.example.TestNode.PingPong.Pong
-import zio.keeper.membership.{Membership, NodeAddress}
+import zio.keeper.example.TestNode.PingPong.{Ping, Pong}
+import zio.keeper.membership.Membership
 import zio.keeper.membership.swim.SWIM
 import zio.keeper.transport.Transport
 import zio.keeper.{ByteCodec, TaggedCodec, transport}
@@ -74,9 +74,10 @@ object TestNode {
 
   def start(port: Int, otherPorts: Set[Int]) =
     (environment(port, otherPorts) >>> (for {
-      env <- ZManaged.environment[Membership[NodeAddress, PingPong]]
+      env <- ZManaged.environment[Membership[PingPong]]
       _            <- sleep(5.seconds).toManaged_
-//      _ <- broadcast(Chunk.fromArray(nodeName.getBytes)).ignore.toManaged_
+      nodes <- env.membership.nodes.toManaged_
+      _ <- ZIO.foreach(nodes)(n => env.membership.send(Ping, n)).toManaged_
       _ <- env.membership.receive.foreach {
             case (sender, message) =>
               putStrLn("receive message: " + message) *> env.membership.send(Pong, sender).ignore *> sleep(5.seconds)
@@ -109,69 +110,3 @@ object TestNode {
         SWIM.run[PingPong](port)
       )
 }
-//
-//object TcpServer extends zio.App {
-//  import zio._
-//  import zio.duration._
-//  import zio.keeper.transport._
-//
-//  val localEnvironment = ZIO.environment[zio.ZEnv] @@ enrichWith[Logging[String]](
-//    new Slf4jLogger.Live {
-//
-//      override def formatMessage(msg: String): ZIO[Any, Nothing, String] =
-//        ZIO.succeed(msg)
-//    }
-//  )
-//
-//  override def run(args: List[String]) =
-//    localEnvironment >>> (for {
-//      tcp       <- tcp.tcpTransport(10.seconds, 10.seconds)
-//      localHost <- InetAddress.localHost.orDie
-//      publicAddress <- SocketAddress
-//                        .inetSocketAddress(localHost, 8010)
-//                        .orDie
-//      console <- ZIO.environment[Console]
-//      handler = (channel: Connection) => {
-//        for {
-//          data <- channel.read
-//          _    <- putStrLn(new String(data.toArray))
-//          _    <- channel.send(data)
-//        } yield ()
-//      }.forever
-//        .catchAll(ex => putStrLn("error: " + ex.msg))
-//        .provide(console)
-//
-//      _ <- putStrLn("public address: " + publicAddress.toString())
-//      _ <- bind(publicAddress)(handler)
-//            .provide(tcp)
-//            .use(ch => ZIO.never.ensuring(ch.close.ignore)).fork
-//
-//
-//    } yield ()).ignore.as(0)
-//}
-//
-//object TcpClient extends zio.App {
-//  import zio.duration._
-//  import zio.keeper.transport._
-//
-//  val localEnvironment = ZIO.environment[zio.ZEnv] @@ enrichWith[Logging[String]](
-//    new Slf4jLogger.Live {
-//
-//      override def formatMessage(msg: String): ZIO[Any, Nothing, String] =
-//        ZIO.succeed(msg)
-//    }
-//  )
-//
-//  override def run(args: List[String]) =
-//    localEnvironment >>> (for {
-//      tcp       <- tcp.tcpTransport(10.seconds, 10.seconds)
-//      localHost <- InetAddress.localHost.orDie
-//      publicAddress <- SocketAddress
-//                        .inetSocketAddress(localHost, 8010)
-//                        .orDie
-//      _ <- putStrLn("connect to address: " + publicAddress.toString())
-//      _ <- connect(publicAddress)
-//            .provide(tcp)
-//            .use(_.send(Chunk.fromArray("message from client".getBytes)).repeat(Schedule.recurs(100)))
-//    } yield ()).ignore.as(0)
-//}
