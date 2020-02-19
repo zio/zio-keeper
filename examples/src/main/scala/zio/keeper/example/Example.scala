@@ -7,7 +7,7 @@ import zio.duration._
 import zio.keeper.discovery.Discovery
 import zio.keeper.example.TestNode.PingPong.Pong
 import zio.keeper.membership.{Membership, NodeAddress}
-import zio.keeper.membership.swim.SWIM2
+import zio.keeper.membership.swim.SWIM
 import zio.keeper.transport.Transport
 import zio.keeper.{ByteCodec, TaggedCodec, transport}
 import zio.logging.Logging
@@ -106,7 +106,7 @@ object TestNode {
   def membership(port: Int) =
     ZManaged.environment[zio.ZEnv with Logging[String] with Transport with Discovery] @@
       enrichWithManaged(
-        SWIM2.run[PingPong](port)
+        SWIM.run[PingPong](port)
       )
 }
 //

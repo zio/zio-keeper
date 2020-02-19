@@ -32,6 +32,10 @@ class Nodes(
     (nodeChannels.put(nodeAddress, connection) *>
       nodeStates.put(nodeAddress, NodeState.Init)).commit.as(connection)
 
+  final def send(msg: (NodeAddress, Chunk[Byte])) =
+    connection(msg._1)
+      .flatMap(_.send(msg._2))
+
   final def connect(addr: InetSocketAddress): ZIO[Logging[String], Error, Unit] =
     logger.info("New connection: " + addr) *>
       NodeAddress(addr).zip(Promise.make[Error, Unit]).flatMap {
@@ -66,10 +70,10 @@ class Nodes(
     nodeChannels
       .get(addr)
       .flatMap {
-        case None             => STM.fail(UnknownNode(addr))
+        case None => STM.fail(UnknownNode(addr))
         case Some(connection) =>
           nodeChannels.put(alias, connection) *>
-          nodeStates.put(alias, NodeState.Healthy) *>
+            nodeStates.put(alias, NodeState.Healthy) *>
             nodeStates.put(addr, NodeState.Healthy)
       }
       .commit *> state.update(_.addMember(alias)).unit
@@ -79,9 +83,6 @@ class Nodes(
       nodes     <- nodeChannels.keys.commit
       nextIndex <- roundRobinOffset.update(old => if (old < nodes.size - 1) old + 1 else 0)
     } yield nodes.drop(nextIndex).headOption
-
-  def updateState(newState: GossipState): ZIO[Logging[String], Nothing, Unit] =
-    logger.info(newState.toString).unit
 }
 
 object Nodes {
