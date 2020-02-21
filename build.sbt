@@ -76,8 +76,8 @@ lazy val membership = project
       "org.slf4j"              % "slf4j-log4j12"            % "1.7.30",
       "dev.zio"                %% "zio-test"                % ZioVersion % Test,
       "dev.zio"                %% "zio-test-sbt"            % ZioVersion % Test,
-      ("com.github.ghik" % "silencer-lib" % "1.5.0" % Provided).cross(CrossVersion.full),
-      compilerPlugin(("com.github.ghik" % "silencer-plugin" % "1.5.0").cross(CrossVersion.full))
+      ("com.github.ghik" % "silencer-lib" % "1.6.0" % Provided).cross(CrossVersion.full),
+      compilerPlugin(("com.github.ghik" % "silencer-plugin" % "1.6.0").cross(CrossVersion.full))
     ),
     testFrameworks := Seq(new TestFramework("zio.test.sbt.ZTestFramework"))
   )
@@ -103,7 +103,7 @@ lazy val docs = project
     scalacOptions ~= { _.filterNot(_.startsWith("-Ywarn")) },
     scalacOptions ~= { _.filterNot(_.startsWith("-Xlint")) },
     libraryDependencies ++= Seq(
-      ("com.github.ghik" % "silencer-lib" % "1.5.0" % Provided).cross(CrossVersion.full)
+      ("com.github.ghik" % "silencer-lib" % "1.6.0" % Provided).cross(CrossVersion.full)
     )
   )
   .dependsOn(keeper, membership)
