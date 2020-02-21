@@ -1,62 +1,21 @@
 package zio.keeper.transport
 
 import zio._
-import zio.console.{ Console, _ }
 import zio.duration._
 import zio.keeper.TransportError.ExceptionWrapper
-import zio.keeper.transport
-import zio.logging.Logging
-import zio.logging.slf4j.Slf4jLogger
-import zio.macros.delegate._
-import zio.macros.delegate.syntax._
 import zio.nio.SocketAddress
-import zio.test.Assertion._
 import zio.test._
+import zio.test.Assertion._
 import zio.test.environment.Live
+import TransportUtil._
 
 object TransportSpec
     extends DefaultRunnableSpec({
       // todo: actually find free port
       val freePort = ZIO.succeed(9010)
 
-      val loggingEnv = ZIO.environment[zio.ZEnv] @@ enrichWith[Logging[String]](
-        new Slf4jLogger.Live {
-          override def formatMessage(msg: String): ZIO[Any, Nothing, String] =
-            ZIO.succeed(msg)
-        }
-      )
-
-      def tcpEnv =
-        loggingEnv >>> ZIO
-          .environment[zio.ZEnv with Logging[String]] @@
-          transport.tcp.withTcpTransport(10.seconds, 10.seconds)
-
-      val liveEnv =
-        (Live.live(ZIO.environment[zio.ZEnv]) @@ enrichWithM(tcpEnv))
-          .flatMap(Live.make)
-
       val environment =
-        for {
-          env <- tcpEnv
-          r   <- liveEnv @@ enrichWith(env)
-        } yield r
-
-      def bindAndWaitForValue(
-        addr: SocketAddress,
-        startPromise: Promise[Nothing, Unit],
-        handler: ChannelOut => UIO[Unit] = _ => ZIO.unit
-      ) =
-        for {
-          q <- Queue.bounded[Chunk[Byte]](10)
-          h = (out: ChannelOut) => {
-            for {
-              _    <- handler(out)
-              data <- out.read
-              _    <- q.offer(data)
-            } yield ()
-          }.catchAll(ex => putStrLn("error in server: " + ex).provide(Console.Live))
-          p <- bind(addr)(h).use_(startPromise.succeed(()) *> q.take)
-        } yield p
+        transportEnvironment(tcp.tcpTransport(10.seconds, 10.seconds))
 
       suite("TcpTransport")(
         testM("can send and receive messages") {
