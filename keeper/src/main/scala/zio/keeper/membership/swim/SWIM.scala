@@ -23,13 +23,13 @@ object SWIM {
       env <- ZManaged.environment[Transport with Discovery]
       messages <- Queue
                    .bounded[Take[Error, (NodeAddress, Chunk[Byte])]](1000)
-                   .toManaged(_.awaitShutdown)
+                   .toManaged(_.shutdown)
       userIn <- Queue
                  .bounded[(NodeAddress, B)](1000)
-                 .toManaged(_.awaitShutdown)
+                 .toManaged(_.shutdown)
       userOut <- Queue
                   .bounded[(NodeAddress, B)](1000)
-                  .toManaged(_.awaitShutdown)
+                  .toManaged(_.shutdown)
       local        <- NodeAddress.local(port).toManaged_
       localAddress <- local.socketAddress.toManaged_
       nodes0       <- Nodes.make(local, messages).toManaged_
@@ -38,7 +38,7 @@ object SWIM {
                              .flatMap(_.debug)
                              .flatMap(_.record {
                                case (_, _: Join) => true
-                               case (_, _)       => false
+                               case _            => false
                              })
                              .toManaged_
 

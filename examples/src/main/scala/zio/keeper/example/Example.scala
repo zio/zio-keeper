@@ -53,19 +53,19 @@ object TestNode {
   sealed trait PingPong
 
   object PingPong {
-    case object Ping extends PingPong
-    case object Pong extends PingPong
+    case class Ping(i: Int) extends PingPong
+    case class Pong(i: Int) extends PingPong
 
-    implicit val pingCodec: ByteCodec[Ping.type] =
-      ByteCodec.fromReadWriter(macroRW[Ping.type])
+    implicit val pingCodec: ByteCodec[Ping] =
+      ByteCodec.fromReadWriter(macroRW[Ping])
 
-    implicit val pongCodec: ByteCodec[Pong.type] =
-      ByteCodec.fromReadWriter(macroRW[Pong.type])
+    implicit val pongCodec: ByteCodec[Pong] =
+      ByteCodec.fromReadWriter(macroRW[Pong])
 
-    implicit def tagged(implicit p1: ByteCodec[Ping.type], p2: ByteCodec[Pong.type]) =
+    implicit def tagged(implicit p1: ByteCodec[Ping], p2: ByteCodec[Pong]) =
       TaggedCodec.instance[PingPong]({
-        case Pong => 1
-        case Ping => 2
+        case Ping(_) => 1
+        case Pong(_) => 2
       }, {
         case 1 => p1.asInstanceOf[ByteCodec[PingPong]]
         case 2 => p2.asInstanceOf[ByteCodec[PingPong]]
@@ -77,10 +77,10 @@ object TestNode {
       env   <- ZManaged.environment[Membership[PingPong]]
       _     <- sleep(5.seconds).toManaged_
       nodes <- env.membership.nodes.toManaged_
-      _     <- ZIO.foreach(nodes)(n => env.membership.send(Ping, n)).toManaged_
+      _     <- ZIO.foreach(nodes)(n => env.membership.send(Ping(1), n)).toManaged_
       _ <- env.membership.receive.foreach {
             case (sender, message) =>
-              putStrLn("receive message: " + message) *> env.membership.send(Pong, sender).ignore *> sleep(5.seconds)
+              putStrLn("receive message: " + message) *> env.membership.send(Pong(1), sender).ignore *> sleep(5.seconds)
           }.toManaged_
     } yield ()))
       .fold(ex => {

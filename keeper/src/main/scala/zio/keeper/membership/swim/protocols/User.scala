@@ -1,11 +1,12 @@
 package zio.keeper.membership.swim.protocols
 
+import upickle.default.{ readBinary, writeBinary }
 import zio.keeper.SerializationError._
 import zio.keeper.membership.NodeAddress
 import zio.keeper.membership.swim.Protocol
 import zio.keeper.{ ByteCodec, TaggedCodec }
 import zio.stream.ZStream
-import zio.{ Chunk, IO }
+import zio.{ Chunk, IO, ZIO }
 
 case class User[A](msg: A)
 
@@ -27,10 +28,26 @@ object User {
     new ByteCodec[User[A]] {
 
       override def fromChunk(chunk: Chunk[Byte]): IO[DeserializationTypeError, User[A]] =
-        TaggedCodec.read[A](chunk).map(User(_))
+        ZIO
+          .effect(readBinary[Array[Byte]](chunk.toArray))
+          .mapError(DeserializationTypeError(_))
+          .flatMap { b1 =>
+            TaggedCodec.read[A](Chunk.fromArray(b1))
+          }
+          .map(ab => User(ab))
 
       override def toChunk(a: User[A]): IO[SerializationTypeError, Chunk[Byte]] =
-        TaggedCodec.write[A](a.msg)
+        TaggedCodec
+          .write[A](a.msg)
+          .flatMap { ch1 =>
+            ZIO
+              .effect(
+                Chunk.fromArray(
+                  writeBinary[Array[Byte]](ch1.toArray)
+                )
+              )
+              .mapError(SerializationTypeError(_))
+          }
     }
 
   def protocol[B: TaggedCodec](
