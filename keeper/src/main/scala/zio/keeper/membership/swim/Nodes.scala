@@ -2,15 +2,16 @@ package zio.keeper.membership.swim
 
 import zio._
 import zio.keeper.ClusterError.UnknownNode
+import zio.keeper.membership.MembershipEvent.{Join, NodeStateChanged}
 import zio.keeper.membership.swim.Nodes.NodeState
-import zio.keeper.membership.{ MembershipEvent, NodeAddress }
-import zio.keeper.transport.{ Connection, Transport }
-import zio.keeper.{ ByteCodec, Error }
+import zio.keeper.membership.{MembershipEvent, NodeAddress}
+import zio.keeper.transport.{Connection, Transport}
+import zio.keeper.{ByteCodec, Error}
 import zio.logging.Logging
 import zio.logging.slf4j._
 import zio.nio.core.InetSocketAddress
 import zio.stm.TMap
-import zio.stream.{ Take, ZStream }
+import zio.stream.{Take, ZStream}
 
 /**
  * Nodes maintains state of the cluster.
@@ -30,7 +31,8 @@ class Nodes(
   nodeStates: TMap[NodeId, NodeState],
   roundRobinOffset: Ref[Int],
   transport: Transport.Service[Any],
-  messages: zio.Queue[Take[Error, Message]]
+  messages: zio.Queue[Take[Error, Message]],
+  eventsQueue: zio.Queue[MembershipEvent]
 ) {
 
   /**
@@ -57,8 +59,17 @@ class Nodes(
    * @param id - member id
    * @param newState - new state
    */
-  def changeNodeState(id: NodeId, newState: NodeState): IO[Nothing, Unit] =
-    nodeStates.put(id, newState).commit
+  def changeNodeState(id: NodeId, newState: NodeState): IO[Error, Unit] =
+    nodeState(id).flatMap{ prev =>
+      nodeStates.put(id, newState).commit.as(
+        if(newState == NodeState.Healthy && prev == NodeState.Init) {
+          Join(id)
+        } else {
+          NodeStateChanged(id, prev, newState)
+        }
+      )
+    }.flatMap(eventsQueue.offer).unit
+
 
   /**
    * Initializes new connection with Init state.
@@ -98,7 +109,8 @@ class Nodes(
           .unit *> conn.close
     )
 
-  final val events: ZStream[Any, Nothing, MembershipEvent] = ???
+  final val events: ZStream[Any, Nothing, MembershipEvent] =
+    ZStream.fromQueue(eventsQueue)
 
   /**
    * Returns next Healthy node.
@@ -171,6 +183,7 @@ object Nodes {
     for {
       nodeChannels     <- TMap.empty[NodeId, Connection].commit
       nodeStates       <- TMap.empty[NodeId, NodeState].commit
+      events <- Queue.sliding[MembershipEvent](100)
       roundRobinOffset <- Ref.make(0)
       env              <- ZIO.environment[Transport]
     } yield new Nodes(
@@ -180,7 +193,8 @@ object Nodes {
       nodeStates,
       roundRobinOffset,
       env.transport,
-      messages
+      messages,
+      events
     )
 
 }
