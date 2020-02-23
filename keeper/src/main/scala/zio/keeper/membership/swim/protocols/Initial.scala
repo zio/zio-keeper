@@ -4,8 +4,8 @@ import upickle.default._
 import zio.ZIO
 import zio.keeper.discovery.Discovery
 import zio.keeper.membership.NodeAddress
-import zio.keeper.membership.swim.{ Nodes, Protocol }
-import zio.keeper.{ ByteCodec, TaggedCodec }
+import zio.keeper.membership.swim.{NodeId, Nodes, Protocol}
+import zio.keeper.{ByteCodec, TaggedCodec}
 import zio.logging.Logging
 import zio.logging.slf4j._
 import zio.stream.ZStream
@@ -53,15 +53,15 @@ object Initial {
   def protocol(nodes: Nodes) =
     ZIO.accessM[Discovery with Logging[String]](
       env =>
-        Protocol[NodeAddress, Initial].apply(
+        Protocol[NodeId, Initial].apply(
           {
-            case (sender, Join(alias)) =>
+            case (sender, Join(_)) =>
               nodes
-                .established(sender, alias)
+                .established(sender)
                 .as(Some((sender, Accept)))
             case (sender, Accept) =>
               nodes
-                .established(sender, sender)
+                .established(sender)
                 .as(None)
             case (sender, Reject(msg)) =>
               logger.error("Rejected from cluster: " + msg) *>
@@ -73,8 +73,7 @@ object Initial {
             )
             .mapM(
               node =>
-                nodes.connect(node) *>
-                  NodeAddress(node)
+                nodes.connect(node)
                     .map(addr => (addr, Join(nodes.local)))
             )
         )

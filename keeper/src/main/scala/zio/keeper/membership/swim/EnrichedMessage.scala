@@ -9,14 +9,6 @@ case class EnrichedMessage[A, B](msg: A, piggyBaked: List[B])
 
 object EnrichedMessage {
 
-  implicit def tagged[A: TaggedCodec, B: TaggedCodec](
-    implicit codec: ByteCodec[EnrichedMessage[A, B]]
-  ): TaggedCodec[EnrichedMessage[A, B]] =
-    TaggedCodec.instance(
-      _ => 23,
-      { case 23 => codec }
-    )
-
   implicit def codec[A: TaggedCodec, B: TaggedCodec]: ByteCodec[EnrichedMessage[A, B]] =
     new ByteCodec[EnrichedMessage[A, B]] {
 

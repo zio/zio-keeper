@@ -5,7 +5,6 @@ import zio.clock.Clock
 import zio.duration._
 import zio.keeper._
 import zio.keeper.discovery.Discovery
-import zio.keeper.membership.swim.protocols.Initial.Join
 import zio.keeper.membership.swim.protocols.{ DeadLetter, FailureDetection, Initial, User }
 import zio.keeper.membership.{ Membership, MembershipEvent, NodeAddress }
 import zio.keeper.transport.Transport
@@ -22,29 +21,28 @@ object SWIM {
       _   <- logger.info("starting SWIM on port: " + port).toManaged_
       env <- ZManaged.environment[Transport with Discovery]
       messages <- Queue
-                   .bounded[Take[Error, (NodeAddress, Chunk[Byte])]](1000)
+                   .bounded[Take[Error, (NodeId, Chunk[Byte])]](1000)
                    .toManaged(_.shutdown)
       userIn <- Queue
-                 .bounded[(NodeAddress, B)](1000)
+                 .bounded[(NodeId, B)](1000)
                  .toManaged(_.shutdown)
       userOut <- Queue
-                  .bounded[(NodeAddress, B)](1000)
+                  .bounded[(NodeId, B)](1000)
                   .toManaged(_.shutdown)
-      local        <- NodeAddress.local(port).toManaged_
-      localAddress <- local.socketAddress.toManaged_
-      nodes0       <- Nodes.make(local, messages).toManaged_
-      recordedAndInitial <- Initial
-                             .protocol(nodes0)
-                             .flatMap(_.debug)
-                             .flatMap(_.record {
-                               case (_, _: Join) => true
-                               case _            => false
-                             })
-                             .toManaged_
+      localNodeAddress <- NodeAddress.local(port).toManaged_
+      localNodeId      = NodeId.generate
+
+      nodes0 <- Nodes.make(localNodeAddress, localNodeId, messages).toManaged_
+      _      <- nodes0.prettyPrint.flatMap(logger.info(_)).repeat(Schedule.spaced(5.seconds)).toManaged_.fork
+
+      initial <- Initial
+                  .protocol(nodes0)
+                  .flatMap(_.debug)
+                  .toManaged_
 
       failureDetection <- FailureDetection
                            .protocol(nodes0, 3.seconds)
-                           .flatMap(_.piggyBacked(recordedAndInitial).debug)
+                           .flatMap(_.debug)
                            .map(_.binary)
                            .toManaged_
       user <- User
@@ -52,7 +50,7 @@ object SWIM {
                .map(_.binary)
                .toManaged_
       deadLetter <- DeadLetter.protocol.toManaged_
-      swim = recordedAndInitial._2.binary
+      swim = initial.binary
         .compose(failureDetection)
         .compose(user)
         .compose(deadLetter)
@@ -66,24 +64,25 @@ object SWIM {
               case Some(msg) => msg
             }
             .merge(swim.produceMessages)
-            .mapM(nodes0.send)
+            .mapM(
+              nodes0
+                .send(_)
+                .catchAll(e => logger.error("error during send: " + e))
+            )
             .runDrain
             .toManaged_
             .fork
-      _ <- env.transport.bind(localAddress) { conn =>
-            NodeAddress(conn.address).flatMap(
-              addr =>
-                nodes0
-                  .accept(addr, conn)
-                  .flatMap(
-                    cc =>
-                      ZStream
-                        .repeatEffect(cc.read.map(ch => (addr, ch)))
-                        .into(messages)
-                  )
-                  .ignore
+
+      _ <- localNodeAddress.socketAddress.toManaged_
+            .flatMap(
+              localAddress =>
+                env.transport.bind(localAddress) { conn =>
+                  nodes0
+                    .accept(conn)
+                    .flatMap(_._2.join)
+                    .ignore
+                }
             )
-          }
     } yield new Membership[B] {
 
       override def membership: Membership.Service[Any, B] =
@@ -91,15 +90,15 @@ object SWIM {
 
           override def events: ZStream[Any, Error, MembershipEvent] = ???
 
-          override def localMember: NodeAddress = local
+          override def localMember: NodeId = localNodeId
 
-          override def nodes: ZIO[Any, Nothing, List[NodeAddress]] =
-            nodes0.currentState.map(_.members.toList)
+          override def nodes: ZIO[Any, Nothing, List[NodeId]] =
+            nodes0.onlyHealthyNodes.map(_.map(_._1))
 
-          override def receive: ZStream[Any, Error, (NodeAddress, B)] =
+          override def receive: ZStream[Any, Error, (NodeId, B)] =
             ZStream.fromQueue(userIn)
 
-          override def send(data: B, receipt: NodeAddress): ZIO[Any, Error, Unit] =
+          override def send(data: B, receipt: NodeId): ZIO[Any, Error, Unit] =
             userOut.offer((receipt, data)).unit
         }
     }

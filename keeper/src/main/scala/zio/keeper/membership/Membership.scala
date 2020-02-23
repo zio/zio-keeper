@@ -2,6 +2,7 @@ package zio.keeper.membership
 
 import zio.ZIO
 import zio.keeper.Error
+import zio.keeper.membership.swim.NodeId
 import zio.stream.ZStream
 
 trait Membership[B] {
@@ -14,13 +15,13 @@ object Membership {
 
     def events: ZStream[R, Error, MembershipEvent]
 
-    def localMember: NodeAddress
+    def localMember: NodeId
 
-    def nodes: ZIO[R, Nothing, List[NodeAddress]]
+    def nodes: ZIO[R, Nothing, List[NodeId]]
 
-    def receive: ZStream[R, Error, (NodeAddress, B)]
+    def receive: ZStream[R, Error, (NodeId, B)]
 
-    def send(data: B, receipt: NodeAddress): ZIO[R, Error, Unit]
+    def send(data: B, receipt: NodeId): ZIO[R, Error, Unit]
   }
 
 }
