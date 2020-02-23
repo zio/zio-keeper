@@ -21,7 +21,7 @@ object SWIM {
       _   <- logger.info("starting SWIM on port: " + port).toManaged_
       env <- ZManaged.environment[Transport with Discovery]
       messages <- Queue
-                   .bounded[Take[Error, (NodeId, Chunk[Byte])]](1000)
+                   .bounded[Take[Error, Message]](1000)
                    .toManaged(_.shutdown)
       userIn <- Queue
                  .bounded[(NodeId, B)](1000)
@@ -57,13 +57,15 @@ object SWIM {
       _ <- ZStream
             .fromQueue(messages)
             .collectM {
-              case Take.Value((node, msg)) =>
-                swim.onMessage(node, msg)
+              case Take.Value(msg) =>
+                swim
+                  .onMessage(msg.nodeId, msg.payload)
+                  .map(_.map(reply => msg.copy(nodeId = reply._1, payload = reply._2)))
             }
             .collect {
               case Some(msg) => msg
             }
-            .merge(swim.produceMessages)
+            .merge(swim.produceMessages.map(Message.apply(_)))
             .mapM(
               nodes0
                 .send(_)

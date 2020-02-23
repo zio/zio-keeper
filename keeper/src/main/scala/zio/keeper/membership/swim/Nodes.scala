@@ -19,7 +19,7 @@ class Nodes(
   nodeStates: TMap[NodeId, NodeState],
   roundRobinOffset: Ref[Int],
   transport: Transport.Service[Any],
-  messages: zio.Queue[Take[Error, (NodeId, Chunk[Byte])]]
+  messages: zio.Queue[Take[Error, Message]]
 ) {
 
   def nodeState(target: NodeId) =
@@ -39,17 +39,22 @@ class Nodes(
       _            <- connection.send(l)
       firstMessage <- connection.read
       nodeId       <- ByteCodec[NodeId].fromChunk(firstMessage)
+      messageCodec = ByteCodec[Message]
       _            <- (nodeChannels.put(nodeId, connection) *> nodeStates.put(nodeId, NodeState.Init)).commit
       fork <- ZStream
-               .repeatEffect(connection.read)
-               .map((nodeId, _))
+               .repeatEffect(connection.read.flatMap(messageCodec.fromChunk).map(_.copy(nodeId = nodeId)))
                .into(messages)
                .fork
     } yield (nodeId, fork)
 
-  final def send(msg: (NodeId, Chunk[Byte])) =
-    connection(msg._1)
-      .flatMap(_.send(msg._2))
+  final def send(msg: Message) =
+    ByteCodec[Message]
+      .toChunk(msg)
+      .flatMap(
+        chunk =>
+          connection(msg.nodeId)
+            .flatMap(_.send(chunk))
+      )
 
   final def connect(addr: InetSocketAddress): ZIO[Logging[String], Error, NodeId] =
     logger.info("New connection: " + addr) *>
@@ -126,7 +131,7 @@ object Nodes {
     case object Suspicion   extends NodeState
   }
 
-  def make(local: NodeAddress, localId: NodeId, messages: Queue[Take[Error, (NodeId, Chunk[Byte])]]) =
+  def make(local: NodeAddress, localId: NodeId, messages: Queue[Take[Error, Message]]) =
     for {
       nodeChannels     <- TMap.empty[NodeId, Connection].commit
       nodeStates       <- TMap.empty[NodeId, NodeState].commit
