@@ -2,16 +2,16 @@ package zio.keeper.membership.swim
 
 import zio._
 import zio.keeper.ClusterError.UnknownNode
-import zio.keeper.membership.MembershipEvent.{Join, NodeStateChanged}
+import zio.keeper.membership.MembershipEvent.{ Join, NodeStateChanged }
 import zio.keeper.membership.swim.Nodes.NodeState
-import zio.keeper.membership.{MembershipEvent, NodeAddress}
-import zio.keeper.transport.{Connection, Transport}
-import zio.keeper.{ByteCodec, Error}
+import zio.keeper.membership.{ MembershipEvent, NodeAddress }
+import zio.keeper.transport.{ Connection, Transport }
+import zio.keeper.{ ByteCodec, Error }
 import zio.logging.Logging
 import zio.logging.slf4j._
 import zio.nio.core.InetSocketAddress
 import zio.stm.TMap
-import zio.stream.{Take, ZStream}
+import zio.stream.{ Take, ZStream }
 
 /**
  * Nodes maintains state of the cluster.
@@ -31,8 +31,8 @@ class Nodes(
   nodeStates: TMap[NodeId, NodeState],
   roundRobinOffset: Ref[Int],
   transport: Transport.Service[Any],
-  messages: zio.Queue[Take[Error, Message]],
-  eventsQueue: zio.Queue[MembershipEvent]
+  messages: Queue[Take[Error, Message]],
+  eventsQueue: Queue[MembershipEvent]
 ) {
 
   /**
@@ -60,16 +60,21 @@ class Nodes(
    * @param newState - new state
    */
   def changeNodeState(id: NodeId, newState: NodeState): IO[Error, Unit] =
-    nodeState(id).flatMap{ prev =>
-      nodeStates.put(id, newState).commit.as(
-        if(newState == NodeState.Healthy && prev == NodeState.Init) {
-          Join(id)
-        } else {
-          NodeStateChanged(id, prev, newState)
-        }
-      )
-    }.flatMap(eventsQueue.offer).unit
-
+    nodeState(id)
+      .flatMap { prev =>
+        nodeStates
+          .put(id, newState)
+          .commit
+          .as(
+            if (newState == NodeState.Healthy && prev == NodeState.Init) {
+              Join(id)
+            } else {
+              NodeStateChanged(id, prev, newState)
+            }
+          )
+      }
+      .flatMap(eventsQueue.offer)
+      .unit
 
   /**
    * Initializes new connection with Init state.
@@ -109,6 +114,9 @@ class Nodes(
           .unit *> conn.close
     )
 
+  /**
+   *  Stream of Membership Events
+   */
   final val events: ZStream[Any, Nothing, MembershipEvent] =
     ZStream.fromQueue(eventsQueue)
 
@@ -117,8 +125,8 @@ class Nodes(
    */
   final val next: UIO[Option[NodeId]] /*(exclude: List[NodeId] = Nil)*/ =
     for {
-      list <- onlyHealthyNodes
-      nextIndex   <- roundRobinOffset.update(old => if (old < list.size - 1) old + 1 else 0)
+      list      <- onlyHealthyNodes
+      nextIndex <- roundRobinOffset.update(old => if (old < list.size - 1) old + 1 else 0)
     } yield list.drop(nextIndex).headOption.map(_._1)
 
   /**
@@ -183,7 +191,7 @@ object Nodes {
     for {
       nodeChannels     <- TMap.empty[NodeId, Connection].commit
       nodeStates       <- TMap.empty[NodeId, NodeState].commit
-      events <- Queue.sliding[MembershipEvent](100)
+      events           <- Queue.sliding[MembershipEvent](100)
       roundRobinOffset <- Ref.make(0)
       env              <- ZIO.environment[Transport]
     } yield new Nodes(
