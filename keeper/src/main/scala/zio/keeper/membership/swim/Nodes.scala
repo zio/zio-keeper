@@ -9,24 +9,29 @@ import zio.keeper.{ ByteCodec, Error }
 import zio.logging.Logging
 import zio.logging.slf4j._
 import zio.nio.core.InetSocketAddress
-import zio.stm.{ STM, TMap }
+import zio.stm.TMap
 import zio.stream.{ Take, ZStream }
 
+/**
+ * Nodes maintains state of the cluster.
+ *
+ * @param local - local address
+ * @param localId - local id
+ * @param nodeChannels - connections
+ * @param nodeStates - states
+ * @param roundRobinOffset - offset for round-robin
+ * @param transport - transport
+ * @param messages - queue with messages
+ */
 class Nodes(
   val local: NodeAddress,
-  val localId: NodeId,
+  localId: NodeId,
   nodeChannels: TMap[NodeId, Connection],
   nodeStates: TMap[NodeId, NodeState],
   roundRobinOffset: Ref[Int],
   transport: Transport.Service[Any],
   messages: zio.Queue[Take[Error, Message]]
 ) {
-
-  def nodeState(target: NodeId) =
-    nodeStates.get(target).commit.get.asError(UnknownNode(target))
-
-  def changeNodeState(target: NodeId, newState: NodeState) =
-    nodeStates.put(target, newState).commit
 
   /**
    * Accepts connection by adding new node in Init state.
@@ -47,15 +52,19 @@ class Nodes(
                .fork
     } yield (nodeId, fork)
 
-  final def send(msg: Message) =
-    ByteCodec[Message]
-      .toChunk(msg)
-      .flatMap(
-        chunk =>
-          connection(msg.nodeId)
-            .flatMap(_.send(chunk))
-      )
+  /**
+   * Changes node state and issue membership event.
+   * @param id - member id
+   * @param newState - new state
+   */
+  def changeNodeState(id: NodeId, newState: NodeState): IO[Nothing, Unit] =
+    nodeStates.put(id, newState).commit
 
+  /**
+   * Initializes new connection with Init state.
+   * @param addr - inet address
+   * @return - NodeId of new member.
+   */
   final def connect(addr: InetSocketAddress): ZIO[Logging[String], Error, NodeId] =
     logger.info("New connection: " + addr) *>
       Promise.make[Error, NodeId].flatMap { init =>
@@ -72,36 +81,49 @@ class Nodes(
           init.await
       }
 
-  private def connection(addr: NodeId): ZIO[Any, Error, Connection] =
-    nodeChannels.get(addr).commit.get.asError(UnknownNode(addr))
+  private def connection(id: NodeId): ZIO[Any, Error, Connection] =
+    nodeChannels.get(id).commit.get.asError(UnknownNode(id))
 
-  def disconnect(address: NodeId): _root_.zio.ZIO[Any, Error, Unit] =
-    nodeChannels
-      .delete(address)
-      .zip(nodeStates.delete(address))
-      .commit
-      .unit
+  /**
+   * close connection and remove Node from cluster.
+   * @param id node id
+   */
+  def disconnect(id: NodeId): ZIO[Any, Error, Unit] =
+    connection(id).flatMap(
+      conn =>
+        nodeChannels
+          .delete(id)
+          .zip(nodeStates.delete(id))
+          .commit
+          .unit *> conn.close
+    )
 
-  final def established(nodeId: NodeId): ZIO[Any, Error, Unit] =
-    nodeChannels
-      .get(nodeId)
-      .flatMap {
-        case None => STM.fail(UnknownNode(nodeId))
-        case Some(_) =>
-          nodeStates.put(nodeId, NodeState.Healthy)
-      }
-      .commit
-      .unit
+  final val events: ZStream[Any, Nothing, MembershipEvent] = ???
 
-  final def next /*(exclude: List[NodeId] = Nil)*/ =
+  /**
+   * Returns next Healthy node.
+   */
+  final val next: UIO[Option[NodeId]] /*(exclude: List[NodeId] = Nil)*/ =
     for {
-      onlyHealthy <- onlyHealthyNodes
-      nextIndex   <- roundRobinOffset.update(old => if (old < onlyHealthy.size - 1) old + 1 else 0)
-    } yield onlyHealthy.drop(nextIndex).headOption.map(_._1)
+      list <- onlyHealthyNodes
+      nextIndex   <- roundRobinOffset.update(old => if (old < list.size - 1) old + 1 else 0)
+    } yield list.drop(nextIndex).headOption.map(_._1)
 
-  final val onlyHealthyNodes =
+  /**
+   * Node state for given NodeId.
+   */
+  def nodeState(id: NodeId): IO[Error, NodeState] =
+    nodeStates.get(id).commit.get.asError(UnknownNode(id))
+
+  /**
+   * Lists members that are in healthy state.
+   */
+  final def onlyHealthyNodes: UIO[List[(NodeId, NodeState)]] =
     nodeStates.toList.map(_.filter(_._2 == NodeState.Healthy)).commit
 
+  /**
+   * Returns string with cluster state.
+   */
   final val prettyPrint: UIO[String] =
     nodeStates.toList.commit.map(
       nodes =>
@@ -116,7 +138,18 @@ class Nodes(
           "]]"
     )
 
-  final def events: ZStream[Any, Nothing, MembershipEvent] = ???
+  /**
+   * Sends message to target.
+   */
+  final def send(msg: Message): IO[Error, Unit] =
+    ByteCodec[Message]
+      .toChunk(msg)
+      .flatMap(
+        chunk =>
+          connection(msg.nodeId)
+            .flatMap(_.send(chunk))
+      )
+
 }
 
 object Nodes {
@@ -124,14 +157,17 @@ object Nodes {
   sealed trait NodeState
 
   object NodeState {
-    case object Unknown     extends NodeState
     case object Init        extends NodeState
     case object Healthy     extends NodeState
     case object Unreachable extends NodeState
     case object Suspicion   extends NodeState
   }
 
-  def make(local: NodeAddress, localId: NodeId, messages: Queue[Take[Error, Message]]) =
+  def make(
+    local: NodeAddress,
+    localId: NodeId,
+    messages: Queue[Take[Error, Message]]
+  ): ZIO[Transport, Nothing, Nodes] =
     for {
       nodeChannels     <- TMap.empty[NodeId, Connection].commit
       nodeStates       <- TMap.empty[NodeId, NodeState].commit

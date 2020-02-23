@@ -90,7 +90,8 @@ object SWIM {
       override def membership: Membership.Service[Any, B] =
         new Membership.Service[Any, B] {
 
-          override def events: ZStream[Any, Error, MembershipEvent] = ???
+          override def events: ZStream[Any, Error, MembershipEvent] =
+            nodes0.events
 
           override def localMember: NodeId = localNodeId
 

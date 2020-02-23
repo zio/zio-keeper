@@ -4,6 +4,7 @@ import upickle.default._
 import zio.ZIO
 import zio.keeper.discovery.Discovery
 import zio.keeper.membership.NodeAddress
+import zio.keeper.membership.swim.Nodes.NodeState
 import zio.keeper.membership.swim.{NodeId, Nodes, Protocol}
 import zio.keeper.{ByteCodec, TaggedCodec}
 import zio.logging.Logging
@@ -57,11 +58,11 @@ object Initial {
           {
             case (sender, Join(_)) =>
               nodes
-                .established(sender)
+                .changeNodeState(sender, NodeState.Healthy)
                 .as(Some((sender, Accept)))
             case (sender, Accept) =>
               nodes
-                .established(sender)
+                .changeNodeState(sender, NodeState.Healthy)
                 .as(None)
             case (sender, Reject(msg)) =>
               logger.error("Rejected from cluster: " + msg) *>
