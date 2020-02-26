@@ -5,8 +5,8 @@ import zio.ZIO
 import zio.keeper.discovery.Discovery
 import zio.keeper.membership.NodeAddress
 import zio.keeper.membership.swim.Nodes.NodeState
-import zio.keeper.membership.swim.{NodeId, Nodes, Protocol}
-import zio.keeper.{ByteCodec, TaggedCodec}
+import zio.keeper.membership.swim.{ NodeId, Nodes, Protocol }
+import zio.keeper.{ ByteCodec, TaggedCodec }
 import zio.logging.Logging
 import zio.logging.slf4j._
 import zio.stream.ZStream
@@ -74,8 +74,9 @@ object Initial {
             )
             .mapM(
               node =>
-                nodes.connect(node)
-                    .map(addr => (addr, Join(nodes.local)))
+                nodes
+                  .connect(node)
+                  .map(addr => (addr, Join(nodes.local)))
             )
         )
     )

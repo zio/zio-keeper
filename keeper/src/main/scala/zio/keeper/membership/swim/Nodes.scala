@@ -93,6 +93,7 @@ class Nodes(
                 readFiber => init.succeed(readFiber._1) *> readFiber._2.join
               )
           )
+          .catchAll(e => init.fail(e))
           .fork *>
           init.await
       }

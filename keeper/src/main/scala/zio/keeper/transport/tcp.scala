@@ -135,7 +135,7 @@ class NioChannelOut(
         socket
           .write(Chunk((size >>> 24).toByte, (size >>> 16).toByte, (size >>> 8).toByte, size.toByte))
           .mapError(ExceptionWrapper(_)) *>
-          socket.write(data).retry(Schedule.recurs(3)).mapError(ExceptionWrapper(_))
+          socket.write(data).mapError(ExceptionWrapper(_))
       )
       .catchSome {
         case ExceptionWrapper(ex: IOException) if ex.getMessage == "Connection reset by peer" =>

@@ -10,9 +10,24 @@ import zio.keeper.membership.{ Membership, MembershipEvent, NodeAddress }
 import zio.keeper.transport.Transport
 import zio.logging.Logging
 import zio.logging.slf4j._
+import zio.stream.ZStream.Pull
 import zio.stream.{ Take, ZStream }
 
 object SWIM {
+
+  private def recoverErrors[R, E, A](stream: ZStream[R, E, A]): ZStream[R with Logging[String], E, Option[A]] =
+    ZStream
+      .managed(stream.process)
+      .map(
+        pull =>
+          pull.map(Some(_)).catchAll {
+            case Some(e) =>
+              logger.error("Error when process stream: " + e) *>
+                Pull.emit(None)
+            case None => Pull.end
+          }
+      )
+      .flatMap(ZStream.fromPull)
 
   def run[B: TaggedCodec](
     port: Int
@@ -62,10 +77,15 @@ object SWIM {
                   .onMessage(msg.nodeId, msg.payload)
                   .map(_.map(reply => msg.copy(nodeId = reply._1, payload = reply._2)))
             }
+            .merge(
+              recoverErrors(
+                swim.produceMessages
+                  .map(Message(_))
+              )
+            )
             .collect {
               case Some(msg) => msg
             }
-            .merge(swim.produceMessages.map(Message.apply(_)))
             .mapM(
               nodes0
                 .send(_)

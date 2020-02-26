@@ -4,6 +4,7 @@ import upickle.default._
 import zio.clock._
 import zio.console._
 import zio.duration._
+import zio.keeper.TransportError.ExceptionWrapper
 import zio.keeper.discovery.Discovery
 import zio.keeper.example.TestNode.PingPong.{ Ping, Pong }
 import zio.keeper.membership.Membership
@@ -26,7 +27,7 @@ object Node1 extends zio.ManagedApp {
 object Node2 extends zio.ManagedApp {
 
   def run(args: List[String]) =
-    TestNode.start(5558, Set(5557))
+    TestNode.start(5558, Set(5559, 5557))
 }
 
 object Node3 extends zio.ManagedApp {
@@ -100,7 +101,7 @@ object TestNode {
           .foreach(others)(
             port => InetAddress.localHost.flatMap(addr => SocketAddress.inetSocketAddress(addr, port))
           )
-          .orDie
+          .mapError(ExceptionWrapper(_))
           .map(addrs => Discovery.staticList(addrs.toSet))
       )
 

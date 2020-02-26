@@ -3,11 +3,11 @@ package zio.keeper.membership.swim.protocols
 import upickle.default._
 import zio.duration._
 import zio.keeper.membership.swim.Nodes.NodeState
-import zio.keeper.membership.swim.{NodeId, Nodes, Protocol}
-import zio.keeper.{ByteCodec, TaggedCodec}
+import zio.keeper.membership.swim.{ NodeId, Nodes, Protocol }
+import zio.keeper.{ ByteCodec, TaggedCodec }
 import zio.stm.TMap
 import zio.stream.ZStream
-import zio.{Ref, Schedule, ZIO}
+import zio.{ Ref, Schedule, ZIO }
 
 sealed trait FailureDetection
 
