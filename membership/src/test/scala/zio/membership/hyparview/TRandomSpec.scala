@@ -15,7 +15,7 @@ object TRandomSpec
           testM("will draw an element from the list") {
             checkM(Gen.listOfN(10)(Gen.anyInt)) { xs =>
               make(0).flatMap(_.tRandom.selectOne(xs).commit).map { element =>
-                assert(xs, contains(element.get))
+                assert(xs)(contains(element.get))
               }
             }
           },
@@ -25,7 +25,7 @@ object TRandomSpec
               for {
                 fst <- draw
                 snd <- draw
-              } yield assert(fst, equalTo(snd))
+              } yield assert(fst)(equalTo(snd))
             }
           },
           testM("will draw different elements with different seeds") {
@@ -33,11 +33,11 @@ object TRandomSpec
               for {
                 fst <- make(0).flatMap(_.tRandom.selectOne(xs).commit)
                 snd <- make(1).flatMap(_.tRandom.selectOne(xs).commit)
-              } yield assert(fst, not(equalTo(snd)))
+              } yield assert(fst)(not(equalTo(snd)))
             }
           },
           testM("returns None for empty list") {
-            assertM(make(0).flatMap(_.tRandom.selectOne(Nil).commit), isNone)
+            assertM(make(0).flatMap(_.tRandom.selectOne(Nil).commit))(isNone)
           }
         ),
         suite("selectN")(
@@ -48,7 +48,7 @@ object TRandomSpec
             } yield (xs, n)
             checkM(gen) {
               case (xs, n) =>
-                assertM(make(0).flatMap(_.tRandom.selectN(xs, n).map(_.size).commit), equalTo(xs.size))
+                assertM(make(0).flatMap(_.tRandom.selectN(xs, n).map(_.size).commit))(equalTo(xs.size))
             }
           },
           testM("returns n elements with n is smaller") {
@@ -58,7 +58,7 @@ object TRandomSpec
             } yield (xs, n)
             checkM(gen) {
               case (xs, n) =>
-                assertM(make(0).flatMap(_.tRandom.selectN(xs, n).map(_.size).commit), equalTo(n))
+                assertM(make(0).flatMap(_.tRandom.selectN(xs, n).map(_.size).commit))(equalTo(n))
             }
           },
           testM("returns 0 elements when n <= 0") {
@@ -68,12 +68,12 @@ object TRandomSpec
             } yield (xs, n)
             checkM(gen) {
               case (xs, n) =>
-                assertM(make(0).flatMap(_.tRandom.selectN(xs, n).map(_.size).commit), equalTo(0))
+                assertM(make(0).flatMap(_.tRandom.selectN(xs, n).map(_.size).commit))(equalTo(0))
             }
           },
           testM("returns the same elements as the collection") {
             checkM(Gen.listOf(Gen.anyInt)) { xs =>
-              assertM(make(0).flatMap(_.tRandom.selectN(xs, xs.size).map(_.sorted).commit), equalTo(xs.sorted))
+              assertM(make(0).flatMap(_.tRandom.selectN(xs, xs.size).map(_.sorted).commit))(equalTo(xs.sorted))
             }
           }
         )
