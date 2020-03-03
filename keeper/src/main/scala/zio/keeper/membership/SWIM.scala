@@ -15,7 +15,7 @@ import zio.keeper.transport.{ ChannelOut, Transport }
 import zio.logging.Logging
 import zio.logging.slf4j._
 import zio.macros.delegate._
-import zio.nio.{ InetAddress, SocketAddress }
+import zio.nio.core.{ InetAddress, SocketAddress }
 import zio.random.Random
 import zio.stm.{ STM, TMap }
 import zio.stream.{ Stream, ZStream }

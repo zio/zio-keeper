@@ -1,6 +1,6 @@
 package zio.keeper
 import zio.ZIO
-import zio.nio.SocketAddress
+import zio.nio.core.SocketAddress
 
 package object discovery extends Discovery.Service[Discovery] {
 

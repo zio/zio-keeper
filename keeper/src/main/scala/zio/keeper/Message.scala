@@ -5,7 +5,7 @@ import java.util.UUID
 import zio.keeper.SerializationError.{ DeserializationTypeError, SerializationTypeError }
 import zio.keeper.membership.{ Member, NodeId }
 import zio.keeper.transport.ChannelOut
-import zio.nio.Buffer
+import zio.nio.core.Buffer
 import zio.{ Chunk, IO }
 
 final case class Message(

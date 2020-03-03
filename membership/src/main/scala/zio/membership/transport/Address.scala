@@ -1,8 +1,7 @@
 package zio.membership.transport
 
 import zio.IO
-import zio.nio.SocketAddress
-import zio.nio.InetSocketAddress
+import zio.nio.core.{ InetSocketAddress, SocketAddress }
 import zio.membership.ResolutionFailed
 
 final case class Address(
