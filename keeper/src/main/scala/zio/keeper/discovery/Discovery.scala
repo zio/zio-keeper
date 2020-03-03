@@ -2,7 +2,7 @@ package zio.keeper.discovery
 
 import zio.ZIO
 import zio.keeper.Error
-import zio.nio.SocketAddress
+import zio.nio.core.SocketAddress
 
 trait Discovery {
   def discover: Discovery.Service[Any]
@@ -20,6 +20,6 @@ object Discovery {
   }
 
   trait Service[R] {
-    def discoverNodes: ZIO[R, Error, Set[zio.nio.SocketAddress]]
+    def discoverNodes: ZIO[R, Error, Set[SocketAddress]]
   }
 }

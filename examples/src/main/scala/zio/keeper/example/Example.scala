@@ -10,7 +10,7 @@ import zio.logging.Logging
 import zio.logging.slf4j.Slf4jLogger
 import zio.macros.delegate._
 import zio.macros.delegate.syntax._
-import zio.nio.{ InetAddress, SocketAddress }
+import zio.nio.core.{ InetAddress, SocketAddress }
 import zio.{ Chunk, Schedule, ZIO, ZManaged }
 import zio.clock._
 import zio.keeper.membership._

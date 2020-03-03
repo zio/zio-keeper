@@ -1,7 +1,7 @@
 package zio.keeper.transport
 
 import zio.keeper.TransportError
-import zio.nio.SocketAddress
+import zio.nio.core.SocketAddress
 import zio.{ Chunk, UIO, ZIO, ZManaged }
 
 trait Transport {

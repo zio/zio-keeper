@@ -1,6 +1,6 @@
 package zio.keeper
 
-import zio.nio.SocketAddress
+import zio.nio.core.SocketAddress
 import zio.{ ZIO, ZManaged }
 
 package object transport extends Transport.Service[Transport] {

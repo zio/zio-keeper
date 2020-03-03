@@ -10,7 +10,7 @@ import zio.keeper.TransportError
 import zio.keeper.TransportError._
 import zio.logging.Logging
 import zio.macros.delegate._
-import zio.nio._
+import zio.nio.core.SocketAddress
 import zio.nio.channels._
 
 object tcp {

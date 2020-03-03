@@ -9,7 +9,7 @@ import zio.duration.Duration
 import zio.keeper.ServiceDiscoveryError
 import zio.logging.Logging
 import zio.macros.delegate._
-import zio.nio.{ InetAddress, SocketAddress }
+import zio.nio.core.{ InetAddress, SocketAddress }
 import zio.{ IO, URIO, ZIO, keeper }
 
 /**
@@ -23,8 +23,8 @@ trait K8DnsDiscovery extends Discovery.Service[Any] {
   final override val discoverNodes: ZIO[Any, keeper.Error, Set[SocketAddress]] = {
     for {
       addresses <- lookup(serviceDns, serviceDnsTimeout)
-      nodes     <- ZIO.foreach(addresses)(addr => zio.nio.SocketAddress.inetSocketAddress(addr, servicePort))
-    } yield nodes.toSet: Set[zio.nio.SocketAddress]
+      nodes     <- ZIO.foreach(addresses)(addr => SocketAddress.inetSocketAddress(addr, servicePort))
+    } yield nodes.toSet: Set[SocketAddress]
   }.catchAll(
     ex =>
       logging.error("discovery strategy " + this.getClass.getSimpleName + " failed.") *>
@@ -43,10 +43,10 @@ trait K8DnsDiscovery extends Discovery.Service[Any] {
       dirContext   <- ZIO.effect(new InitialDirContext(env)).refineToOrDie[NamingException]
       attributes   <- ZIO.effectTotal(dirContext.getAttributes(serviceDns.hostname, Array[String]("SRV")))
       srvAttribute = Option(attributes.get("srv")).toList.flatMap(_.getAll.asScala)
-      addresses <- ZIO.foldLeft(srvAttribute)(Set.empty[zio.nio.InetAddress]) {
+      addresses <- ZIO.foldLeft(srvAttribute)(Set.empty[InetAddress]) {
                     case (acc, address: String) =>
                       extractHost(address)
-                        .flatMap(zio.nio.InetAddress.byName)
+                        .flatMap(InetAddress.byName)
                         .map(acc + _)
                         .refineToOrDie[UnknownHostException]
                     case (acc, _) =>
@@ -62,7 +62,7 @@ trait K8DnsDiscovery extends Discovery.Service[Any] {
         host.replaceAll("\\\\.$", "")
       }
 
-  def serviceDns: zio.nio.InetAddress
+  def serviceDns: InetAddress
 
   def serviceDnsTimeout: Duration
 
@@ -73,13 +73,13 @@ trait K8DnsDiscovery extends Discovery.Service[Any] {
 object K8DnsDiscovery {
 
   def withK8DnsDiscovery(
-    addr: zio.nio.InetAddress,
+    addr: InetAddress,
     timeout: Duration,
     port: Int
   ) = enrichWithM[Discovery](k8DnsDiscovery(addr, timeout, port))
 
   def k8DnsDiscovery(
-    addr: zio.nio.InetAddress,
+    addr: InetAddress,
     timeout: Duration,
     port: Int
   ): URIO[Logging[String], Discovery] =
