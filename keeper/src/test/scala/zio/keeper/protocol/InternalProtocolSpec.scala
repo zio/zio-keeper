@@ -27,7 +27,7 @@ object InternalProtocolSpec
           for {
             bytes        <- original.serialize
             deserialized <- InternalProtocol.deserialize(bytes)
-          } yield assert(original, equalTo(deserialized))
+          } yield assert(original)(equalTo(deserialized))
         }
 
       suite("Internal Protocol Serialization")(
@@ -73,12 +73,9 @@ object InternalProtocolSpec
           }
         },
         testM("Malformed bytes") {
-          assertM(
-            InternalProtocol.deserialize(Chunk.single(Byte.MaxValue)).either,
-            isLeft(
+          assertM(InternalProtocol.deserialize(Chunk.single(Byte.MaxValue)).either)(isLeft(
               equalTo(DeserializationTypeError[InternalProtocol](upickle.core.Abort("expected dictionary got int32")))
-            )
-          )
+            ))
         }
       )
     })

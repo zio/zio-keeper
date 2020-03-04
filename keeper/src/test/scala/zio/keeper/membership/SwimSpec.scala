@@ -99,9 +99,9 @@ object SwimSpec
               node2   <- member2.instance.localMember.map(_.nodeId)
               node3   <- member3.instance.localMember.map(_.nodeId)
               _       <- member1.stop *> member2.stop *> member3.stop
-            } yield assert(nodes1, equalTo(List(node2, node3))) &&
-              assert(nodes2, equalTo(List(node1, node3))) &&
-              assert(nodes3, equalTo(List(node1, node2)))
+            } yield assert(nodes1)(equalTo(List(node2, node3))) &&
+              assert(nodes2)(equalTo(List(node1, node3))) &&
+              assert(nodes3)(equalTo(List(node1, node2)))
           )
         },
         testM("should receive notification") {
@@ -115,8 +115,8 @@ object SwimSpec
               _             <- member2.stop
               leaveEvents   <- member1Events.run(Sink.collectAllN[MembershipEvent](2))
               _             <- member1.stop
-            } yield assert(joinEvent, equalTo(MembershipEvent.Join(node2))) &&
-              assert(leaveEvents, equalTo(List(MembershipEvent.Unreachable(node2), MembershipEvent.Leave(node2))))
+            } yield assert(joinEvent)(equalTo(MembershipEvent.Join(node2))) &&
+              assert(leaveEvents)(equalTo(List(MembershipEvent.Unreachable(node2), MembershipEvent.Leave(node2))))
           )
         }
       )

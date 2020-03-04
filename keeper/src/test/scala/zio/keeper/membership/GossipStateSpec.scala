@@ -18,7 +18,7 @@ object GossipStateSpec
           val remote     = GossipState(SortedSet(member2, member3))
           val diff       = local.diff(remote)
 
-          assert(diff, equalTo(StateDiff(SortedSet(member1), SortedSet(member2))))
+          assert(diff)(equalTo(StateDiff(SortedSet(member1), SortedSet(member2))))
 
         }
       )
