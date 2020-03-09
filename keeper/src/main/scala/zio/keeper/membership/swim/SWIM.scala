@@ -5,13 +5,13 @@ import zio.clock.Clock
 import zio.duration._
 import zio.keeper._
 import zio.keeper.discovery.Discovery
-import zio.keeper.membership.swim.protocols.{ DeadLetter, FailureDetection, Initial, User }
-import zio.keeper.membership.{ Membership, MembershipEvent, NodeAddress }
+import zio.keeper.membership.swim.protocols.{DeadLetter, FailureDetection, Initial, Suspicion, User}
+import zio.keeper.membership.{Membership, MembershipEvent, NodeAddress}
 import zio.keeper.transport.Transport
 import zio.logging.Logging
 import zio.logging.slf4j._
 import zio.stream.ZStream.Pull
-import zio.stream.{ Take, ZStream }
+import zio.stream.{Take, ZStream}
 
 object SWIM {
 
@@ -60,6 +60,12 @@ object SWIM {
                            .flatMap(_.debug)
                            .map(_.binary)
                            .toManaged_
+      suspicion <- Suspicion
+        .protocol(nodes0)
+        .flatMap(_.debug)
+        .map(_.binary)
+        .toManaged_
+
       user <- User
                .protocol[B](userIn, userOut)
                .map(_.binary)
@@ -67,6 +73,7 @@ object SWIM {
       deadLetter <- DeadLetter.protocol.toManaged_
       swim = initial.binary
         .compose(failureDetection)
+        .compose(suspicion)
         .compose(user)
         .compose(deadLetter)
       _ <- ZStream

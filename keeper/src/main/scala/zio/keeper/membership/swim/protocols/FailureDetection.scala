@@ -17,17 +17,20 @@ object FailureDetection {
     implicit
     c1: ByteCodec[Ack],
     c2: ByteCodec[Ping],
-    c3: ByteCodec[PingReq]
+    c3: ByteCodec[PingReq],
+    c4: ByteCodec[Nack]
   ): TaggedCodec[FailureDetection] =
     TaggedCodec.instance(
       {
         case _: Ack     => 10
         case _: Ping    => 11
         case _: PingReq => 12
+        case _: Nack => 13
       }, {
         case 10 => c1.asInstanceOf[ByteCodec[FailureDetection]]
         case 11 => c2.asInstanceOf[ByteCodec[FailureDetection]]
         case 12 => c3.asInstanceOf[ByteCodec[FailureDetection]]
+        case 13 => c4.asInstanceOf[ByteCodec[FailureDetection]]
       }
     )
 
@@ -37,6 +40,15 @@ object FailureDetection {
 
     implicit val codec: ByteCodec[Ack] =
       ByteCodec.fromReadWriter(macroRW[Ack])
+
+  }
+
+  final case class Nack(conversation: Long) extends FailureDetection
+
+  object Nack {
+
+    implicit val codec: ByteCodec[Nack] =
+      ByteCodec.fromReadWriter(macroRW[Nack])
 
   }
 
@@ -76,7 +88,7 @@ object FailureDetection {
             _          <- acks.put(ackId, _Ack(nodeAndMsg._1, onBehalf)).commit
           } yield nodeAndMsg
 
-        Protocol[NodeId, FailureDetection].apply(
+        Protocol[NodeId, FailureDetection](
           {
             case (_, Ack(ackId)) =>
               ack(ackId).map {
@@ -92,6 +104,7 @@ object FailureDetection {
             case (sender, PingReq(to, originalAck)) =>
               withAck(Some((sender, originalAck)), ackId => (to, Ping(ackId)))
                 .map(Some(_))
+            case (_, Nack(_)) => ZIO.succeed(None)
 
           },
           ZStream
@@ -125,7 +138,7 @@ object FailureDetection {
                               ack(ackId) *>
                                 nodes
                                   .changeNodeState(ack0.target, NodeState.Suspicion)
-                                  .as(None) //this should send suspicion message
+                                  .as(None) //this should trigger suspicion mechanism
                             case (_, _) =>
                               nodes
                                 .disconnect(ack0.target)

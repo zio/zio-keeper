@@ -2,11 +2,12 @@ package zio.keeper.membership.swim.protocols
 
 import upickle.default._
 import zio.ZIO
+import zio.keeper.ClusterError.UnknownNode
 import zio.keeper.discovery.Discovery
 import zio.keeper.membership.NodeAddress
 import zio.keeper.membership.swim.Nodes.NodeState
-import zio.keeper.membership.swim.{ NodeId, Nodes, Protocol }
-import zio.keeper.{ ByteCodec, TaggedCodec }
+import zio.keeper.membership.swim.{NodeId, Nodes, Protocol}
+import zio.keeper.{ByteCodec, TaggedCodec}
 import zio.logging.Logging
 import zio.logging.slf4j._
 import zio.stream.ZStream
@@ -54,12 +55,20 @@ object Initial {
   def protocol(nodes: Nodes) =
     ZIO.accessM[Discovery with Logging[String]](
       env =>
-        Protocol[NodeId, Initial].apply(
+        Protocol[NodeId, Initial](
           {
-            case (sender, Join(_)) =>
+            case (sender, Join(addr)) =>
               nodes
                 .changeNodeState(sender, NodeState.Healthy)
                 .as(Some((sender, Accept)))
+                .catchSome {
+                  //this handle Join messages that was piggybacked
+                  case UnknownNode(_) =>
+                    addr.socketAddress
+                      .flatMap(nodes.connect)
+                      .map(newNodeId => Some((newNodeId, Join(nodes.local))))
+                }
+
             case (sender, Accept) =>
               nodes
                 .changeNodeState(sender, NodeState.Healthy)
@@ -76,7 +85,7 @@ object Initial {
               node =>
                 nodes
                   .connect(node)
-                  .map(addr => (addr, Join(nodes.local)))
+                  .map(newNodeId => (newNodeId, Join(nodes.local)))
             )
         )
     )
