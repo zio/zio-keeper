@@ -1,9 +1,9 @@
 package zio.keeper.membership.swim
 
-import zio.keeper.{ Error, TaggedCodec }
+import zio.keeper.{Error, TaggedCodec}
 import zio.logging.Logging
 import zio.stream.ZStream
-import zio.{ Chunk, Queue, ZIO }
+import zio.{Chunk, ZIO}
 
 /**
  * Protocol represents message flow.
@@ -22,22 +22,22 @@ trait Protocol[A, M] {
   final def binary(implicit codec: TaggedCodec[M]): Protocol[A, Chunk[Byte]] =
     new Protocol[A, Chunk[Byte]] {
 
-      override val onMessage: (A, Chunk[Byte]) => ZIO[Any, Error, Option[(A, Chunk[Byte])]] =
+      override val onMessage: (A, Chunk[Byte]) => ZIO[Any, Error, Message[Chunk[Byte]]] =
         (sender, payload) =>
           TaggedCodec
             .read[M](payload)
             .flatMap(m => self.onMessage(sender, m))
             .flatMap {
-              case Some((addr, msg)) => TaggedCodec.write(msg).map(chunk => Some((addr, chunk)))
-              case _                 => ZIO.succeed[Option[(A, Chunk[Byte])]](None)
+              case Message.Direct(addr, msg) => TaggedCodec.write(msg).map(chunk => Message.Direct(addr, chunk))
+              case _                 => ZIO.succeed[Message[Chunk[Byte]]](Message.Empty)
             }
 
-      override val produceMessages: ZStream[Any, Error, (A, Chunk[Byte])] =
+      override val produceMessages: ZStream[Any, Error, Message[Chunk[Byte]]] =
         self.produceMessages.mapM {
-          case (recipient, msg) =>
+          case Message.Direct(recipient, msg) =>
             TaggedCodec
               .write[M](msg)
-              .map((recipient, _))
+              .map(Message.Direct(recipient, _))
         }
     }
 
@@ -46,13 +46,13 @@ trait Protocol[A, M] {
    */
   final def compose(other: Protocol[A, M]): Protocol[A, M] = new Protocol[A, M] {
 
-    override def onMessage: (A, M) => ZIO[Any, Error, Option[(A, M)]] =
+    override def onMessage: (A, M) => ZIO[Any, Error, Message[M]] =
       (sender, msg) =>
         self
           .onMessage(sender, msg)
           .orElse(other.onMessage(sender, msg))
 
-    override def produceMessages: ZStream[Any, Error, (A, M)] =
+    override def produceMessages: ZStream[Any, Error, Message[M]] =
       self.produceMessages
         .merge(other.produceMessages)
   }
@@ -63,14 +63,14 @@ trait Protocol[A, M] {
   val debug: ZIO[Logging[String], Error, Protocol[A, M]] =
     ZIO.access[Logging[String]] { env =>
       new Protocol[A, M] {
-        override def onMessage: (A, M) => ZIO[Any, Error, Option[(A, M)]] =
+        override def onMessage: (A, M) => ZIO[Any, Error, Message[M]] =
           (sender, msg) =>
             env.logging.info("Receive [" + msg + "] from: " + sender) *>
               self.onMessage(sender, msg)
 
-        override def produceMessages: ZStream[Any, Error, (A, M)] =
+        override def produceMessages: ZStream[Any, Error, Message[M]] =
           self.produceMessages.tap {
-            case (to, msg) =>
+            case Message.Direct(to, msg) =>
               env.logging.info("Sending [" + msg + "] to: " + to)
           }
       }
@@ -79,12 +79,12 @@ trait Protocol[A, M] {
   /**
    * Handler for incomming messages.
    */
-  def onMessage: (A, M) => ZIO[Any, Error, Option[(A, M)]]
+  def onMessage: (A, M) => ZIO[Any, Error, Message[M]]
 
   /**
    * Stream of outgoing messages.
    */
-  def produceMessages: zio.stream.ZStream[Any, Error, (A, M)]
+  def produceMessages: zio.stream.ZStream[Any, Error, Message[M]]
 
 }
 
@@ -93,17 +93,17 @@ object Protocol {
   class ProtocolBuilder[A, M] {
 
     def apply[R](
-      in: (A, M) => ZIO[R, Error, Option[(A, M)]],
-      out: zio.stream.ZStream[R, Error, (A, M)]
+                  in: (A, M) => ZIO[R, Error, Message[M]],
+                  out: zio.stream.ZStream[R, Error, Message[M]]
     ): ZIO[R, Error, Protocol[A, M]] =
       ZIO.access[R](
         env =>
           new Protocol[A, M] {
 
-            override val onMessage: (A, M) => ZIO[Any, Error, Option[(A, M)]] =
+            override val onMessage: (A, M) => ZIO[Any, Error, Message[M]] =
               (sender, payload) => in(sender, payload).provide(env)
 
-            override val produceMessages: ZStream[Any, Error, (A, M)] =
+            override val produceMessages: ZStream[Any, Error, Message[M]] =
               out.provide(env)
           }
       )

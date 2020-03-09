@@ -1,7 +1,7 @@
 package zio.keeper.membership.swim.protocols
 
 import zio.Chunk
-import zio.keeper.membership.swim.{ NodeId, Protocol }
+import zio.keeper.membership.swim.{NodeId, Protocol, Message}
 import zio.logging.slf4j._
 import zio.stream.ZStream
 
@@ -13,7 +13,7 @@ object DeadLetter {
         case (sender, _) =>
           logger
             .error("message from: " + sender + " in dead letter")
-            .as(None)
+            .as(Message.Empty)
       },
       ZStream.empty
     )

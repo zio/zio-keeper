@@ -6,7 +6,7 @@ import zio.keeper.ClusterError.UnknownNode
 import zio.keeper.discovery.Discovery
 import zio.keeper.membership.NodeAddress
 import zio.keeper.membership.swim.Nodes.NodeState
-import zio.keeper.membership.swim.{NodeId, Nodes, Protocol}
+import zio.keeper.membership.swim.{NodeId, Nodes, Protocol, Message}
 import zio.keeper.{ByteCodec, TaggedCodec}
 import zio.logging.Logging
 import zio.logging.slf4j._
@@ -60,22 +60,22 @@ object Initial {
             case (sender, Join(addr)) =>
               nodes
                 .changeNodeState(sender, NodeState.Healthy)
-                .as(Some((sender, Accept)))
+                .as(Message.Direct(sender, Accept))
                 .catchSome {
                   //this handle Join messages that was piggybacked
                   case UnknownNode(_) =>
                     addr.socketAddress
                       .flatMap(nodes.connect)
-                      .map(newNodeId => Some((newNodeId, Join(nodes.local))))
+                      .map(newNodeId => Message.Direct(newNodeId, Join(nodes.local)))
                 }
 
             case (sender, Accept) =>
               nodes
                 .changeNodeState(sender, NodeState.Healthy)
-                .as(None)
+                .as(Message.Empty)
             case (sender, Reject(msg)) =>
               logger.error("Rejected from cluster: " + msg) *>
-                nodes.disconnect(sender).as(None)
+                nodes.disconnect(sender).as(Message.Empty)
           },
           ZStream
             .fromIterator(
@@ -85,7 +85,7 @@ object Initial {
               node =>
                 nodes
                   .connect(node)
-                  .map(newNodeId => (newNodeId, Join(nodes.local)))
+                  .map(newNodeId => Message.Direct(newNodeId, Join(nodes.local)))
             )
         )
     )

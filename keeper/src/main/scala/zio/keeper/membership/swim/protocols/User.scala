@@ -1,11 +1,11 @@
 package zio.keeper.membership.swim.protocols
 
-import upickle.default.{ readBinary, writeBinary }
+import upickle.default.{readBinary, writeBinary}
 import zio.keeper.SerializationError._
-import zio.keeper.membership.swim.{ NodeId, Protocol }
-import zio.keeper.{ ByteCodec, TaggedCodec }
+import zio.keeper.membership.swim.{NodeId, Protocol, Message}
+import zio.keeper.{ByteCodec, TaggedCodec}
 import zio.stream.ZStream
-import zio.{ Chunk, IO, ZIO }
+import zio.{Chunk, IO, ZIO}
 
 case class User[A](msg: A)
 
@@ -54,11 +54,11 @@ object User {
     userOut: zio.Queue[(NodeId, B)]
   ) =
     Protocol[NodeId, User[B]].apply(
-      (s, u: User[B]) => userIn.offer((s, u.msg)).as(None),
+      (s, u: User[B]) => userIn.offer((s, u.msg)).as(Message.Empty),
       ZStream
         .fromQueue(userOut)
         .map {
-          case (recipient, msg) => (recipient, User(msg))
+          case (recipient, msg) => Message.Direct(recipient, User(msg))
         }
     )
 

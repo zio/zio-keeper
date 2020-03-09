@@ -1,27 +1,13 @@
 package zio.keeper.membership.swim
 
-import java.util.UUID
 
-import zio.Chunk
-import upickle.default._
-import zio.keeper.ByteCodec
-
-case class Message(
-  nodeId: NodeId,
-  payload: Chunk[Byte],
-  correlationId: UUID
-)
+sealed trait Message[+A]
 
 object Message {
-  def apply: ((NodeId, Chunk[Byte])) => Message = input => Message(input._1, input._2, UUID.randomUUID())
-
-  implicit val codec: ByteCodec[Message] =
-    ByteCodec.fromReadWriter(macroRW[Message])
-
-  implicit val chunkRW: ReadWriter[Chunk[Byte]] =
-    implicitly[ReadWriter[Array[Byte]]]
-      .bimap[Chunk[Byte]](
-        ch => ch.toArray,
-        arr => Chunk.fromArray(arr)
-      )
+  case class Direct[A](nodeId: NodeId, message: A) extends Message[A] {
+    def reply[B <: A](message: B) =
+      this.copy(message = message)
+  }
+  case class Gossip[A](message: A)                 extends Message[A]
+  case object Empty                           extends Message[Nothing]
 }

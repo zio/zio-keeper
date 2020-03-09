@@ -3,11 +3,11 @@ package zio.keeper.membership.swim.protocols
 import upickle.default._
 import zio.duration._
 import zio.keeper.membership.swim.Nodes.NodeState
-import zio.keeper.membership.swim.{ NodeId, Nodes, Protocol }
-import zio.keeper.{ ByteCodec, TaggedCodec }
+import zio.keeper.membership.swim.{NodeId, Nodes, Protocol, Message}
+import zio.keeper.{ByteCodec, TaggedCodec}
 import zio.stm.TMap
 import zio.stream.ZStream
-import zio.{ Ref, Schedule, ZIO }
+import zio.{Ref, Schedule, ZIO}
 
 sealed trait FailureDetection
 
@@ -81,11 +81,11 @@ object FailureDetection {
             acks
               .delete(id)).commit
 
-        def withAck(onBehalf: Option[(NodeId, Long)], fn: Long => (NodeId, FailureDetection)) =
+        def withAck(onBehalf: Option[(NodeId, Long)], fn: Long => Message.Direct[FailureDetection]) =
           for {
             ackId      <- ackId.update(_ + 1)
             nodeAndMsg = fn(ackId)
-            _          <- acks.put(ackId, _Ack(nodeAndMsg._1, onBehalf)).commit
+            _          <- acks.put(ackId, _Ack(nodeAndMsg.nodeId, onBehalf)).commit
           } yield nodeAndMsg
 
         Protocol[NodeId, FailureDetection](
@@ -93,18 +93,17 @@ object FailureDetection {
             case (_, Ack(ackId)) =>
               ack(ackId).map {
                 case Some(_Ack(_, Some((node, originalAckId)))) =>
-                  Some((node, Ack(originalAckId)))
+                  Message.Direct(node, Ack(originalAckId))
                 case _ =>
-                  None
+                  Message.Empty
               }
 
             case (sender, Ping(ackId)) =>
-              ZIO.succeed(Some((sender, Ack(ackId))))
+              ZIO.succeed(Message.Direct(sender, Ack(ackId)))
 
             case (sender, PingReq(to, originalAck)) =>
-              withAck(Some((sender, originalAck)), ackId => (to, Ping(ackId)))
-                .map(Some(_))
-            case (_, Nack(_)) => ZIO.succeed(None)
+              withAck(Some((sender, originalAck)), ackId => Message.Direct(to, Ping(ackId)))
+            case (_, Nack(_)) => ZIO.succeed(Message.Empty)
 
           },
           ZStream
@@ -117,7 +116,7 @@ object FailureDetection {
                 .fromEffect(nodes.next)
                 .collectM {
                   case Some(next) =>
-                    withAck(None, ackId => (next, Ping(ackId)))
+                    withAck(None, ackId => Message.Direct(next, Ping(ackId)))
                 }
                 .merge(
                   // Every protocol round check for outstanding acks
@@ -133,20 +132,17 @@ object FailureDetection {
                             case (Some(next), NodeState.Healthy) =>
                               nodes
                                 .changeNodeState(ack0.target, NodeState.Unreachable)
-                                .as(Some((next, PingReq(ack0.target, ackId))))
+                                .as(Message.Direct(next, PingReq(ack0.target, ackId)))
                             case (Some(_), NodeState.Unreachable) =>
                               ack(ackId) *>
                                 nodes
                                   .changeNodeState(ack0.target, NodeState.Suspicion)
-                                  .as(None) //this should trigger suspicion mechanism
+                                  .as(Message.Empty) //this should trigger suspicion mechanism
                             case (_, _) =>
                               nodes
                                 .disconnect(ack0.target)
-                                .as(None)
+                                .as(Message.Empty)
                           }
-                    }
-                    .collect {
-                      case Some(req) => req
                     }
                 )
         )

@@ -25,14 +25,14 @@ import zio.stream.{ Take, ZStream }
  * @param messages - queue with messages
  */
 class Nodes(
-  val local: NodeAddress,
-  localId: NodeId,
-  nodeChannels: TMap[NodeId, Connection],
-  nodeStates: TMap[NodeId, NodeState],
-  roundRobinOffset: Ref[Int],
-  transport: Transport.Service[Any],
-  messages: Queue[Take[Error, Message]],
-  eventsQueue: Queue[MembershipEvent]
+             val local: NodeAddress,
+             localId: NodeId,
+             nodeChannels: TMap[NodeId, Connection],
+             nodeStates: TMap[NodeId, NodeState],
+             roundRobinOffset: Ref[Int],
+             transport: Transport.Service[Any],
+             messages: Queue[Take[Error, Message1]],
+             eventsQueue: Queue[MembershipEvent]
 ) {
 
   /**
@@ -46,7 +46,7 @@ class Nodes(
       _            <- connection.send(l)
       firstMessage <- connection.read
       nodeId       <- ByteCodec[NodeId].fromChunk(firstMessage)
-      messageCodec = ByteCodec[Message]
+      messageCodec = ByteCodec[Message1]
       _            <- (nodeChannels.put(nodeId, connection) *> nodeStates.put(nodeId, NodeState.Init)).commit
       fork <- ZStream
                .repeatEffect(connection.read.flatMap(messageCodec.fromChunk).map(_.copy(nodeId = nodeId)))
@@ -162,8 +162,8 @@ class Nodes(
   /**
    * Sends message to target.
    */
-  final def send(msg: Message): IO[Error, Unit] =
-    ByteCodec[Message]
+  final def send(msg: Message1): IO[Error, Unit] =
+    ByteCodec[Message1]
       .toChunk(msg)
       .flatMap(
         chunk =>
@@ -187,7 +187,7 @@ object Nodes {
   def make(
     local: NodeAddress,
     localId: NodeId,
-    messages: Queue[Take[Error, Message]]
+    messages: Queue[Take[Error, Message1]]
   ): ZIO[Transport, Nothing, Nodes] =
     for {
       nodeChannels     <- TMap.empty[NodeId, Connection].commit

@@ -5,17 +5,17 @@ import zio.clock.Clock
 import zio.duration._
 import zio.keeper._
 import zio.keeper.discovery.Discovery
-import zio.keeper.membership.swim.protocols.{DeadLetter, FailureDetection, Initial, Suspicion, User}
-import zio.keeper.membership.{Membership, MembershipEvent, NodeAddress}
+import zio.keeper.membership.swim.protocols._
+import zio.keeper.membership.{ Membership, MembershipEvent, NodeAddress }
 import zio.keeper.transport.Transport
 import zio.logging.Logging
 import zio.logging.slf4j._
 import zio.stream.ZStream.Pull
-import zio.stream.{Take, ZStream}
+import zio.stream.{ Take, ZStream }
 
 object SWIM {
 
-  private def recoverErrors[R, E, A](stream: ZStream[R, E, A]): ZStream[R with Logging[String], E, Option[A]] =
+  private def recoverErrors[R, E, A](stream: ZStream[R, E, A]): ZStream[R with Logging[String], E, A] =
     ZStream
       .managed(stream.process)
       .map(
@@ -27,7 +27,10 @@ object SWIM {
             case None => Pull.end
           }
       )
-      .flatMap(ZStream.fromPull)
+      .flatMap(ZStream.fromPull(_))
+      .collect[A] {
+        case Some(a) => a
+      }
 
   def run[B: TaggedCodec](
     port: Int
@@ -36,7 +39,7 @@ object SWIM {
       _   <- logger.info("starting SWIM on port: " + port).toManaged_
       env <- ZManaged.environment[Transport with Discovery]
       messages <- Queue
-                   .bounded[Take[Error, Message]](1000)
+                   .bounded[Take[Error, Message1]](1000)
                    .toManaged(_.shutdown)
       userIn <- Queue
                  .bounded[(NodeId, B)](1000)
@@ -61,10 +64,10 @@ object SWIM {
                            .map(_.binary)
                            .toManaged_
       suspicion <- Suspicion
-        .protocol(nodes0)
-        .flatMap(_.debug)
-        .map(_.binary)
-        .toManaged_
+                    .protocol(nodes0)
+                    .flatMap(_.debug)
+                    .map(_.binary)
+                    .toManaged_
 
       user <- User
                .protocol[B](userIn, userOut)
@@ -82,22 +85,20 @@ object SWIM {
               case Take.Value(msg) =>
                 swim
                   .onMessage(msg.nodeId, msg.payload)
-                  .map(_.map(reply => msg.copy(nodeId = reply._1, payload = reply._2)))
             }
             .merge(
               recoverErrors(
                 swim.produceMessages
-                  .map(Message(_))
               )
             )
-            .collect {
-              case Some(msg) => msg
+            .mapM {
+              case direct: Message.Direct[Chunk[Byte]] =>
+                nodes0
+                  .send(Message1(direct))
+                  .catchAll(e => logger.error("error during send: " + e))
+              case Message.Empty =>
+               ZIO.unit
             }
-            .mapM(
-              nodes0
-                .send(_)
-                .catchAll(e => logger.error("error during send: " + e))
-            )
             .runDrain
             .toManaged_
             .fork
