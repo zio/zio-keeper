@@ -15,7 +15,7 @@ import zio.stream.{ Take, ZStream }
 
 object SWIM {
 
-  private def recoverErrors[R, E, A](stream: ZStream[R, E, A]): ZStream[R with Logging[String], E, A] =
+  private def recoverErrors[R, E, A](stream: ZStream[R, E, A]): ZStream[R with Logging[String], E, Option[A]] =
     ZStream
       .managed(stream.process)
       .map(
@@ -27,10 +27,8 @@ object SWIM {
             case None => Pull.end
           }
       )
-      .flatMap(ZStream.fromPull(_))
-      .collect[A] {
-        case Some(a) => a
-      }
+      .flatMap(ZStream.fromPull)
+
 
   def run[B: TaggedCodec](
     port: Int
@@ -39,13 +37,13 @@ object SWIM {
       _   <- logger.info("starting SWIM on port: " + port).toManaged_
       env <- ZManaged.environment[Transport with Discovery]
       messages <- Queue
-                   .bounded[Take[Error, Message1]](1000)
+                   .bounded[Take[Error, Message.Direct[Chunk[Byte]]]](1000)
                    .toManaged(_.shutdown)
       userIn <- Queue
-                 .bounded[(NodeId, B)](1000)
+                 .bounded[Message.Direct[B]](1000)
                  .toManaged(_.shutdown)
       userOut <- Queue
-                  .bounded[(NodeId, B)](1000)
+                  .bounded[Message.Direct[B]](1000)
                   .toManaged(_.shutdown)
       localNodeAddress <- NodeAddress.local(port).toManaged_
       localNodeId      = NodeId.generate
@@ -84,20 +82,20 @@ object SWIM {
             .collectM {
               case Take.Value(msg) =>
                 swim
-                  .onMessage(msg.nodeId, msg.payload)
+                  .onMessage(msg)
             }
             .merge(
               recoverErrors(
                 swim.produceMessages
               )
             )
-            .mapM {
-              case direct: Message.Direct[Chunk[Byte]] =>
+            .collectM {
+              case Some(msg: Message.Broadcast[Chunk[Byte]]) =>
+                ???
+              case Some(msg: Message.Direct[Chunk[Byte]]) =>
                 nodes0
-                  .send(Message1(direct))
+                  .send(msg)
                   .catchAll(e => logger.error("error during send: " + e))
-              case Message.Empty =>
-               ZIO.unit
             }
             .runDrain
             .toManaged_
@@ -127,10 +125,12 @@ object SWIM {
             nodes0.onlyHealthyNodes.map(_.map(_._1))
 
           override def receive: ZStream[Any, Error, (NodeId, B)] =
-            ZStream.fromQueue(userIn)
+            ZStream.fromQueue(userIn).collect{
+              case Message.Direct(n, m) => (n, m)
+            }
 
           override def send(data: B, receipt: NodeId): ZIO[Any, Error, Unit] =
-            userOut.offer((receipt, data)).unit
+            userOut.offer(Message.Direct(receipt, data)).unit
         }
     }
 }

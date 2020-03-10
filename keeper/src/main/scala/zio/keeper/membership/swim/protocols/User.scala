@@ -2,7 +2,7 @@ package zio.keeper.membership.swim.protocols
 
 import upickle.default.{readBinary, writeBinary}
 import zio.keeper.SerializationError._
-import zio.keeper.membership.swim.{NodeId, Protocol, Message}
+import zio.keeper.membership.swim.{Message, Protocol}
 import zio.keeper.{ByteCodec, TaggedCodec}
 import zio.stream.ZStream
 import zio.{Chunk, IO, ZIO}
@@ -50,15 +50,15 @@ object User {
     }
 
   def protocol[B: TaggedCodec](
-    userIn: zio.Queue[(NodeId, B)],
-    userOut: zio.Queue[(NodeId, B)]
+    userIn: zio.Queue[Message.Direct[B]],
+    userOut: zio.Queue[Message.Direct[B]]
   ) =
-    Protocol[NodeId, User[B]].apply(
-      (s, u: User[B]) => userIn.offer((s, u.msg)).as(Message.Empty),
+    Protocol[User[B]](
+      msg => userIn.offer(Message.Direct(msg.nodeId, msg.message.msg)).as(None),
       ZStream
         .fromQueue(userOut)
         .map {
-          case (recipient, msg) => Message.Direct(recipient, User(msg))
+          _.transform(User(_))
         }
     )
 

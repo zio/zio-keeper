@@ -3,7 +3,7 @@ package zio.keeper.membership.swim.protocols
 import upickle.default._
 import zio.duration._
 import zio.keeper.membership.swim.Nodes.NodeState
-import zio.keeper.membership.swim.{NodeId, Nodes, Protocol, Message}
+import zio.keeper.membership.swim.{Message, NodeId, Nodes, Protocol}
 import zio.keeper.{ByteCodec, TaggedCodec}
 import zio.stm.TMap
 import zio.stream.ZStream
@@ -25,7 +25,7 @@ object FailureDetection {
         case _: Ack     => 10
         case _: Ping    => 11
         case _: PingReq => 12
-        case _: Nack => 13
+        case _: Nack    => 13
       }, {
         case 10 => c1.asInstanceOf[ByteCodec[FailureDetection]]
         case 11 => c2.asInstanceOf[ByteCodec[FailureDetection]]
@@ -88,23 +88,24 @@ object FailureDetection {
             _          <- acks.put(ackId, _Ack(nodeAndMsg.nodeId, onBehalf)).commit
           } yield nodeAndMsg
 
-        Protocol[NodeId, FailureDetection](
+        Protocol[FailureDetection](
           {
-            case (_, Ack(ackId)) =>
+            case Message.Direct(_, Ack(ackId)) =>
               ack(ackId).map {
                 case Some(_Ack(_, Some((node, originalAckId)))) =>
-                  Message.Direct(node, Ack(originalAckId))
+                  Some(Message.Direct(node, Ack(originalAckId)))
                 case _ =>
-                  Message.Empty
+                  None
               }
+            case Message.Direct(sender, Ping(ackId)) =>
+              ZIO.succeed(Some(Message.Direct(sender, Ack(ackId))))
 
-            case (sender, Ping(ackId)) =>
-              ZIO.succeed(Message.Direct(sender, Ack(ackId)))
+            case Message.Direct(sender, PingReq(to, originalAck)) =>
+              withAck(Some((sender, originalAck)), ackId =>
+                Message.Direct(to, Ping(ackId))).map(Some(_))
 
-            case (sender, PingReq(to, originalAck)) =>
-              withAck(Some((sender, originalAck)), ackId => Message.Direct(to, Ping(ackId)))
-            case (_, Nack(_)) => ZIO.succeed(Message.Empty)
-
+            case Message.Direct(_, Nack(_)) =>
+              ZIO.succeed(None)
           },
           ZStream
             .repeatEffectWith(
@@ -126,24 +127,30 @@ object FailureDetection {
                     )
                     .collectM {
                       case (ackId, ack0) =>
-                        nodes.next
-                          .zip(nodes.nodeState(ack0.target))
+                        nodes
+                          .nodeState(ack0.target)
                           .flatMap {
-                            case (Some(next), NodeState.Healthy) =>
-                              nodes
-                                .changeNodeState(ack0.target, NodeState.Unreachable)
-                                .as(Message.Direct(next, PingReq(ack0.target, ackId)))
-                            case (Some(_), NodeState.Unreachable) =>
+                            case NodeState.Healthy =>
+                              nodes.next.flatMap {
+                                case Some(next) =>
+                                  nodes
+                                    .changeNodeState(ack0.target, NodeState.Unreachable)
+                                    .as(Some(Message.Direct(next, PingReq(ack0.target, ackId))))
+                                case None =>
+                                  nodes
+                                    .disconnect(ack0.target)
+                                    .as(None)
+                              }
+                            case NodeState.Unreachable =>
                               ack(ackId) *>
                                 nodes
                                   .changeNodeState(ack0.target, NodeState.Suspicion)
-                                  .as(Message.Empty) //this should trigger suspicion mechanism
-                            case (_, _) =>
-                              nodes
-                                .disconnect(ack0.target)
-                                .as(Message.Empty)
+                                  .as(None) //this should trigger suspicion mechanism
+                            case _ => ZIO.succeed(None)
                           }
-                    }
+                    }.collect{
+                    case Some(r) => r
+                  }
                 )
         )
       }

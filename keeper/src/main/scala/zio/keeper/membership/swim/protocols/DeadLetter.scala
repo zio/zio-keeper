@@ -1,19 +1,19 @@
 package zio.keeper.membership.swim.protocols
 
 import zio.Chunk
-import zio.keeper.membership.swim.{NodeId, Protocol, Message}
+import zio.keeper.membership.swim.Protocol
 import zio.logging.slf4j._
 import zio.stream.ZStream
 
 object DeadLetter {
 
   def protocol =
-    Protocol[NodeId, Chunk[Byte]].apply(
+    Protocol[Chunk[Byte]].apply(
       {
-        case (sender, _) =>
+        msg =>
           logger
-            .error("message from: " + sender + " in dead letter")
-            .as(Message.Empty)
+            .error("message [" + msg + "] in dead letter")
+            .as(None)
       },
       ZStream.empty
     )

@@ -6,7 +6,7 @@ import zio.keeper.ClusterError.UnknownNode
 import zio.keeper.discovery.Discovery
 import zio.keeper.membership.NodeAddress
 import zio.keeper.membership.swim.Nodes.NodeState
-import zio.keeper.membership.swim.{NodeId, Nodes, Protocol, Message}
+import zio.keeper.membership.swim.{Message, Nodes, Protocol}
 import zio.keeper.{ByteCodec, TaggedCodec}
 import zio.logging.Logging
 import zio.logging.slf4j._
@@ -55,27 +55,27 @@ object Initial {
   def protocol(nodes: Nodes) =
     ZIO.accessM[Discovery with Logging[String]](
       env =>
-        Protocol[NodeId, Initial](
+        Protocol[Initial](
           {
-            case (sender, Join(addr)) =>
+            case Message.Direct(sender, Join(addr)) =>
               nodes
                 .changeNodeState(sender, NodeState.Healthy)
-                .as(Message.Direct(sender, Accept))
+                .as(Some(Message.Direct(sender, Accept)))
                 .catchSome {
                   //this handle Join messages that was piggybacked
                   case UnknownNode(_) =>
                     addr.socketAddress
                       .flatMap(nodes.connect)
-                      .map(newNodeId => Message.Direct(newNodeId, Join(nodes.local)))
+                      .map(newNodeId => Some(Message.Direct(newNodeId, Join(nodes.local))))
                 }
 
-            case (sender, Accept) =>
+            case Message.Direct(sender, Accept) =>
               nodes
                 .changeNodeState(sender, NodeState.Healthy)
-                .as(Message.Empty)
-            case (sender, Reject(msg)) =>
+                .as(None)
+            case Message.Direct(sender, Reject(msg)) =>
               logger.error("Rejected from cluster: " + msg) *>
-                nodes.disconnect(sender).as(Message.Empty)
+                nodes.disconnect(sender).as(None)
           },
           ZStream
             .fromIterator(

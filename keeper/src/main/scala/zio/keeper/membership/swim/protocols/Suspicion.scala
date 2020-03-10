@@ -2,7 +2,7 @@ package zio.keeper.membership.swim.protocols
 
 import upickle.default.macroRW
 import zio.ZIO
-import zio.keeper.membership.swim.{NodeId, Nodes, Protocol, Message}
+import zio.keeper.membership.swim.{NodeId, Nodes, Protocol}
 import zio.keeper.{ByteCodec, TaggedCodec}
 import zio.stream.ZStream
 
@@ -42,9 +42,9 @@ object Suspicion {
   implicit val codecDead: ByteCodec[Dead] =
     ByteCodec.fromReadWriter(macroRW[Dead])
 
-  def protocol(nodes: Nodes) = Protocol[NodeId, Suspicion](
+  def protocol(nodes: Nodes) = Protocol[Suspicion](
     {
-      case (_, _) => ZIO.succeed(Message.Empty)
+      case _ => ZIO.succeed(None)
     },
     ZStream.empty
   )
