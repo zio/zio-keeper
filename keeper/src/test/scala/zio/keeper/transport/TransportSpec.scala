@@ -72,7 +72,7 @@ object TransportSpec
                 _            <- startPromise.await
                 _            <- connect(addr).use(_.send(payload).retry(Schedule.spaced(10.milliseconds)))
                 result       <- chunk.join
-              } yield assert(result, equalTo(payload)))
+              } yield assert(result)(equalTo(payload)))
           }
         },
         testM("we should be able to close the client connection") {
@@ -87,11 +87,11 @@ object TransportSpec
                      )
           } yield (result match {
             case Right(_) =>
-              assert(false, equalTo(true))
+              assert(false)(equalTo(true))
             case Left(ex: ExceptionWrapper) =>
-              assert(ex.throwable.getMessage, equalTo("Connection reset by peer"))
+              assert(ex.throwable.getMessage)(equalTo("Connection reset by peer"))
             case Left(_) =>
-              assert(false, equalTo(true))
+              assert(false)(equalTo(true))
           }))
 
         },
@@ -106,7 +106,7 @@ object TransportSpec
             _      <- latch.await
             _      <- connect(addr).use(_.send(payload)).retry(Schedule.spaced(10.milliseconds))
             result <- fiber.interrupt
-          } yield assert(result, isInterrupted))
+          } yield assert(result)(isInterrupted))
         }
       )
     })

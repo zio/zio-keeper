@@ -54,7 +54,7 @@ object TransportSpec
                               .fork
                     _      <- trans.send(addr, payload).retry(Schedule.spaced(10.milliseconds))
                     result <- chunk.join
-                  } yield assert(result, isSome(equalTo(payload)))
+                  } yield assert(result)(isSome(equalTo(payload)))
                 }
               }
           }
@@ -76,7 +76,7 @@ object TransportSpec
                             .fork
                   _      <- trans.send(addr, payload).retry(Schedule.spaced(10.milliseconds))
                   result <- latch.await *> fiber.interrupt
-                } yield assert(result, isInterrupted)
+                } yield assert(result)(isInterrupted)
               }
           }
         },
@@ -97,7 +97,7 @@ object TransportSpec
                               .fork
                     _      <- trans.send(addr, payload).retry(Schedule.spaced(10.milliseconds))
                     result <- fiber.join
-                  } yield assert(result, isSome(equalTo(payload)))
+                  } yield assert(result)(isSome(equalTo(payload)))
                 }
               }
           }

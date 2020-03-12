@@ -16,10 +16,7 @@ object ByteCodecLaws {
       suite(s"ByteCodecLaws[${typeOf[A].typeSymbol.name.toString}]")(
         testM("codec round trip") {
           checkM(gen) { a =>
-            assertM(
-              codec.toChunk(a).flatMap[Any, Any, A](codec.fromChunk).run,
-              succeeds(equalTo(a))
-            )
+            assertM(codec.toChunk(a).flatMap[Any, Any, A](codec.fromChunk).run)(succeeds(equalTo(a)))
           }
         }
       )

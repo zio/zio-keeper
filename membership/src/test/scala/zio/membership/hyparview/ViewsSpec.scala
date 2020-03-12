@@ -32,7 +32,7 @@ object ViewsSpec
                   } yield ()
                 }
               }
-              assertM(result.run, fails(equalTo(())))
+              assertM(result.run)(fails(equalTo(())))
           }
         },
         testM("adding more than the maximum number of nodes to the active view fails with ()") {
@@ -52,7 +52,7 @@ object ViewsSpec
                   } yield ()
                 }
               }
-              assertM(result.run, fails(equalTo(())))
+              assertM(result.run)(fails(equalTo(())))
           }
         },
         testM("adding the same node twice to the passive view is a noop") {
@@ -65,7 +65,7 @@ object ViewsSpec
                     size1 <- views.passiveViewSize
                     _     <- views.addToPassiveView(x)
                     size2 <- views.passiveViewSize
-                  } yield assert(size1, equalTo(1)) && assert(size2, equalTo(1))
+                  } yield assert(size1)(equalTo(1)) && assert(size2)(equalTo(1))
                 }
               }
           }
@@ -86,7 +86,7 @@ object ViewsSpec
                     size1 <- views.passiveViewSize
                     _     <- views.addToPassiveView(x3)
                     size2 <- views.passiveViewSize
-                  } yield assert(size1, equalTo(2)) && assert(size2, equalTo(2))
+                  } yield assert(size1)(equalTo(2)) && assert(size2)(equalTo(2))
                 }
               }
           }
@@ -105,7 +105,7 @@ object ViewsSpec
                           )
                           .commit
                     _      <- views.send(x, ActiveProtocol.Disconnect(1, false)).ignore
-                    result <- assertM(ref.get, equalTo(1))
+                    result <- assertM(ref.get)(equalTo(1))
                   } yield result
                 }
               }
@@ -125,7 +125,7 @@ object ViewsSpec
                     _      <- views.addToPassiveView(x1)
                     _      <- views.addShuffledNodes(Set.empty, Set(x2, x3))
                     result <- views.passiveView
-                  } yield assert(result, equalTo(Set(x2, x3)))
+                  } yield assert(result)(equalTo(Set(x2, x3)))
                 }
               }
           }
@@ -144,7 +144,7 @@ object ViewsSpec
                   for {
                     _      <- views.addShuffledNodes(Set(x1, x2), Set(x3, x4))
                     result <- views.passiveView
-                  } yield assert(result, contains(x3) && contains(x4) && hasSize(equalTo(3)))
+                  } yield assert(result)(contains(x3) && contains(x4) && hasSize(equalTo(3)))
                 }
               }
           }
