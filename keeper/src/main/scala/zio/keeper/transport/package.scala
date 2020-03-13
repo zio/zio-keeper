@@ -1,15 +1,17 @@
 package zio.keeper
 
 import zio.nio.core.SocketAddress
-import zio.{ ZIO, ZManaged }
+import zio.{ Has, ZIO, ZManaged }
 
-package object transport extends Transport.Service[Transport] {
+package object transport {
 
-  override def bind(
+  type Transport = Has[Transport.Service]
+
+  def bind(
     localAddr: SocketAddress
   )(connectionHandler: ChannelOut => ZIO[Any, Nothing, Unit]): ZManaged[Transport, TransportError, ChannelIn] =
-    ZManaged.environment[Transport].flatMap(_.transport.bind(localAddr)(connectionHandler))
+    ZManaged.environment[Transport].flatMap(_.get.bind(localAddr)(connectionHandler))
 
-  override def connect(to: SocketAddress): ZManaged[Transport, TransportError, ChannelOut] =
-    ZManaged.environment[Transport].flatMap(_.transport.connect(to))
+  def connect(to: SocketAddress): ZManaged[Transport, TransportError, ChannelOut] =
+    ZManaged.environment[Transport].flatMap(_.get.connect(to))
 }
