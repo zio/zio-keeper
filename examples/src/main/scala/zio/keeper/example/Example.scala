@@ -6,8 +6,9 @@ import zio.console._
 import zio.duration._
 import zio.keeper.discovery.Discovery
 import zio.keeper.membership._
+import zio.keeper.transport.Channel.Connection
 import zio.logging.Logging
-import zio.nio.core.{ InetAddress, SocketAddress }
+import zio.nio.core.{InetAddress, SocketAddress}
 import zio.random.Random
 
 object Node1 extends zio.ManagedApp {
@@ -89,7 +90,7 @@ object TcpServer extends zio.App {
                         .inetSocketAddress(localHost, 8010)
                         .orDie
       console <- ZIO.environment[Console]
-      handler = (channel: ChannelOut) => {
+      handler = (channel: Connection) => {
         for {
           data <- channel.read
           _    <- putStrLn(new String(data.toArray))

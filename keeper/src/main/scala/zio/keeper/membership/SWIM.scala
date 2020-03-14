@@ -11,7 +11,8 @@ import zio.keeper.{ Message, _ }
 import zio.keeper.discovery.Discovery
 import zio.keeper.protocol.InternalProtocol
 import zio.keeper.protocol.InternalProtocol._
-import zio.keeper.transport.{ ChannelIn, ChannelOut, Transport }
+import zio.keeper.transport.Channel.{ Bind, Connection }
+import zio.keeper.transport.Transport
 import zio.logging
 import zio.logging.Logging
 import zio.nio.core.{ InetAddress, SocketAddress }
@@ -31,7 +32,7 @@ object SWIM {
         localHost            <- InetAddress.localHost.toManaged_.orDie
         localMember          = Member(NodeId.generateNew, NodeAddress(localHost.address, port))
         _                    <- logging.logInfo(s"Starting node [ ${localMember.nodeId} ]").toManaged_
-        nodes                <- zio.Ref.make(Map.empty[NodeId, ChannelOut]).toManaged_
+        nodes                <- zio.Ref.make(Map.empty[NodeId, Connection]).toManaged_
         seeds                <- discovery.discoverNodes.toManaged_
         _                    <- logging.logInfo("seeds: " + seeds).toManaged_
         userMessagesQueue    <- ZManaged.make(zio.Queue.bounded[Message](1000))(_.shutdown)
@@ -78,16 +79,16 @@ object SWIM {
 }
 
 final private class SWIM(
-  localMember_ : Member,
-  nodeChannels: Ref[Map[NodeId, ChannelOut]],
-  gossipStateRef: Ref[GossipState],
-  userMessageQueue: Queue[Message],
-  clusterMessageQueue: Queue[Message],
-  clusterEventsQueue: Queue[MembershipEvent],
-  subscribeToBroadcast: UIO[Stream[Nothing, Chunk[Byte]]],
-  publishToBroadcast: Chunk[Byte] => UIO[Unit],
-  msgOffset: Ref[Long],
-  acks: TMap[Long, Promise[Error, Unit]]
+                          localMember_ : Member,
+                          nodeChannels: Ref[Map[NodeId, Connection]],
+                          gossipStateRef: Ref[GossipState],
+                          userMessageQueue: Queue[Message],
+                          clusterMessageQueue: Queue[Message],
+                          clusterEventsQueue: Queue[MembershipEvent],
+                          subscribeToBroadcast: UIO[Stream[Nothing, Chunk[Byte]]],
+                          publishToBroadcast: Chunk[Byte] => UIO[Unit],
+                          msgOffset: Ref[Long],
+                          acks: TMap[Long, Promise[Error, Unit]]
 ) extends Membership.Service {
 
   val events: Stream[Error, MembershipEvent] =
@@ -119,7 +120,7 @@ final private class SWIM(
           }
     } yield ()
 
-  private def acceptConnectionRequests: ZManaged[Logging with Transport with Clock, TransportError, ChannelIn] =
+  private def acceptConnectionRequests: ZManaged[Logging with Transport with Clock, TransportError, Bind] =
     for {
       env          <- ZManaged.environment[Logging with Transport with Clock]
       _            <- handleClusterMessages(Stream.fromQueue(clusterMessageQueue)).fork.toManaged_
@@ -153,7 +154,7 @@ final private class SWIM(
       _ <- promOpt.fold(ZIO.unit)(_.succeed(()).unit)
     } yield ()
 
-  private def addMember(member: Member, send: ChannelOut): URIO[Logging, Unit] =
+  private def addMember(member: Member, send: Connection): URIO[Logging, Unit] =
     gossipStateRef.update(_.addMember(member)) *>
       nodeChannels.update(_ + (member.nodeId -> send)) *>
       propagateEvent(MembershipEvent.Join(member)) *>
@@ -161,7 +162,7 @@ final private class SWIM(
 
   private def connect(addr: SocketAddress): ZIO[Logging with Transport with Clock, Error, Unit] =
     for {
-      connectionInit <- Promise.make[Error, (Member, ChannelOut)]
+      connectionInit <- Promise.make[Error, (Member, Connection)]
       _ <- transport
             .connect(addr)
             .use { channel =>
@@ -199,7 +200,7 @@ final private class SWIM(
     } yield ()
 
   private def expects[R, A](
-    channel: ChannelOut
+    channel: Connection
   )(pf: PartialFunction[InternalProtocol, ZIO[R, Error, A]]): ZIO[R, Error, A] =
     for {
       bytes  <- readMessage(channel)
@@ -247,8 +248,8 @@ final private class SWIM(
     }.runDrain
 
   private def listenOnChannel(
-    channel: ChannelOut,
-    partner: Member
+                               channel: Connection,
+                               partner: Member
   ): ZIO[Logging with Transport with Clock, Error, Unit] = {
 
     def handleSends(messages: Stream[Nothing, Chunk[Byte]]): IO[Error, Unit] =
@@ -265,9 +266,9 @@ final private class SWIM(
   }
 
   private def routeMessages(
-    channel: ChannelOut,
-    clusterMessageQueue: Queue[Message],
-    userMessageQueue: Queue[Message]
+                             channel: Connection,
+                             clusterMessageQueue: Queue[Message],
+                             userMessageQueue: Queue[Message]
   ): URIO[Logging, Unit] = {
     val loop = readMessage(channel)
       .flatMap {
@@ -383,9 +384,9 @@ final private class SWIM(
     } yield ()
 
   private def sendInternalMessage(
-    to: ChannelOut,
-    correlationId: UUID,
-    msg: InternalProtocol
+                                   to: Connection,
+                                   correlationId: UUID,
+                                   msg: InternalProtocol
   ): ZIO[Logging, Error, Unit] = {
     for {
       _       <- logging.logInfo(s"sending $msg")

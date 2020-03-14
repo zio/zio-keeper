@@ -1,9 +1,10 @@
 package zio.keeper.transport
 
 import zio._
-import zio.console.{ Console, _ }
+import zio.console.{Console, _}
 import zio.duration._
 import zio.keeper.TransportError.ExceptionWrapper
+import zio.keeper.transport.Channel.Connection
 import zio.logging.Logging
 import zio.nio.core.SocketAddress
 import zio.test.Assertion._
@@ -20,11 +21,11 @@ object TransportSpec extends DefaultRunnableSpec {
   def bindAndWaitForValue(
     addr: SocketAddress,
     startPromise: Promise[Nothing, Unit],
-    handler: ChannelOut => UIO[Unit] = _ => ZIO.unit
+    handler: Connection => UIO[Unit] = _ => ZIO.unit
   ) =
     for {
       q <- Queue.bounded[Chunk[Byte]](10)
-      h = (out: ChannelOut) => {
+      h = (out: Connection) => {
         for {
           _    <- handler(out)
           data <- out.read
