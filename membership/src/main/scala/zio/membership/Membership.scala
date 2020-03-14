@@ -2,6 +2,7 @@ package zio.membership
 
 import zio._
 import zio.stream._
+import zio.keeper.membership.ByteCodec
 
 object Membership {
 

@@ -2,7 +2,7 @@ package zio.membership.hyparview
 
 import upickle.default._
 import zio.Chunk
-import zio.membership.ByteCodec
+import zio.keeper.membership.{ ByteCodec, TaggedCodec }
 
 sealed trait ActiveProtocol[+T]
 

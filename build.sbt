@@ -63,6 +63,7 @@ lazy val keeper = project
 lazy val membership = project
   .in(file("membership"))
   .settings(stdSettings("zio-membership"))
+  .dependsOn(keeper % "compile->compile;test->test")
   .settings(
     libraryDependencies ++= Seq(
       "dev.zio"                %% "zio"                     % ZioVersion,
