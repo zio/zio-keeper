@@ -2,13 +2,13 @@ package zio.membership.hyparview
 
 import zio._
 import zio.stm._
-import zio.membership.{ SendError, log }
+import zio.membership.SendError
 import zio.logging.Logging
 
 object periodic {
 
-  def doShuffle[T]: ZIO[Views[T] with Logging[String] with HyParViewConfig with TRandom, Nothing, ViewState] =
-    Views.using[T] { views =>
+  def doShuffle[T: Tagged]: ZIO[Views[T] with Logging with HyParViewConfig with TRandom, Nothing, ViewState] =
+    Views.using[T].apply { views =>
       TRandom.using { tRandom =>
         getConfig.flatMap { config =>
           val go: IO[SendError, ViewState] =
@@ -38,18 +38,18 @@ object periodic {
       }
     }
 
-  def doReport[T]: ZIO[Views[T] with Logging[String], Nothing, Unit] =
+  def doReport[T: Tagged]: ZIO[Views[T] with Logging, Nothing, Unit] =
     Views
-      .using[T] { views =>
+      .using[T]
+      .apply { views =>
         STM.atomically {
           for {
             active  <- views.activeViewSize
             passive <- views.passiveViewSize
-          } yield log.info(
+          } yield logging.logInfo(
             s"HyParView: { addr: ${views.myself}, activeView: $active/${views.activeViewCapacity}, passiveView: $passive/${views.passiveViewCapacity} }"
           )
         }
       }
       .flatten
-
 }

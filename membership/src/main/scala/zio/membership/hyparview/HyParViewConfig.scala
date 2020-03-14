@@ -1,11 +1,6 @@
 package zio.membership.hyparview
 
 import zio._
-import zio.macros.delegate._
-
-trait HyParViewConfig {
-  val hyParViewConfig: HyParViewConfig.Service[Any]
-}
 
 object HyParViewConfig {
 
@@ -34,7 +29,7 @@ object HyParViewConfig {
                          |concurrentIncomingConnections: $concurrentIncomingConnections""".stripMargin
   }
 
-  def withStaticConfig(
+  def staticConfig(
     activeViewCapacity: Int,
     passiveViewCapacity: Int,
     arwl: Int,
@@ -45,33 +40,28 @@ object HyParViewConfig {
     connectionBuffer: Int,
     userMessagesBuffer: Int,
     concurrentIncomingConnections: Int
-  ) =
-    enrichWith[HyParViewConfig](
-      HyParViewConfig(
-        Config(
-          activeViewCapacity,
-          passiveViewCapacity,
-          arwl,
-          prwl,
-          shuffleNActive,
-          shuffleNPassive,
-          shuffleTTL,
-          connectionBuffer,
-          userMessagesBuffer,
-          concurrentIncomingConnections
-        )
-      )
-    )
-
-  def apply(config: Config): HyParViewConfig =
-    new HyParViewConfig {
-
-      val hyParViewConfig = new Service[Any] {
-        val getConfig = ZIO.succeed(config)
+  ): Layer[Nothing, HyParViewConfig] =
+    ZLayer.succeed {
+      new Service {
+        val getConfig: UIO[Config] =
+          UIO.succeed {
+            Config(
+              activeViewCapacity,
+              passiveViewCapacity,
+              arwl,
+              prwl,
+              shuffleNActive,
+              shuffleNPassive,
+              shuffleTTL,
+              connectionBuffer,
+              userMessagesBuffer,
+              concurrentIncomingConnections
+            )
+          }
       }
     }
 
-  trait Service[-R] {
-    val getConfig: URIO[R, Config]
+  trait Service {
+    val getConfig: UIO[Config]
   }
 }
