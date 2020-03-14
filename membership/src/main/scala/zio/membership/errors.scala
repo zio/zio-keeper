@@ -9,7 +9,6 @@ sealed abstract class SendError(msg: String = "", cause: Throwable = null)      
 final case class SerializationError(msg: String = "", cause: Throwable = null)   extends Error(msg, cause)
 final case class DeserializationError(msg: String = "", cause: Throwable = null) extends Error(msg, cause)
 
-
 final case class ResolutionFailed(address: Address, cause: Throwable)
     extends Error(s"Resolution failed for $address", cause)
 
@@ -29,5 +28,5 @@ object SendError {
   case object NotConnected extends SendError
 
   final case class SerializationFailed(err: zio.keeper.SerializationError) extends SendError(msg = err.msg)
-  final case class TransportFailed(err: zio.membership.TransportError)         extends SendError(cause = err)
+  final case class TransportFailed(err: zio.membership.TransportError)     extends SendError(cause = err)
 }

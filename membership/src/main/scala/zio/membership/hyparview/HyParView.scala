@@ -2,7 +2,7 @@ package zio.membership.hyparview
 
 import zio._
 import zio.membership.transport.Transport
-import zio.keeper.membership.{ByteCodec, TaggedCodec}
+import zio.keeper.membership.{ ByteCodec, TaggedCodec }
 import zio.membership.{ Error, Membership, SendError, TransportError }
 import zio.duration._
 import zio.clock.Clock
@@ -101,7 +101,10 @@ object HyParView {
         override def broadcast[A: ByteCodec](payload: A) = ???
 
         override def receive[A: ByteCodec] =
-          ZStream.fromQueue(userMessages).unTake.mapM(ByteCodec[A].fromChunk(_).mapError(e => zio.membership.DeserializationError(e.msg)))
+          ZStream
+            .fromQueue(userMessages)
+            .unTake
+            .mapM(ByteCodec[A].fromChunk(_).mapError(e => zio.membership.DeserializationError(e.msg)))
       }
     }
 }
