@@ -1,10 +1,9 @@
 package zio.keeper.membership
 
-import zio.keeper.membership.GossipState.StateDiff
-
 import scala.collection.immutable.SortedSet
 
 case class GossipState(members: SortedSet[Member]) extends AnyVal {
+  import zio.keeper.membership.GossipState.StateDiff
 
   def addMember(member: Member) =
     copy(members = this.members + member)
@@ -28,5 +27,4 @@ object GossipState {
   val Empty = GossipState(SortedSet())
 
   final case class StateDiff(local: SortedSet[Member], remote: SortedSet[Member])
-
 }

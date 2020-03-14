@@ -2,16 +2,11 @@ package zio.membership.hyparview
 
 import zio._
 import zio.stm._
-import zio.macros.delegate._
 import zio.membership.SendError
 
-private[hyparview] trait Views[T] {
-  val views: Views.Service[Any, T]
-}
+private object Views {
 
-private[hyparview] object Views {
-
-  private[hyparview] trait Service[-R, T] {
+  private[hyparview] trait Service[T] {
     def myself: T
     def activeViewCapacity: Int
     def passiveViewCapacity: Int
@@ -19,10 +14,10 @@ private[hyparview] object Views {
     def activeView: STM[Nothing, Set[T]]
     def passiveView: STM[Nothing, Set[T]]
 
-    def activeViewSize: STM[Nothing, Int] =
+    final def activeViewSize: STM[Nothing, Int] =
       activeView.map(_.size)
 
-    def passiveViewSize: STM[Nothing, Int] =
+    final def passiveViewSize: STM[Nothing, Int] =
       passiveView.map(_.size)
 
     def isActiveViewFull: STM[Nothing, Boolean]
@@ -48,153 +43,164 @@ private[hyparview] object Views {
       replied: Set[T]
     ): STM[Nothing, Unit]
 
-    def viewState: STM[Nothing, ViewState] =
+    final def viewState: STM[Nothing, ViewState] =
       for {
         activeViewSize  <- activeViewSize
         passiveViewSize <- passiveViewSize
       } yield ViewState(activeViewSize, activeViewCapacity, passiveViewSize, passiveViewCapacity)
   }
 
-  final class Using[T] {
+  final class Using[T: Tagged] {
 
-    def apply[R <: Views[T], E, A](f: Service[Any, T] => ZIO[R, E, A]): ZIO[R, E, A] =
-      ZIO.environment[Views[T]].flatMap(r => f(r.views))
+    def apply[R <: Views[T], E, A](f: Service[T] => ZIO[R, E, A]): ZIO[R, E, A] =
+      ZIO.environment[Views[T]].flatMap(r => f(r.get))
   }
 
-  final class UsingManaged[T] {
+  final class UsingManaged[T: Tagged] {
 
-    def apply[R <: Views[T], E, A](f: Service[Any, T] => ZManaged[R, E, A]): ZManaged[R, E, A] =
-      ZManaged.environment[Views[T]].flatMap(r => f(r.views))
+    def apply[R <: Views[T], E, A](
+      f: Service[T] => ZManaged[R, E, A]
+    ): ZManaged[R, E, A] =
+      ZManaged.environment[Views[T]].flatMap(r => f(r.get))
   }
 
-  def using[T]: Using[T]               = new Using[T]
-  def usingManaged[T]: UsingManaged[T] = new UsingManaged[T]
+  def using[T: Tagged]: Using[T]               = new Using[T]
+  def usingManaged[T: Tagged]: UsingManaged[T] = new UsingManaged[T]
 
-  def withViews[T](
+  def fromConfig[T: Tagged](
+    localAddr: T
+  ): ZLayer[HyParViewConfig with TRandom, Nothing, Views[T]] =
+    ZLayer.fromEffect {
+      for {
+        hpvc    <- URIO.environment[HyParViewConfig]
+        conf    <- hpvc.get.getConfig
+        service <- makeViews(localAddr, conf.activeViewCapacity, conf.passiveViewCapacity)
+      } yield service
+    }
+
+  def live[T: Tagged](
     myself: T,
     activeViewCapacity: Int,
     passiveViewCapacity: Int
-  ) = enrichWithM[Views[T]](make(myself, activeViewCapacity, passiveViewCapacity))
+  ): ZLayer[TRandom, Nothing, Views[T]] =
+    ZLayer.fromEffect(makeViews(myself, activeViewCapacity, passiveViewCapacity))
 
-  def make[T](
+  private def makeViews[T](
     myself0: T,
     activeViewCapacity0: Int,
     passiveViewCapacity0: Int
-  ): ZIO[TRandom, Nothing, Views[T]] = {
+  ): URIO[TRandom, Service[T]] =
     for {
-      tRandom      <- ZIO.environment[TRandom].map(_.tRandom)
       activeView0  <- TMap.empty[T, (ActiveProtocol[T] => IO[SendError, Unit], UIO[Unit])].commit
       passiveView0 <- TSet.empty[T].commit
-    } yield new Views[T] {
-      val views = new Service[Any, T] {
+      tRandom      <- URIO.environment[TRandom]
+    } yield new Service[T] {
 
-        override val myself =
-          myself0
+      val myself: T =
+        myself0
 
-        override val activeViewCapacity =
-          activeViewCapacity0
+      val activeViewCapacity: Int =
+        activeViewCapacity0
 
-        override val passiveViewCapacity =
-          passiveViewCapacity0
+      val passiveViewCapacity: Int =
+        passiveViewCapacity0
 
-        override val activeView =
-          activeView0.keys.map(_.toSet)
+      val activeView: STM[Nothing, Set[T]] =
+        activeView0.keys.map(_.toSet)
 
-        override val passiveView =
-          passiveView0.toList.map(_.toSet)
+      val passiveView: STM[Nothing, Set[T]] =
+        passiveView0.toList.map(_.toSet)
 
-        override val isActiveViewFull =
-          activeViewSize.map(_ >= activeViewCapacity)
+      val isActiveViewFull: STM[Nothing, Boolean] =
+        activeViewSize.map(_ >= activeViewCapacity)
 
-        override val isPassiveViewFull =
-          passiveViewSize.map(_ >= passiveViewCapacity)
+      val isPassiveViewFull: STM[Nothing, Boolean] =
+        passiveViewSize.map(_ >= passiveViewCapacity)
 
-        override def send(to: T, msg: ActiveProtocol[T]) =
-          activeView0
-            .get(to)
-            .commit
-            .get
-            .foldM(
-              _ => ZIO.fail(SendError.NotConnected),
-              n =>
-                n._1(msg)
-                  .foldM(
-                    {
-                      case e: SendError.TransportFailed => n._2 *> ZIO.fail(e)
-                      case e                            => ZIO.fail(e)
-                    },
-                    _ => IO.unit
-                  )
-            )
+      def send(to: T, msg: ActiveProtocol[T]): IO[SendError, Unit] =
+        activeView0
+          .get(to)
+          .commit
+          .get
+          .foldM(
+            _ => IO.fail(SendError.NotConnected),
+            n =>
+              n._1(msg)
+                .foldM(
+                  {
+                    case e: SendError.TransportFailed => n._2 *> IO.fail(e)
+                    case e                            => IO.fail(e)
+                  },
+                  _ => IO.unit
+                )
+          )
 
-        override def addToActiveView(
-          node: T,
-          send: ActiveProtocol[T] => IO[SendError, Unit],
-          disconnect: UIO[Unit]
-        ) =
-          if (node == myself) STM.unit
-          else {
-            val abort = for {
-              inActive   <- activeView0.contains(node)
-              activeFull <- isActiveViewFull
-            } yield inActive || activeFull
-            abort.flatMap {
-              case false =>
+      def addToActiveView(
+        node: T,
+        send: ActiveProtocol[T] => IO[SendError, Unit],
+        disconnect: UIO[Unit]
+      ): STM[Unit, Unit] =
+        if (node == myself) STM.unit
+        else {
+          val abort = for {
+            inActive   <- activeView0.contains(node)
+            activeFull <- isActiveViewFull
+          } yield inActive || activeFull
+          abort.flatMap {
+            case false =>
+              for {
+                _ <- activeView0.put(node, (send, disconnect))
+                _ <- passiveView0.delete(node)
+              } yield ()
+            case true =>
+              STM.fail(())
+          }
+        }
+
+      def removeFromActiveView(node: T): STM[Nothing, Unit] =
+        activeView0.delete(node)
+
+      def addToPassiveView(node: T): STM[Nothing, Unit] =
+        for {
+          inActive  <- activeView0.contains(node)
+          inPassive <- passiveView0.contains(node)
+          _ <- if (node == myself || inActive || inPassive) STM.unit
+              else {
                 for {
-                  _ <- activeView0.put(node, (send, disconnect))
-                  _ <- passiveView0.delete(node)
+                  size <- passiveViewSize
+                  _    <- if (size < passiveViewCapacity) STM.unit else dropOneFromPassive
+                  _    <- passiveView0.put(node)
                 } yield ()
-              case true =>
-                STM.fail(())
-            }
-          }
+              }
+        } yield ()
 
-        override def removeFromActiveView(node: T): STM[Nothing, Unit] =
-          activeView0.delete(node)
+      def addAllToPassiveView(remaining: List[T]): STM[Nothing, Unit] =
+        remaining match {
+          case Nil     => STM.unit
+          case x :: xs => addToPassiveView(x) *> addAllToPassiveView(xs)
+        }
 
-        override def addToPassiveView(node: T): STM[Nothing, Unit] =
-          for {
-            inActive  <- activeView0.contains(node)
-            inPassive <- passiveView0.contains(node)
-            _ <- if (node == myself || inActive || inPassive) STM.unit
-                else {
-                  for {
-                    size <- passiveViewSize
-                    _    <- if (size < passiveViewCapacity) STM.unit else dropOneFromPassive
-                    _    <- passiveView0.put(node)
-                  } yield ()
-                }
-          } yield ()
+      def removeFromPassiveView(node: T): STM[Nothing, Unit] =
+        passiveView0.delete(node)
 
-        override def addAllToPassiveView(remaining: List[T]): STM[Nothing, Unit] =
-          remaining match {
-            case Nil     => STM.unit
-            case x :: xs => addToPassiveView(x) *> addAllToPassiveView(xs)
-          }
+      def addShuffledNodes(sentOriginally: Set[T], replied: Set[T]): STM[Nothing, Unit] =
+        for {
+          _         <- passiveView0.removeIf(sentOriginally.contains)
+          size      <- passiveViewSize
+          _         <- dropNFromPassive(replied.size - (passiveViewCapacity - size))
+          _         <- addAllToPassiveView(replied.toList)
+          remaining <- passiveViewSize.map(passiveViewCapacity - _)
+          _         <- addAllToPassiveView(sentOriginally.take(remaining).toList)
+        } yield ()
 
-        override def removeFromPassiveView(node: T) =
-          passiveView0.delete(node)
+      private def dropNFromPassive(n: Int): STM[Nothing, Unit] =
+        if (n <= 0) STM.unit else (dropOneFromPassive *> dropNFromPassive(n - 1))
 
-        override def addShuffledNodes(sentOriginally: Set[T], replied: Set[T]) =
-          for {
-            _         <- passiveView0.removeIf(sentOriginally.contains)
-            size      <- passiveViewSize
-            _         <- dropNFromPassive(replied.size - (passiveViewCapacity - size))
-            _         <- addAllToPassiveView(replied.toList)
-            remaining <- passiveViewSize.map(passiveViewCapacity - _)
-            _         <- addAllToPassiveView(sentOriginally.take(remaining).toList)
-          } yield ()
-
-        private def dropNFromPassive(n: Int): STM[Nothing, Unit] =
-          if (n <= 0) STM.unit else dropOneFromPassive *> dropNFromPassive(n - 1)
-
-        private val dropOneFromPassive =
-          for {
-            list    <- passiveView0.toList
-            dropped <- tRandom.selectOne(list)
-            _       <- STM.foreach(dropped)(passiveView0.delete(_))
-          } yield ()
-      }
+      private val dropOneFromPassive: STM[Nothing, Unit] =
+        for {
+          list    <- passiveView0.toList
+          dropped <- tRandom.get.selectOne(list)
+          _       <- STM.foreach(dropped)(passiveView0.delete(_))
+        } yield ()
     }
-  }
 }
