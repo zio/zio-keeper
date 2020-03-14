@@ -9,20 +9,20 @@ import zio.{ Chunk, IO, ZIO }
 
 sealed trait InternalProtocol {
 
-  final val serialize: IO[SerializationTypeError[InternalProtocol], Chunk[Byte]] =
+  final val serialize: IO[SerializationTypeError, Chunk[Byte]] =
     ZIO
       .effect(Chunk.fromArray(writeBinary(this)))
-      .mapError(ex => SerializationTypeError[InternalProtocol](ex))
+      .mapError(ex => SerializationTypeError(ex))
 }
 
 object InternalProtocol {
 
-  def deserialize(bytes: Chunk[Byte]): IO[DeserializationTypeError[InternalProtocol], InternalProtocol] =
+  def deserialize(bytes: Chunk[Byte]): IO[DeserializationTypeError, InternalProtocol] =
     ZIO
       .effect(
         readBinary[InternalProtocol](bytes.toArray)
       )
-      .mapError(ex => DeserializationTypeError[InternalProtocol](ex))
+      .mapError(ex => DeserializationTypeError(ex))
 
   final case class Ack(conversation: Long, state: GossipState) extends InternalProtocol
 
