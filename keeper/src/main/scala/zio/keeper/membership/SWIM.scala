@@ -79,16 +79,16 @@ object SWIM {
 }
 
 final private class SWIM(
-                          localMember_ : Member,
-                          nodeChannels: Ref[Map[NodeId, Connection]],
-                          gossipStateRef: Ref[GossipState],
-                          userMessageQueue: Queue[Message],
-                          clusterMessageQueue: Queue[Message],
-                          clusterEventsQueue: Queue[MembershipEvent],
-                          subscribeToBroadcast: UIO[Stream[Nothing, Chunk[Byte]]],
-                          publishToBroadcast: Chunk[Byte] => UIO[Unit],
-                          msgOffset: Ref[Long],
-                          acks: TMap[Long, Promise[Error, Unit]]
+  localMember_ : Member,
+  nodeChannels: Ref[Map[NodeId, Connection]],
+  gossipStateRef: Ref[GossipState],
+  userMessageQueue: Queue[Message],
+  clusterMessageQueue: Queue[Message],
+  clusterEventsQueue: Queue[MembershipEvent],
+  subscribeToBroadcast: UIO[Stream[Nothing, Chunk[Byte]]],
+  publishToBroadcast: Chunk[Byte] => UIO[Unit],
+  msgOffset: Ref[Long],
+  acks: TMap[Long, Promise[Error, Unit]]
 ) extends Membership.Service {
 
   val events: Stream[Error, MembershipEvent] =
@@ -248,8 +248,8 @@ final private class SWIM(
     }.runDrain
 
   private def listenOnChannel(
-                               channel: Connection,
-                               partner: Member
+    channel: Connection,
+    partner: Member
   ): ZIO[Logging with Transport with Clock, Error, Unit] = {
 
     def handleSends(messages: Stream[Nothing, Chunk[Byte]]): IO[Error, Unit] =
@@ -266,9 +266,9 @@ final private class SWIM(
   }
 
   private def routeMessages(
-                             channel: Connection,
-                             clusterMessageQueue: Queue[Message],
-                             userMessageQueue: Queue[Message]
+    channel: Connection,
+    clusterMessageQueue: Queue[Message],
+    userMessageQueue: Queue[Message]
   ): URIO[Logging, Unit] = {
     val loop = readMessage(channel)
       .flatMap {
@@ -384,9 +384,9 @@ final private class SWIM(
     } yield ()
 
   private def sendInternalMessage(
-                                   to: Connection,
-                                   correlationId: UUID,
-                                   msg: InternalProtocol
+    to: Connection,
+    correlationId: UUID,
+    msg: InternalProtocol
   ): ZIO[Logging, Error, Unit] = {
     for {
       _       <- logging.logInfo(s"sending $msg")

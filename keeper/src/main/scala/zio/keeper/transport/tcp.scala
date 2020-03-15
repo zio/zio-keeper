@@ -12,6 +12,12 @@ import zio.nio.core.SocketAddress
 
 object tcp {
 
+  /**
+   * Creates layer with tcp transport.
+   * @param connectionTimeout connection timeout
+   * @param requestTimeout request timeout
+   * @return layer with tcp transport.
+   */
   def live(
     connectionTimeout: Duration,
     requestTimeout: Duration
@@ -77,8 +83,8 @@ object tcp {
     requestTimeout: Duration,
     close: IO[TransportError, Unit]
   ): URIO[Clock, Connection] =
-    ZIO.access[Clock] { env =>
-      new Connection(
+    ZIO.accessM[Clock] { env =>
+      Connection.withLock(
         socketChannel
           .read(_)
           .mapError(ExceptionWrapper),

@@ -8,7 +8,7 @@ import zio.keeper.discovery.Discovery
 import zio.keeper.membership._
 import zio.keeper.transport.Channel.Connection
 import zio.logging.Logging
-import zio.nio.core.{InetAddress, SocketAddress}
+import zio.nio.core.{ InetAddress, SocketAddress }
 import zio.random.Random
 
 object Node1 extends zio.ManagedApp {
