@@ -1,4 +1,4 @@
-package zio.membership
+package zio.keeper.membership
 
 import zio.test._
 import zio.test.Assertion._

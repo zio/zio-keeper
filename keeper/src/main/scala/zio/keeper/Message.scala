@@ -32,7 +32,7 @@ object Message {
           id                     = new UUID(idMostSignificant, idLeastSignificant)
           sender                 = NodeId(new UUID(senderMostSignificant, senderLeastSignificant))
         } yield (messageType, Message(id, sender, payloadByte)))
-          .mapError(e => DeserializationTypeError[Message](e))
+          .mapError(e => DeserializationTypeError(e))
     )
 
   private[keeper] def serializeMessage(
@@ -52,5 +52,5 @@ object Message {
       _          <- byteBuffer.flip
       bytes      <- byteBuffer.getChunk()
     } yield bytes
-  }.mapError(ex => SerializationTypeError[Message](ex))
+  }.mapError(ex => SerializationTypeError(ex))
 }

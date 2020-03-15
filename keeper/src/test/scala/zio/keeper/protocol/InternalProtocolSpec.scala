@@ -74,7 +74,7 @@ object InternalProtocolSpec extends DefaultRunnableSpec {
     testM("Malformed bytes") {
       assertM(InternalProtocol.deserialize(Chunk.single(Byte.MaxValue)).either)(
         isLeft(
-          equalTo(DeserializationTypeError[InternalProtocol](upickle.core.Abort("expected dictionary got int32")))
+          equalTo(DeserializationTypeError(upickle.core.Abort("expected dictionary got int32")))
         )
       )
     }

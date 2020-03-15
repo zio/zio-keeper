@@ -2,6 +2,7 @@ package zio.membership
 
 import zio._
 import zio.logging.Logging
+import zio.keeper.membership.{ ByteCodec, TaggedCodec }
 import zio.membership.hyparview.NeighborReply.{ Accept, Reject }
 import zio.membership.transport.{ ChunkConnection, Transport }
 import zio.stm.STM
@@ -29,9 +30,12 @@ package object hyparview {
       val continue =
         pull.foldM[R, E, Option[T]](
           _.fold[ZIO[R, E, Option[T]]](ZIO.succeed(None))(ZIO.fail(_)), { msg =>
-            ByteCodec[JoinReply[T]].fromChunk(msg).map {
-              case JoinReply(addr) => Some(addr)
-            }
+            ByteCodec[JoinReply[T]]
+              .fromChunk(msg)
+              .mapError(e => zio.membership.DeserializationError(e.msg))
+              .map {
+                case JoinReply(addr) => Some(addr)
+              }
           }
         )
       continue.map(_.map((_, ZStream.repeatEffectOption(pull))))
@@ -44,10 +48,13 @@ package object hyparview {
       val continue =
         pull.foldM[R, E, Boolean](
           _.fold[ZIO[R, E, Boolean]](ZIO.succeed(false))(ZIO.fail(_)), { msg =>
-            TaggedCodec.read[NeighborReply](msg).map {
-              case Accept => true
-              case Reject => false
-            }
+            TaggedCodec
+              .read[NeighborReply](msg)
+              .mapError(e => zio.membership.DeserializationError(e.msg))
+              .map {
+                case Accept => true
+                case Reject => false
+              }
           }
         )
       ZIO.environment[R].flatMap { env =>
@@ -117,21 +124,26 @@ package object hyparview {
                       _.fold[ZIO[R, E, Option[T]]](ZIO.succeed(None))(ZIO.fail(_)), { raw =>
                         TaggedCodec
                           .read[InitialProtocol[T]](raw)
+                          .mapError(e => zio.membership.DeserializationError(e.msg))
                           .tap(msg => logging.logDebug(s"receiveInitialProtocol: $msg"))
                           .flatMap {
                             case msg: Neighbor[T] =>
                               Views.using[T].apply {
                                 views =>
                                   val accept = for {
-                                    reply <- TaggedCodec.write[NeighborReply](NeighborReply.Accept)
-                                    _     <- logging.logDebug(s"Accepting neighborhood request from ${msg.sender}")
-                                    _     <- con.send(reply)
+                                    reply <- TaggedCodec
+                                              .write[NeighborReply](NeighborReply.Accept)
+                                              .mapError(e => zio.membership.SerializationError(e.msg))
+                                    _ <- logging.logDebug(s"Accepting neighborhood request from ${msg.sender}")
+                                    _ <- con.send(reply)
                                   } yield Some(msg.sender)
 
                                   val reject = for {
-                                    reply <- TaggedCodec.write[NeighborReply](NeighborReply.Reject)
-                                    _     <- logging.logDebug(s"Rejecting neighborhood request from ${msg.sender}")
-                                    _     <- con.send(reply)
+                                    reply <- TaggedCodec
+                                              .write[NeighborReply](NeighborReply.Reject)
+                                              .mapError(e => zio.membership.SerializationError(e.msg))
+                                    _ <- logging.logDebug(s"Rejecting neighborhood request from ${msg.sender}")
+                                    _ <- con.send(reply)
                                   } yield None
 
                                   if (msg.isHighPriority) {
@@ -154,23 +166,26 @@ package object hyparview {
                                   }
                               }
                             case msg: InitialMessage.Join[T] =>
-                              Views.using[T].apply { views =>
-                                for {
-                                  others <- views.activeView.map(_.filterNot(_ == msg.sender)).commit
-                                  config <- getConfig
-                                  _ <- ZIO
-                                        .foreachPar_(others)(
-                                          node =>
-                                            views
-                                              .send(
-                                                node,
-                                                ActiveProtocol
-                                                  .ForwardJoin(views.myself, msg.sender, TimeToLive(config.arwl))
-                                              )
-                                        )
-                                  reply <- ByteCodec[JoinReply[T]].toChunk(JoinReply(views.myself))
-                                  _     <- con.send(reply)
-                                } yield Some(msg.sender)
+                              Views.using[T].apply {
+                                views =>
+                                  for {
+                                    others <- views.activeView.map(_.filterNot(_ == msg.sender)).commit
+                                    config <- getConfig
+                                    _ <- ZIO
+                                          .foreachPar_(others)(
+                                            node =>
+                                              views
+                                                .send(
+                                                  node,
+                                                  ActiveProtocol
+                                                    .ForwardJoin(views.myself, msg.sender, TimeToLive(config.arwl))
+                                                )
+                                          )
+                                    reply <- ByteCodec[JoinReply[T]]
+                                              .toChunk(JoinReply(views.myself))
+                                              .mapError(e => zio.membership.SerializationError(e.msg))
+                                    _ <- con.send(reply)
+                                  } yield Some(msg.sender)
                               }
                             case msg: InitialMessage.ForwardJoinReply[T] =>
                               // nothing to do here, we just continue to the next protocol
@@ -324,6 +339,7 @@ package object hyparview {
             .mapM { raw =>
               TaggedCodec
                 .read[ActiveProtocol[T]](raw)
+                .mapError(e => zio.membership.DeserializationError(e.msg))
                 .tap(msg => logging.logDebug(s"receiveActiveProtocol: $to -> $msg"))
                 .flatMap {
                   case msg: Disconnect[T] =>

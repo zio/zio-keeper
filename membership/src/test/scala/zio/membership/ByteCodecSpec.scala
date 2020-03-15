@@ -4,6 +4,7 @@ import zio.membership.hyparview.ActiveProtocol._
 import zio.membership.hyparview.InitialMessage.{ Join, ShuffleReply }
 import zio.membership.hyparview.NeighborReply.{ Accept, Reject }
 import zio.membership.hyparview.{ JoinReply, Neighbor }
+import zio.keeper.membership.ByteCodecLaws
 import zio.test._
 import zio.test.Gen
 
