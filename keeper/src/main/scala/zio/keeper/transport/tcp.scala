@@ -1,5 +1,7 @@
 package zio.keeper.transport
 
+import java.io.IOException
+
 import zio._
 import zio.clock.Clock
 import zio.duration._
@@ -82,15 +84,22 @@ object tcp {
     to: SocketAddress,
     requestTimeout: Duration,
     close: IO[TransportError, Unit]
-  ): URIO[Clock, Connection] =
+  ): URIO[Clock, Connection] = {
+    def handleConnectionReset[A]: PartialFunction[zio.keeper.TransportError, IO[zio.keeper.TransportError, A]] = {
+      case ExceptionWrapper(ex: IOException) if ex.getMessage == "Connection reset by peer" =>
+        close *> ZIO.fail(ExceptionWrapper(ex))
+    }
     ZIO.accessM[Clock] { env =>
       Connection.withLock(
         socketChannel
           .read(_)
-          .mapError(ExceptionWrapper),
+          .mapError(ExceptionWrapper)
+          .catchSome(handleConnectionReset)
+          ,
         socketChannel
           .write(_)
           .mapError(ExceptionWrapper)
+          .catchSome(handleConnectionReset)
           .timeoutFail(RequestTimeout(to, requestTimeout))(requestTimeout)
           .unit
           .provide(env),
@@ -98,4 +107,5 @@ object tcp {
         close
       )
     }
+  }
 }
