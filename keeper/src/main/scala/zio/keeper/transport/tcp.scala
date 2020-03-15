@@ -94,8 +94,7 @@ object tcp {
         socketChannel
           .read(_)
           .mapError(ExceptionWrapper)
-          .catchSome(handleConnectionReset)
-          ,
+          .catchSome(handleConnectionReset),
         socketChannel
           .write(_)
           .mapError(ExceptionWrapper)
