@@ -5,6 +5,7 @@ import java.math.BigInteger
 import zio.keeper.TransportError
 import zio.keeper.TransportError.ExceptionWrapper
 import zio.{ Chunk, IO, _ }
+import zio.nio.core.SocketAddress
 
 /**
  * Channel represents connection
@@ -87,14 +88,15 @@ object Channel {
   }
 
   /**
-   * Represents local listener
+   * Represents a local listener.
    *
-   * @param isOpen check if underlying transport is still available.
-   *
+   * @param isOpen check if underlying transport is still available
    * @param close finalizer for underlying transport
+   * @param localAddress returns the locally bound address
    */
   class Bind(
     val isOpen: IO[TransportError, Boolean],
-    val close: IO[TransportError, Unit]
+    val close: IO[TransportError, Unit],
+    val localAddress: IO[TransportError, SocketAddress]
   ) extends Channel
 }
