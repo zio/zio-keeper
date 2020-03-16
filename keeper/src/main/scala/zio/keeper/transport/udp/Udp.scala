@@ -1,15 +1,16 @@
-package zio.keeper.transport
+package zio.keeper.transport.udp
 
 import zio._
 import zio.clock.Clock
 import zio.keeper.TransportError
 import zio.keeper.TransportError._
+import zio.keeper.transport._
 import zio.keeper.transport.Channel._
 import zio.logging._
 import zio.nio.channels._
 import zio.nio.core.{ Buffer, SocketAddress }
 
-object udp {
+object Udp {
 
   /**
    * Creates udp transport with given maximum message size.

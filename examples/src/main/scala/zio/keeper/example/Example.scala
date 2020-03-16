@@ -9,6 +9,7 @@ import zio.keeper.discovery.static.Static
 import zio.keeper.membership._
 import zio.keeper.membership.swim.SWIM
 import zio.keeper.transport.Channel.Connection
+import zio.keeper.transport.tcp.Tcp
 import zio.logging.Logging
 import zio.nio.core.{ InetAddress, SocketAddress }
 import zio.random.Random
@@ -32,11 +33,9 @@ object Node3 extends zio.ManagedApp {
 }
 
 object TestNode {
-  import zio.keeper.transport._
-
   val logging = Logging.console((_, msg) => msg)
 
-  val transport = (Clock.live ++ logging) >>> tcp.live(10.seconds, 10.seconds)
+  val transport = (Clock.live ++ logging) >>> Tcp.live(10.seconds, 10.seconds)
 
   def start(port: Int, nodeName: String, otherPorts: Set[Int]) =
     environment(port, otherPorts).orDie
@@ -81,7 +80,7 @@ object TcpServer extends zio.App {
 
   val logging = Logging.console((_, msg) => msg)
 
-  val transport = (Clock.live ++ logging) >>> tcp.live(10.seconds, 10.seconds)
+  val transport = (Clock.live ++ logging) >>> Tcp.live(10.seconds, 10.seconds)
 
   val localEnvironment = Console.live ++ transport
 
@@ -115,7 +114,7 @@ object TcpClient extends zio.App {
 
   val logging = Logging.console((_, msg) => msg)
 
-  val transport = (Clock.live ++ logging) >>> tcp.live(10.seconds, 10.seconds)
+  val transport = (Clock.live ++ logging) >>> Tcp.live(10.seconds, 10.seconds)
 
   val localEnvironment = Console.live ++ transport
 

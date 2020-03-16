@@ -5,6 +5,8 @@ import zio.console.{ Console, _ }
 import zio.duration._
 import zio.keeper.TransportError.ExceptionWrapper
 import zio.keeper.transport.Channel.Connection
+import zio.keeper.transport.tcp.Tcp
+import zio.keeper.transport.udp.Udp
 import zio.logging.Logging
 import zio.nio.core.SocketAddress
 import zio.test.Assertion._
@@ -16,10 +18,10 @@ object TransportSpec extends DefaultRunnableSpec {
   val freePort = ZIO.succeed(9010)
 
   private val tcpEnv =
-    (TestEnvironment.live ++ Logging.ignore) >>> tcp.live(10.seconds, 10.seconds)
+    (TestEnvironment.live ++ Logging.ignore) >>> Tcp.live(10.seconds, 10.seconds)
 
   private val udpEnv =
-    (TestEnvironment.live ++ Logging.ignore) >>> udp.live(128)
+    (TestEnvironment.live ++ Logging.ignore) >>> Udp.live(128)
 
   def bindAndWaitForValue(
     addr: SocketAddress,

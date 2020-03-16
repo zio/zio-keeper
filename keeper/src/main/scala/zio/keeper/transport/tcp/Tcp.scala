@@ -1,4 +1,4 @@
-package zio.keeper.transport
+package zio.keeper.transport.tcp
 
 import java.io.IOException
 
@@ -7,12 +7,13 @@ import zio.clock.Clock
 import zio.duration._
 import zio.keeper.TransportError
 import zio.keeper.TransportError._
+import zio.keeper.transport._
 import zio.keeper.transport.Channel._
 import zio.logging._
 import zio.nio.channels._
 import zio.nio.core.SocketAddress
 
-object tcp {
+object Tcp {
 
   /**
    * Creates layer with tcp transport.

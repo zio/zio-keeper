@@ -4,6 +4,7 @@ import zio.{ Chunk, Schedule }
 import zio.clock.Clock
 import zio.console.{ Console, putStrLn }
 import zio.keeper.transport.Channel.Connection
+import zio.keeper.transport.udp.Udp
 import zio.logging.Logging
 import zio.nio.core.{ InetAddress, SocketAddress }
 
@@ -13,7 +14,7 @@ object UdpServer extends zio.App {
 
   val logging = Logging.console((_, msg) => msg)
 
-  val transport = (Clock.live ++ logging) >>> udp.live(128)
+  val transport = (Clock.live ++ logging) >>> Udp.live(128)
 
   val localEnvironment = Console.live ++ transport
 
@@ -45,7 +46,7 @@ object UdpClient extends zio.App {
 
   val logging = Logging.console((_, msg) => msg)
 
-  val transport = (Clock.live ++ logging) >>> udp.live(128)
+  val transport = (Clock.live ++ logging) >>> Udp.live(128)
 
   val localEnvironment = Console.live ++ transport
 

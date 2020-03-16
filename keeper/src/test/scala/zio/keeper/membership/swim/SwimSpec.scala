@@ -7,6 +7,7 @@ import zio.keeper.Error
 import zio.keeper.discovery.{ Discovery, TestDiscovery }
 import zio.keeper.membership._
 import zio.keeper.transport._
+import zio.keeper.transport.tcp.Tcp
 import zio.logging.Logging
 import zio.random.Random
 import zio.stream.Sink
@@ -23,7 +24,7 @@ object SwimSpec extends DefaultRunnableSpec {
 
   private val environment = {
     val clockAndLogging = Clock.live ++ Logging.ignore
-    val transport       = clockAndLogging >>> tcp.live(10.seconds, 10.seconds)
+    val transport       = clockAndLogging >>> Tcp.live(10.seconds, 10.seconds)
     clockAndLogging ++ Random.live ++ transport ++ TestDiscovery.live
   }
 
