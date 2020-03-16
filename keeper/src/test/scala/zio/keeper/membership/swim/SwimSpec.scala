@@ -1,10 +1,11 @@
-package zio.keeper.membership
+package zio.keeper.membership.swim
 
 import zio.{ Promise, UIO, ZIO }
 import zio.clock.Clock
 import zio.duration._
 import zio.keeper.Error
 import zio.keeper.discovery.{ Discovery, TestDiscovery }
+import zio.keeper.membership._
 import zio.keeper.transport._
 import zio.logging.Logging
 import zio.random.Random
@@ -35,7 +36,7 @@ object SwimSpec extends DefaultRunnableSpec {
       start    <- Promise.make[Nothing, Membership.Service]
       shutdown <- Promise.make[Nothing, Unit]
       _ <- SWIM
-            .join(port)
+            .live(port)
             .build
             .map(_.get)
             .use { cluster =>

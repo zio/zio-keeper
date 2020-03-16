@@ -1,4 +1,4 @@
-package zio.keeper.membership
+package zio.keeper.membership.swim
 
 import java.util.UUID
 
@@ -9,6 +9,7 @@ import zio.keeper.ClusterError._
 import zio.keeper.Message.{ readMessage, serializeMessage }
 import zio.keeper.{ Message, _ }
 import zio.keeper.discovery.Discovery
+import zio.keeper.membership._
 import zio.keeper.protocol.InternalProtocol
 import zio.keeper.protocol.InternalProtocol._
 import zio.keeper.transport.Channel.{ Bind, Connection }
@@ -24,7 +25,7 @@ import scala.collection.immutable.SortedSet
 
 object SWIM {
 
-  def join(
+  def live(
     port: Int
   ): ZLayer[Logging with Clock with Random with Transport with Discovery, Error, Membership] =
     ZLayer.fromManaged {

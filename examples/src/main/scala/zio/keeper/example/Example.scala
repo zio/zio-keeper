@@ -7,6 +7,7 @@ import zio.duration._
 import zio.keeper.discovery.Discovery
 import zio.keeper.discovery.static.Static
 import zio.keeper.membership._
+import zio.keeper.membership.swim.SWIM
 import zio.keeper.transport.Channel.Connection
 import zio.logging.Logging
 import zio.nio.core.{ InetAddress, SocketAddress }
@@ -70,7 +71,7 @@ object TestNode {
       .map(addrs => Static.live(addrs.toSet))
 
   def membership(port: Int) =
-    SWIM.join(port)
+    SWIM.live(port)
 }
 
 object TcpServer extends zio.App {
