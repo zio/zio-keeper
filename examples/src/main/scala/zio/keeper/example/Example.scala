@@ -5,6 +5,7 @@ import zio.clock._
 import zio.console._
 import zio.duration._
 import zio.keeper.discovery.Discovery
+import zio.keeper.discovery.static.Static
 import zio.keeper.membership._
 import zio.keeper.transport.Channel.Connection
 import zio.logging.Logging
@@ -66,7 +67,7 @@ object TestNode {
         InetAddress.localHost.flatMap(SocketAddress.inetSocketAddress(_, port)).toManaged_
       }
       .orDie
-      .map(addrs => Discovery.staticList(addrs.toSet))
+      .map(addrs => Static.live(addrs.toSet))
 
   def membership(port: Int) =
     SWIM.join(port)
