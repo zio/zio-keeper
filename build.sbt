@@ -86,7 +86,7 @@ lazy val examples = project
   .settings(stdSettings("zio-keeper-examples"))
   .dependsOn(keeper)
   .settings(
-    scalacOptions --= Seq("-Ywarn-dead-code"),
+    scalacOptions --= Seq("-Ywarn-dead-code", "-Wdead-code"),
     libraryDependencies ++= Seq(
       "dev.zio"        %% "zio-logging-slf4j" % ZioLoggingVersion,
       "ch.qos.logback" % "logback-classic"    % "1.2.3"
