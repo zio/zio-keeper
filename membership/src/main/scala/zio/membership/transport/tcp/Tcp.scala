@@ -1,4 +1,4 @@
-package zio.membership.transport
+package zio.membership.transport.tcp
 
 import java.{ util => ju }
 import java.math.BigInteger
@@ -9,11 +9,12 @@ import zio.duration._
 import zio.logging.Logging
 import zio.membership.TransportError
 import zio.membership.TransportError._
+import zio.membership.transport._
 import zio.membership.uuid
 import zio.nio.channels._
 import zio.stream._
 
-object tcp {
+object Tcp {
 
   def live(
     maxConnections: Long,

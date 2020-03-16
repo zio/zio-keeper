@@ -3,7 +3,7 @@ package zio.membership
 import zio._
 import zio.duration._
 import zio.membership.transport.Address
-import zio.membership.transport.tcp
+import zio.membership.transport.tcp.Tcp
 import zio.random.Random
 import zio.logging.slf4j.Slf4jLogger
 import zio.clock.Clock
@@ -24,7 +24,7 @@ object Main2 extends zio.App {
     val address   = Address("localhost", 8081)
     val tRandom   = Random.live >>> TRandom.live
     val logging   = Slf4jLogger.make((_, msg) => msg)
-    val transport = (Clock.live ++ logging) >>> tcp.live(64, 10.seconds, 10.seconds)
+    val transport = (Clock.live ++ logging) >>> Tcp.live(64, 10.seconds, 10.seconds)
     val hpvc      = HyParViewConfig.staticConfig(10, 10, 4, 2, 3, 3, 3, 256, 256, 16)
     val hpv = (tRandom ++ logging ++ transport ++ hpvc ++ Clock.live) >>>
       HyParView.live(address, Schedule.spaced(2.seconds))

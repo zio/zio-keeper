@@ -8,12 +8,13 @@ import zio.duration._
 import zio.stream.ZStream
 import zio.test.TestAspect._
 import zio.logging.Logging
+import zio.membership.transport.tcp.Tcp
 
 object TransportSpec extends DefaultRunnableSpec {
   val addr = Address("localhost", 8081)
 
   val environment =
-    ((Clock.live ++ Logging.ignore) >>> tcp.live(10, 10.seconds, 10.seconds)) ++ Clock.live
+    ((Clock.live ++ Logging.ignore) >>> Tcp.live(10, 10.seconds, 10.seconds)) ++ Clock.live
 
   def spec =
     (suite("TcpTransport")(
