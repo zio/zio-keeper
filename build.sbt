@@ -50,8 +50,8 @@ lazy val keeper = project
       "dev.zio"                %% "zio"                     % ZioVersion,
       "dev.zio"                %% "zio-streams"             % ZioVersion,
       "dev.zio"                %% "zio-nio"                 % NioVersion,
-      "dev.zio"                %% "zio-macros-core"         % "0.6.2",
-      "dev.zio"                %% "zio-logging-slf4j"       % "0.0.4",
+      "dev.zio"                %% "zio-logging"             % ZioLoggingVersion,
+      "dev.zio"                %% "zio-logging-slf4j"       % ZioLoggingVersion,
       "com.lihaoyi"            %% "upickle"                 % "1.0.0",
       "org.scala-lang.modules" %% "scala-collection-compat" % "2.1.4",
       "dev.zio"                %% "zio-test"                % ZioVersion % Test,
@@ -63,16 +63,16 @@ lazy val keeper = project
 lazy val membership = project
   .in(file("membership"))
   .settings(stdSettings("zio-membership"))
+  .dependsOn(keeper % "compile->compile;test->test")
   .settings(
     libraryDependencies ++= Seq(
       "dev.zio"                %% "zio"                     % ZioVersion,
       "dev.zio"                %% "zio-streams"             % ZioVersion,
       "dev.zio"                %% "zio-nio"                 % NioVersion,
-      "dev.zio"                %% "zio-macros-core"         % "0.6.2",
       "com.lihaoyi"            %% "upickle"                 % "1.0.0",
       "org.scala-lang.modules" %% "scala-collection-compat" % "2.1.4",
-      "dev.zio"                %% "zio-logging"             % "0.0.4",
-      "dev.zio"                %% "zio-logging-slf4j"       % "0.0.4",
+      "dev.zio"                %% "zio-logging"             % ZioLoggingVersion,
+      "dev.zio"                %% "zio-logging-slf4j"       % ZioLoggingVersion,
       "org.slf4j"              % "slf4j-log4j12"            % "1.7.30",
       "dev.zio"                %% "zio-test"                % ZioVersion % Test,
       "dev.zio"                %% "zio-test-sbt"            % ZioVersion % Test,

@@ -1,14 +1,14 @@
-package zio.membership.hyparview
+package zio.keeper.membership
 
 import zio._
-import zio.membership.{ ByteCodec, DeserializationError, SerializationError }
+import zio.keeper.SerializationError._
 
-private[hyparview] trait TaggedCodec[A] {
+trait TaggedCodec[A] {
   def tagOf(a: A): Byte
   def codecFor(tag: Byte): IO[Unit, ByteCodec[A]]
 }
 
-private[hyparview] object TaggedCodec {
+object TaggedCodec {
 
   def apply[A](implicit ev: TaggedCodec[A]) = ev
 
@@ -26,12 +26,12 @@ private[hyparview] object TaggedCodec {
   )(
     implicit
     tagged: TaggedCodec[A]
-  ): ZIO[Any, DeserializationError, A] =
-    if (from.isEmpty) ZIO.fail(DeserializationError("Empty chunk"))
+  ): ZIO[Any, DeserializationTypeError, A] =
+    if (from.isEmpty) ZIO.fail(DeserializationTypeError("Empty chunk"))
     else {
       val (tag, chunk) = from.splitAt(1)
       for {
-        codec <- tagged.codecFor(tag(0)).mapError(_ => DeserializationError(s"No codec found for tag ${tag(0)}"))
+        codec <- tagged.codecFor(tag(0)).mapError(_ => DeserializationTypeError(s"No codec found for tag ${tag(0)}"))
         data  <- codec.fromChunk(chunk)
       } yield data
     }
@@ -41,10 +41,10 @@ private[hyparview] object TaggedCodec {
   )(
     implicit
     tagged: TaggedCodec[A]
-  ): ZIO[Any, SerializationError, Chunk[Byte]] = {
+  ): ZIO[Any, SerializationTypeError, Chunk[Byte]] = {
     val tag = tagged.tagOf(data)
     for {
-      codec <- tagged.codecFor(tag).mapError(_ => SerializationError(s"No codec found for tag $tag"))
+      codec <- tagged.codecFor(tag).mapError(_ => SerializationTypeError(s"No codec found for tag $tag"))
       chunk <- codec.toChunk(data).map(Chunk.single(tag) ++ _)
     } yield chunk
   }

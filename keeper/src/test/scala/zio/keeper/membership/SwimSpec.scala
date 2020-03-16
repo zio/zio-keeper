@@ -1,123 +1,89 @@
 package zio.keeper.membership
 
-import zio.duration._
-import zio.keeper.discovery.TestDiscovery
-import zio.keeper.transport
-import zio.logging.Logging
-import zio.logging.slf4j.Slf4jLogger
-import zio.macros.delegate._
-import zio.macros.delegate.syntax._
-import zio.stream.Sink
-import zio.test.Assertion.equalTo
-import zio.test.environment.Live
-import zio.test.{ DefaultRunnableSpec, assert, suite, testM }
 import zio.{ Promise, UIO, ZIO }
+import zio.clock.Clock
+import zio.duration._
+import zio.keeper.Error
+import zio.keeper.discovery.{ Discovery, TestDiscovery }
+import zio.keeper.transport._
+import zio.logging.Logging
+import zio.random.Random
+import zio.stream.Sink
+import zio.test.DefaultRunnableSpec
+import zio.test.{ assert, suite, testM }
+import zio.test.Assertion.equalTo
 
-object SwimSpec
-    extends DefaultRunnableSpec({
+object SwimSpec extends DefaultRunnableSpec {
 
-      val loggingEnv = ZIO.environment[zio.ZEnv] @@ enrichWith[Logging[String]](
-        new Slf4jLogger.Live {
-          override def formatMessage(msg: String): ZIO[Any, Nothing, String] =
-            ZIO.succeed(msg)
-        }
-      )
+  private trait MemberHolder {
+    def instance: Membership.Service
+    def stop: UIO[Unit]
+  }
 
-      val discoveryEnv = ZIO.environment[zio.ZEnv] @@
-        enrichWithM[TestDiscovery](
-          TestDiscovery.test
-        )
+  private val environment = {
+    val clockAndLogging = Clock.live ++ Logging.ignore
+    val transport       = clockAndLogging >>> tcp.live(10.seconds, 10.seconds)
+    clockAndLogging ++ Random.live ++ transport ++ TestDiscovery.live
+  }
 
-      def tcpEnv =
-        loggingEnv >>> ZIO
-          .environment[zio.ZEnv with Logging[String]] @@
-          transport.tcp.withTcpTransport(10.seconds, 10.seconds)
+  private def member(port: Int): ZIO[
+    Logging with Clock with Random with Transport with Discovery with TestDiscovery.TestDiscovery,
+    Error,
+    MemberHolder
+  ] =
+    for {
+      start    <- Promise.make[Nothing, Membership.Service]
+      shutdown <- Promise.make[Nothing, Unit]
+      _ <- SWIM
+            .join(port)
+            .build
+            .map(_.get)
+            .use { cluster =>
+              cluster.localMember.flatMap { local =>
+                TestDiscovery.addMember(local) *>
+                  start.succeed(cluster) *>
+                  shutdown.await
+              }
+            }
+            .fork
+      cluster <- start.await
+    } yield new MemberHolder {
+      val instance = cluster
+      val stop     = shutdown.succeed(()).unit
+    }
 
-      def dependencies =
-        discoveryEnv @@
-          enrichWithM(tcpEnv)
-
-      val liveEnv =
-        Live
-          .live(
-            ZIO.environment[zio.ZEnv] @@
-              enrichWithM(dependencies)
-          )
-          .flatMap(Live.make)
-
-      val environment =
+  def spec =
+    suite("cluster")(
+      testM("all nodes should have references to each other") {
         for {
-          env <- dependencies
-          r   <- liveEnv @@ enrichWith(env)
-        } yield r
-
-      trait MemberHolder {
-        def instance: Membership.Service[Any]
-
-        def stop: UIO[Unit]
+          member1 <- member(33333)
+          member2 <- member(33331)
+          _       <- member2.instance.localMember.flatMap(m => TestDiscovery.removeMember(m))
+          member3 <- member(33332)
+          _       <- member1.instance.events.run(Sink.collectAllN[MembershipEvent](2))
+          nodes1  <- member1.instance.nodes
+          nodes2  <- member2.instance.nodes
+          nodes3  <- member3.instance.nodes
+          node1   <- member1.instance.localMember.map(_.nodeId)
+          node2   <- member2.instance.localMember.map(_.nodeId)
+          node3   <- member3.instance.localMember.map(_.nodeId)
+          _       <- member1.stop *> member2.stop *> member3.stop
+        } yield assert(nodes1)(equalTo(List(node2, node3))) &&
+          assert(nodes2)(equalTo(List(node1, node3))) &&
+          assert(nodes3)(equalTo(List(node1, node2)))
+      },
+      testM("should receive notification") {
+        for {
+          member1       <- member(44333)
+          member1Events = member1.instance.events
+          member2       <- member(44331)
+          node2         <- member2.instance.localMember
+          joinEvent     <- member1Events.run(Sink.await[MembershipEvent])
+          _             <- member2.stop
+          leaveEvents   <- member1Events.run(Sink.collectAllN[MembershipEvent](2))
+          _             <- member1.stop
+        } yield assert(joinEvent)(equalTo(MembershipEvent.Join(node2))) &&
+          assert(leaveEvents)(equalTo(List(MembershipEvent.Unreachable(node2), MembershipEvent.Leave(node2))))
       }
-
-      def member(port: Int) =
-        for {
-          start         <- Promise.make[Nothing, Membership.Service[Any]]
-          shutdown      <- Promise.make[Nothing, Unit]
-          discoveryTest <- ZIO.environment[TestDiscovery]
-          _ <- SWIM
-                .join(port)
-                .use(
-                  cluster =>
-                    cluster.membership.localMember.flatMap(
-                      local =>
-                        discoveryTest.discover.addMember(local) *>
-                          start.succeed(cluster.membership) *>
-                          shutdown.await
-                    )
-                )
-                .fork
-          cluster <- start.await
-        } yield new MemberHolder {
-          def instance = cluster
-
-          def stop = shutdown.succeed(()).unit
-        }
-
-      suite("cluster")(
-        testM("all nodes should have references to each other") {
-          environment >>> Live.live(
-            for {
-              member1 <- member(33333)
-              member2 <- member(33331)
-              _ <- ZIO.accessM[TestDiscovery](
-                    d => member2.instance.localMember.flatMap(m => d.discover.removeMember(m))
-                  )
-              member3 <- member(33332)
-              _       <- member1.instance.events.run(Sink.collectAllN[MembershipEvent](2))
-              nodes1  <- member1.instance.nodes
-              nodes2  <- member2.instance.nodes
-              nodes3  <- member3.instance.nodes
-              node1   <- member1.instance.localMember.map(_.nodeId)
-              node2   <- member2.instance.localMember.map(_.nodeId)
-              node3   <- member3.instance.localMember.map(_.nodeId)
-              _       <- member1.stop *> member2.stop *> member3.stop
-            } yield assert(nodes1, equalTo(List(node2, node3))) &&
-              assert(nodes2, equalTo(List(node1, node3))) &&
-              assert(nodes3, equalTo(List(node1, node2)))
-          )
-        },
-        testM("should receive notification") {
-          environment >>> Live.live(
-            for {
-              member1       <- member(44333)
-              member1Events = member1.instance.events
-              member2       <- member(44331)
-              node2         <- member2.instance.localMember
-              joinEvent     <- member1Events.run(Sink.await[MembershipEvent])
-              _             <- member2.stop
-              leaveEvents   <- member1Events.run(Sink.collectAllN[MembershipEvent](2))
-              _             <- member1.stop
-            } yield assert(joinEvent, equalTo(MembershipEvent.Join(node2))) &&
-              assert(leaveEvents, equalTo(List(MembershipEvent.Unreachable(node2), MembershipEvent.Leave(node2))))
-          )
-        }
-      )
-    })
+    ).provideCustomLayer(environment)
+}

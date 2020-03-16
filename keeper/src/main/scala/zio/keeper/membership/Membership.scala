@@ -1,27 +1,17 @@
 package zio.keeper.membership
 
+import zio.{ Chunk, IO, UIO }
 import zio.keeper.{ Error, Message }
-import zio.stream.ZStream
-import zio.{ Chunk, ZIO }
-
-trait Membership {
-  def membership: Membership.Service[Any]
-}
+import zio.stream.Stream
 
 object Membership {
 
-  trait Service[R] {
-    def broadcast(data: Chunk[Byte]): ZIO[R, Error, Unit]
-
-    def events: ZStream[R, Error, MembershipEvent]
-
-    def localMember: ZIO[R, Nothing, Member]
-
-    def nodes: ZIO[R, Nothing, List[NodeId]]
-
-    def receive: ZStream[R, Error, Message]
-
-    def send(data: Chunk[Byte], receipt: NodeId): ZIO[R, Error, Unit]
+  trait Service {
+    def broadcast(data: Chunk[Byte]): IO[Error, Unit]
+    def events: Stream[Error, MembershipEvent]
+    def localMember: UIO[Member]
+    def nodes: UIO[List[NodeId]]
+    def receive: Stream[Error, Message]
+    def send(data: Chunk[Byte], receipt: NodeId): IO[Error, Unit]
   }
-
 }
