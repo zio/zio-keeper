@@ -102,10 +102,8 @@ object TcpServer extends zio.App {
 
       _ <- putStrLn("public address: " + publicAddress.toString())
       _ <- bind(publicAddress)(handler)
-            .use(ch => ZIO.never.ensuring(ch.close.ignore))
-            .fork
-
-    } yield ()).ignore.as(0).provideLayer(localEnvironment)
+            .use(ch => ZIO.never.ensuring(ch.close.ignore).unit)
+    } yield ()).foldM(e => putStrLn(s"Error: ${e.msg}"), _ => ZIO.unit).as(0).provideLayer(localEnvironment)
 }
 
 object TcpClient extends zio.App {
