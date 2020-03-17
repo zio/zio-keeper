@@ -54,7 +54,12 @@ object tcp {
 
                   _ <- cur.use(connectionHandler).fork
                 } yield ()).forever.fork
-                  .as(new Bind(server.isOpen, close.unit))
+                  .as {
+                    val local = server.localAddress
+                      .flatMap(opt => IO.effect(opt.get).orDie)
+                      .mapError(ExceptionWrapper(_))
+                    new Bind(server.isOpen, close.unit, local)
+                  }
             }
             .provide(env)
 
