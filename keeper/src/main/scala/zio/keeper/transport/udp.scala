@@ -75,7 +75,13 @@ object udp {
             .mapM(
               channel =>
                 Connection.withLock(
-                  channel.read(_).mapError(ExceptionWrapper),
+                  (bytes: Int) =>
+                    Buffer
+                      .byte(bytes)
+                      .tap(bb => channel.receive(bb))
+                      .tap(_.flip)
+                      .flatMap(_.getChunk(bytes))
+                      .mapError(ExceptionWrapper),
                   channel.write(_).mapError(ExceptionWrapper).unit,
                   ZIO.succeed(true),
                   ZIO.unit

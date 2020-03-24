@@ -4,7 +4,7 @@ import upickle.default._
 import zio.duration._
 import zio.keeper.membership.swim.Nodes.NodeState
 import zio.keeper.membership.swim.{ Message, NodeId, Nodes, Protocol }
-import zio.keeper.membership.{ ByteCodec, TaggedCodec }
+import zio.keeper.membership.{ ByteCodec, NodeAddress, TaggedCodec }
 import zio.stm.TMap
 import zio.stream.ZStream
 import zio.{ Ref, Schedule, ZIO }
@@ -60,7 +60,7 @@ object FailureDetection {
       ByteCodec.fromReadWriter(macroRW[Ping])
   }
 
-  final case class PingReq(target: NodeId, ackConversation: Long) extends FailureDetection
+  final case class PingReq(target: NodeAddress, ackConversation: Long) extends FailureDetection
 
   object PingReq {
 
@@ -68,7 +68,7 @@ object FailureDetection {
       ByteCodec.fromReadWriter(macroRW[PingReq])
   }
 
-  private case class _Ack(target: NodeId, onBehalf: Option[(NodeId, Long)])
+  private case class _Ack(target: NodeAddress, onBehalf: Option[(NodeAddress, Long)])
 
   def protocol(nodes: Nodes, protocolPeriod: Duration) =
     for {
@@ -81,11 +81,11 @@ object FailureDetection {
             acks
               .delete(id)).commit
 
-        def withAck(onBehalf: Option[(NodeId, Long)], fn: Long => Message.Direct[FailureDetection]) =
+        def withAck(onBehalf: Option[(NodeAddress, Long)], fn: Long => Message.Direct[FailureDetection]) =
           for {
             ackId      <- ackId.updateAndGet(_ + 1)
             nodeAndMsg = fn(ackId)
-            _          <- acks.put(ackId, _Ack(nodeAndMsg.nodeId, onBehalf)).commit
+            _          <- acks.put(ackId, _Ack(nodeAndMsg.node, onBehalf)).commit
           } yield nodeAndMsg
 
         Protocol[FailureDetection](

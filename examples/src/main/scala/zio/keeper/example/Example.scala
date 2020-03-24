@@ -33,11 +33,8 @@ object Node3 extends zio.ManagedApp {
 }
 
 object TestNode {
-  import zio.keeper.transport._
 
   val logging = Logging.console((_, msg) => msg)
-
-  val transport = (Clock.live ++ logging) >>> tcp.live(10.seconds, 10.seconds)
 
   sealed trait PingPong
 
@@ -82,8 +79,8 @@ object TestNode {
 
   private def environment(port: Int, others: Set[Int]) =
     discovery(others).map { dsc =>
-      val mem = (dsc ++ transport ++ logging ++ Clock.live ++ Random.live) >>> membership(port)
-      dsc ++ transport ++ logging ++ mem
+      val mem = (dsc ++ logging ++ Clock.live ++ Random.live) >>> membership(port)
+      dsc ++ logging ++ mem
     }
 
   def discovery(others: Set[Int]): Managed[Exception, Layer[Nothing, Discovery]] =

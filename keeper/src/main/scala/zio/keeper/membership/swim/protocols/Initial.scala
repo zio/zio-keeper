@@ -57,16 +57,17 @@ object Initial {
       env =>
         Protocol[Initial](
           {
-            case Message.Direct(sender, Join(addr)) =>
+            case Message.Direct(_, Join(addr)) =>
               nodes
-                .changeNodeState(sender, NodeState.Healthy)
-                .as(Some(Message.Direct(sender, Accept)))
+                .changeNodeState(addr, NodeState.Healthy)
+                .as(Some(Message.Direct(addr, Accept)))
                 .catchSome {
                   //this handle Join messages that was piggybacked
                   case UnknownNode(_) =>
-                    addr.socketAddress
-                      .flatMap(nodes.connect)
-                      .map(newNodeId => Some(Message.Direct(newNodeId, Join(nodes.local))))
+                    nodes.addNode(addr) *>
+                      nodes
+                        .changeNodeState(addr, NodeState.Healthy)
+                        .as(None)
                 }
 
             case Message.Direct(sender, Accept) =>
@@ -82,10 +83,7 @@ object Initial {
               env.get.discoverNodes.map(_.iterator)
             )
             .mapM(
-              node =>
-                nodes
-                  .connect(node)
-                  .map(newNodeId => Message.Direct(newNodeId, Join(nodes.local)))
+              node => NodeAddress(node).map(Message.Direct(_, Join(nodes.local)))
             )
         )
     )

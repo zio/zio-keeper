@@ -27,7 +27,7 @@ trait Protocol[M] {
         msg =>
           TaggedCodec
             .read[M](msg.message)
-            .flatMap(decoded => self.onMessage(Message.Direct(msg.nodeId, decoded)))
+            .flatMap(decoded => self.onMessage(Message.Direct(msg.node, decoded)))
             .flatMap {
               case Some(res) => res.transformM(TaggedCodec.write[M]).map(Some(_))
               case _         => ZIO.succeed(None)

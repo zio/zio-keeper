@@ -1,7 +1,7 @@
 package zio.keeper.membership.swim
 
 import upickle.default._
-import zio.keeper.membership.ByteCodec
+import zio.keeper.membership.{ ByteCodec, NodeAddress }
 import zio.{ Chunk, IO }
 
 sealed trait Message[+A] {
@@ -27,7 +27,7 @@ sealed trait Message[+A] {
 
 object Message {
 
-  case class Direct[A](nodeId: NodeId, message: A) extends Message[A] {
+  case class Direct[A](node: NodeAddress, message: A) extends Message[A] {
 
     def reply[B <: A](message: B) =
       this.copy(message = message)
