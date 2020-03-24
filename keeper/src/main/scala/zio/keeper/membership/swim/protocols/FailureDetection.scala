@@ -3,11 +3,11 @@ package zio.keeper.membership.swim.protocols
 import upickle.default._
 import zio.duration._
 import zio.keeper.membership.swim.Nodes.NodeState
-import zio.keeper.membership.swim.{Message, NodeId, Nodes, Protocol}
-import zio.keeper.membership.{ByteCodec, TaggedCodec}
+import zio.keeper.membership.swim.{ Message, NodeId, Nodes, Protocol }
+import zio.keeper.membership.{ ByteCodec, TaggedCodec }
 import zio.stm.TMap
 import zio.stream.ZStream
-import zio.{Ref, Schedule, ZIO}
+import zio.{ Ref, Schedule, ZIO }
 
 sealed trait FailureDetection
 
@@ -101,8 +101,7 @@ object FailureDetection {
               ZIO.succeed(Some(Message.Direct(sender, Ack(ackId))))
 
             case Message.Direct(sender, PingReq(to, originalAck)) =>
-              withAck(Some((sender, originalAck)), ackId =>
-                Message.Direct(to, Ping(ackId))).map(Some(_))
+              withAck(Some((sender, originalAck)), ackId => Message.Direct(to, Ping(ackId))).map(Some(_))
 
             case Message.Direct(_, Nack(_)) =>
               ZIO.succeed(None)
@@ -148,9 +147,10 @@ object FailureDetection {
                                   .as(None) //this should trigger suspicion mechanism
                             case _ => ZIO.succeed(None)
                           }
-                    }.collect{
-                    case Some(r) => r
-                  }
+                    }
+                    .collect {
+                      case Some(r) => r
+                    }
                 )
         )
       }

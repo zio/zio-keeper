@@ -1,7 +1,7 @@
 package zio.keeper.transport
 
 import zio._
-import zio.console.{Console, _}
+import zio.console.{ Console, _ }
 import zio.duration._
 import zio.keeper.TransportError.ExceptionWrapper
 import zio.keeper.transport.Channel.Connection

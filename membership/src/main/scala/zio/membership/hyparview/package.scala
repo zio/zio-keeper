@@ -2,10 +2,10 @@ package zio.membership
 
 import zio._
 import zio.logging._
-import zio.keeper.membership.{ByteCodec, TaggedCodec}
+import zio.keeper.membership.{ ByteCodec, TaggedCodec }
 import zio.logging.Logging.Logging
-import zio.membership.hyparview.NeighborReply.{Accept, Reject}
-import zio.membership.transport.{ChunkConnection, Transport}
+import zio.membership.hyparview.NeighborReply.{ Accept, Reject }
+import zio.membership.transport.{ ChunkConnection, Transport }
 import zio.stm.STM
 import zio.stream._
 
@@ -95,7 +95,11 @@ package object hyparview {
           openConnection(to, m).as(None)
       }
     }).foldM(
-      e => log.error("Error in Initial", Cause.Both(Cause.fail(e), Cause.fail(s"Failed sending initialMessage $msg to $to"))), {
+      e =>
+        log.error(
+          "Error in Initial",
+          Cause.Both(Cause.fail(e), Cause.fail(s"Failed sending initialMessage $msg to $to"))
+        ), {
         case (None, release) =>
           release.unit
         case (Some((addr, send, receive)), release) =>
@@ -207,7 +211,11 @@ package object hyparview {
 
           }.foldM(
             e =>
-              log.error("Error in Receive", Cause.Both(Cause.fail(e), Cause.fail("Failure while running initial protocol")))
+              log
+                .error(
+                  "Error in Receive",
+                  Cause.Both(Cause.fail(e), Cause.fail("Failure while running initial protocol"))
+                )
                 .as(None), {
               case (None, release)                        => release.as(None)
               case (Some((addr, send, receive)), release) => ZIO.succeed(Some((addr, send, receive, release)))
@@ -289,25 +297,23 @@ package object hyparview {
           end <- Promise.make[Unit, Nothing].toManaged_
           keepInPassive <- {
             for {
-              _ <- Views.using[T].apply {
-                    views =>
-                      views
-                        .addToActiveView(
-                          to,
-                          msg =>
-                            (for {
-                              chunk <- TaggedCodec.write[ActiveProtocol[T]](msg).mapError(SendError.SerializationFailed)
-                              _     <- reply(chunk).mapError(SendError.TransportFailed)
-                              _     <- log.debug(s"sendActiveProtocol: $to -> $msg")
-                            } yield ())
-                              .tapError(
-                                e =>
-                                  log.error(s"Failed sending message $msg to $to", Cause.fail(e))
-                              )
-                              .provide(env),
-                          end.fail(()).unit
-                        )
-                        .commit
+              _ <- Views.using[T].apply { views =>
+                    views
+                      .addToActiveView(
+                        to,
+                        msg =>
+                          (for {
+                            chunk <- TaggedCodec.write[ActiveProtocol[T]](msg).mapError(SendError.SerializationFailed)
+                            _     <- reply(chunk).mapError(SendError.TransportFailed)
+                            _     <- log.debug(s"sendActiveProtocol: $to -> $msg")
+                          } yield ())
+                            .tapError(
+                              e => log.error(s"Failed sending message $msg to $to", Cause.fail(e))
+                            )
+                            .provide(env),
+                        end.fail(()).unit
+                      )
+                      .commit
                   }
               ref <- Ref.make(false)
             } yield ref

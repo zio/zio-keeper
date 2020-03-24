@@ -2,11 +2,11 @@ package zio.membership.hyparview
 
 import zio._
 import zio.membership.transport.Transport
-import zio.keeper.membership.{ByteCodec, TaggedCodec}
-import zio.membership.{Error, Membership, ScopeIO, SendError, TransportError, transport}
+import zio.keeper.membership.{ ByteCodec, TaggedCodec }
+import zio.membership.{ Error, Membership, ScopeIO, SendError, TransportError, transport }
 import zio.duration._
 import zio.clock.Clock
-import zio.stream.{Stream, Take, ZStream}
+import zio.stream.{ Stream, Take, ZStream }
 import zio.logging._
 import zio.logging.Logging.Logging
 

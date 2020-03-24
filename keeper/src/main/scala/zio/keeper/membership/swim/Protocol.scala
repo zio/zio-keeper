@@ -5,7 +5,7 @@ import zio.keeper.membership.TaggedCodec
 import zio.logging.Logging.Logging
 import zio.logging._
 import zio.stream.ZStream
-import zio.{Chunk, ZIO}
+import zio.{ Chunk, ZIO }
 
 /**
  * Protocol represents message flow.
@@ -30,11 +30,11 @@ trait Protocol[M] {
             .flatMap(decoded => self.onMessage(Message.Direct(msg.nodeId, decoded)))
             .flatMap {
               case Some(res) => res.transformM(TaggedCodec.write[M]).map(Some(_))
-              case _                 => ZIO.succeed(None)
+              case _         => ZIO.succeed(None)
             }
 
       override val produceMessages: ZStream[Any, Error, Message[Chunk[Byte]]] =
-        self.produceMessages.mapM (_.transformM(TaggedCodec.write[M]))
+        self.produceMessages.mapM(_.transformM(TaggedCodec.write[M]))
     }
 
   /**
@@ -88,8 +88,8 @@ object Protocol {
   class ProtocolBuilder[M] {
 
     def apply[R](
-                  in: Message.Direct[M] => ZIO[R, Error, Option[Message[M]]],
-                  out: zio.stream.ZStream[R, Error, Message[M]]
+      in: Message.Direct[M] => ZIO[R, Error, Option[Message[M]]],
+      out: zio.stream.ZStream[R, Error, Message[M]]
     ): ZIO[R, Error, Protocol[M]] =
       ZIO.access[R](
         env =>

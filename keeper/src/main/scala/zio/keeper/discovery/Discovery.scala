@@ -1,11 +1,11 @@
 package zio.keeper.discovery
 
-import zio.{IO, Layer, UIO, ZLayer}
+import zio.{ IO, Layer, UIO, ZLayer }
 import zio.duration.Duration
 import zio.keeper.Error
 import zio.logging.Logging
 import zio.logging.Logging.Logging
-import zio.nio.core.{InetAddress, InetSocketAddress}
+import zio.nio.core.{ InetAddress, InetSocketAddress }
 
 object Discovery {
 
@@ -30,7 +30,7 @@ object Discovery {
   def k8Dns(address: InetAddress, timeout: Duration, port: Int): ZLayer[Logging, Nothing, Discovery] =
     ZLayer.fromFunction { logging0 =>
       new K8DnsDiscovery {
-        val logging               = logging0
+        val logging           = logging0
         val serviceDns        = address
         val serviceDnsTimeout = timeout
         val servicePort       = port

@@ -1,11 +1,11 @@
 package zio.keeper.example
 
-import zio.{Chunk, Schedule}
+import zio.{ Chunk, Schedule }
 import zio.clock.Clock
-import zio.console.{Console, putStrLn}
+import zio.console.{ Console, putStrLn }
 import zio.keeper.transport.Channel.Connection
 import zio.logging.Logging
-import zio.nio.core.{InetAddress, SocketAddress}
+import zio.nio.core.{ InetAddress, SocketAddress }
 import zio.duration._
 
 object TcpServer extends zio.App {
@@ -23,8 +23,8 @@ object TcpServer extends zio.App {
     (for {
       localHost <- InetAddress.localHost.orDie
       publicAddress <- SocketAddress
-        .inetSocketAddress(localHost, 8010)
-        .orDie
+                        .inetSocketAddress(localHost, 8010)
+                        .orDie
       console <- ZIO.environment[Console]
       handler = (channel: Connection) => {
         for {
@@ -32,13 +32,13 @@ object TcpServer extends zio.App {
           _    <- putStrLn(new String(data.toArray))
           _    <- channel.send(data)
         } yield ()
-        }.forever
+      }.forever
         .catchAll(ex => putStrLn("error: " + ex.msg))
         .provide(console)
 
       _ <- putStrLn("public address: " + publicAddress.toString())
       _ <- bind(publicAddress)(handler)
-        .use(ch => ZIO.never.ensuring(ch.close.ignore).unit)
+            .use(ch => ZIO.never.ensuring(ch.close.ignore).unit)
     } yield ()).foldM(e => putStrLn(s"Error: ${e.msg}"), _ => ZIO.unit).as(0).provideLayer(localEnvironment)
 }
 
@@ -55,11 +55,10 @@ object TcpClient extends zio.App {
     (for {
       localHost <- InetAddress.localHost.orDie
       publicAddress <- SocketAddress
-        .inetSocketAddress(localHost, 8010)
-        .orDie
+                        .inetSocketAddress(localHost, 8010)
+                        .orDie
       _ <- putStrLn("connect to address: " + publicAddress.toString())
       _ <- connect(publicAddress)
-        .use(_.send(Chunk.fromArray("message from client".getBytes)).repeat(Schedule.recurs(100)))
+            .use(_.send(Chunk.fromArray("message from client".getBytes)).repeat(Schedule.recurs(100)))
     } yield ()).ignore.as(0).provideLayer(localEnvironment)
 }
-

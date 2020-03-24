@@ -9,10 +9,9 @@ object DeadLetter {
 
   def protocol =
     Protocol[Chunk[Byte]].apply(
-      {
-        msg =>
-          log(LogLevel.Error)("message [" + msg + "] in dead letter")
-            .as(None)
+      { msg =>
+        log(LogLevel.Error)("message [" + msg + "] in dead letter")
+          .as(None)
       },
       ZStream.empty
     )

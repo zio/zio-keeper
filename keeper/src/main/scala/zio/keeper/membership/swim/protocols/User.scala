@@ -1,11 +1,11 @@
 package zio.keeper.membership.swim.protocols
 
-import upickle.default.{readBinary, writeBinary}
+import upickle.default.{ readBinary, writeBinary }
 import zio.keeper.SerializationError._
-import zio.keeper.membership.swim.{Message, Protocol}
-import zio.keeper.membership.{ByteCodec, TaggedCodec}
+import zio.keeper.membership.swim.{ Message, Protocol }
+import zio.keeper.membership.{ ByteCodec, TaggedCodec }
 import zio.stream.ZStream
-import zio.{Chunk, IO, ZIO}
+import zio.{ Chunk, IO, ZIO }
 
 case class User[A](msg: A)
 

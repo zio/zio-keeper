@@ -6,8 +6,8 @@ import zio.keeper.ClusterError.UnknownNode
 import zio.keeper.discovery.Discovery
 import zio.keeper.membership.NodeAddress
 import zio.keeper.membership.swim.Nodes.NodeState
-import zio.keeper.membership.swim.{Message, Nodes, Protocol}
-import zio.keeper.membership.{ByteCodec, TaggedCodec}
+import zio.keeper.membership.swim.{ Message, Nodes, Protocol }
+import zio.keeper.membership.{ ByteCodec, TaggedCodec }
 import zio.logging.Logging.Logging
 import zio.logging._
 import zio.stream.ZStream

@@ -2,7 +2,7 @@ package zio.keeper.membership
 
 import zio.keeper.membership.swim.NodeId
 import zio.stream.Stream
-import zio.{Has, IO, UIO, ZIO}
+import zio.{ Has, IO, UIO, ZIO }
 
 object Membership {
   type Membership[A] = Has[Membership.Service[A]]

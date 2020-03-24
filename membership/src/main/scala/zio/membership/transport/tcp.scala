@@ -1,6 +1,6 @@
 package zio.membership.transport
 
-import java.{util => ju}
+import java.{ util => ju }
 import java.math.BigInteger
 
 import zio._

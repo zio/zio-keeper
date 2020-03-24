@@ -2,8 +2,8 @@ package zio.keeper.membership.swim.protocols
 
 import upickle.default.macroRW
 import zio.ZIO
-import zio.keeper.membership.swim.{NodeId, Nodes, Protocol}
-import zio.keeper.membership.{ByteCodec, TaggedCodec}
+import zio.keeper.membership.swim.{ NodeId, Nodes, Protocol }
+import zio.keeper.membership.{ ByteCodec, TaggedCodec }
 import zio.stream.ZStream
 
 sealed trait Suspicion
@@ -11,16 +11,16 @@ sealed trait Suspicion
 object Suspicion {
 
   implicit def taggedRequests(
-                               implicit
-                               c4: ByteCodec[Suspect],
-                               c6: ByteCodec[Alive],
-                               c7: ByteCodec[Dead]
-                             ): TaggedCodec[Suspicion] =
+    implicit
+    c4: ByteCodec[Suspect],
+    c6: ByteCodec[Alive],
+    c7: ByteCodec[Dead]
+  ): TaggedCodec[Suspicion] =
     TaggedCodec.instance(
       {
-        case _: Suspect   => 33
-        case _: Alive    => 35
-        case _: Dead => 36
+        case _: Suspect => 33
+        case _: Alive   => 35
+        case _: Dead    => 36
       }, {
         case 33 => c4.asInstanceOf[ByteCodec[Suspicion]]
         case 35 => c6.asInstanceOf[ByteCodec[Suspicion]]
@@ -29,6 +29,7 @@ object Suspicion {
     )
 
   case class Suspect(nodeId: NodeId) extends Suspicion
+
   implicit val codecSuspect: ByteCodec[Suspect] =
     ByteCodec.fromReadWriter(macroRW[Suspect])
 

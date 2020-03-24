@@ -6,12 +6,12 @@ import zio.clock._
 import zio.console._
 import zio.duration._
 import zio.keeper.discovery.Discovery
-import zio.keeper.example.TestNode.PingPong.{Ping, Pong}
+import zio.keeper.example.TestNode.PingPong.{ Ping, Pong }
 import zio.keeper.membership.Membership.Membership
 import zio.keeper.membership._
 import zio.keeper.membership.swim.SWIM
 import zio.logging.Logging
-import zio.nio.core.{InetAddress, SocketAddress}
+import zio.nio.core.{ InetAddress, SocketAddress }
 import zio.random.Random
 
 object Node1 extends zio.ManagedApp {
@@ -62,19 +62,22 @@ object TestNode {
   }
 
   def start(port: Int, otherPorts: Set[Int]) =
-    environment(port, otherPorts).orDie.flatMap(env =>
-      (for {
-        membership0   <- ZManaged.access[Membership[PingPong]](_.get)
-        _     <- sleep(5.seconds).toManaged_
-        nodes <- membership0.nodes.toManaged_
-        _     <- ZIO.foreach(nodes)(n => membership0.send(Ping(1), n)).toManaged_
-        _ <- membership0.receive.foreach {
-          case (sender, message) =>
-            putStrLn("receive message: " + message) *> membership0.send(Pong(1), sender).ignore *> sleep(5.seconds)
-        }.toManaged_
-      } yield 0)
-      .provideCustomLayer(env)
-      .catchAll(ex => putStrLn("error: " + ex).toManaged_.as(1))
+    environment(port, otherPorts).orDie.flatMap(
+      env =>
+        (for {
+          membership0 <- ZManaged.access[Membership[PingPong]](_.get)
+          _           <- sleep(5.seconds).toManaged_
+          nodes       <- membership0.nodes.toManaged_
+          _           <- ZIO.foreach(nodes)(n => membership0.send(Ping(1), n)).toManaged_
+          _ <- membership0.receive.foreach {
+                case (sender, message) =>
+                  putStrLn("receive message: " + message) *> membership0.send(Pong(1), sender).ignore *> sleep(
+                    5.seconds
+                  )
+              }.toManaged_
+        } yield 0)
+          .provideCustomLayer(env)
+          .catchAll(ex => putStrLn("error: " + ex).toManaged_.as(1))
     )
 
   private def environment(port: Int, others: Set[Int]) =
@@ -94,4 +97,3 @@ object TestNode {
   def membership(port: Int) =
     SWIM.run[PingPong](port)
 }
-

@@ -2,12 +2,12 @@ package zio.keeper.membership.swim
 
 import upickle.default._
 import zio.keeper.membership.ByteCodec
-import zio.{Chunk, IO}
-
+import zio.{ Chunk, IO }
 
 sealed trait Message[+A] {
   self =>
   val message: A
+
   final def transformM[B](fn: A => IO[zio.keeper.Error, B]): IO[zio.keeper.Error, Message[B]] =
     self match {
       case d: Message.Direct[A] =>
@@ -26,7 +26,9 @@ sealed trait Message[+A] {
 }
 
 object Message {
+
   case class Direct[A](nodeId: NodeId, message: A) extends Message[A] {
+
     def reply[B <: A](message: B) =
       this.copy(message = message)
   }
@@ -50,4 +52,3 @@ object Message {
         arr => Chunk.fromArray(arr)
       )
 }
-

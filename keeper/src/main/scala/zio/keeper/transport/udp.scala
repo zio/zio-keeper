@@ -8,7 +8,7 @@ import zio.keeper.transport.Channel._
 import zio.logging.Logging.Logging
 import zio.logging._
 import zio.nio.channels._
-import zio.nio.core.{Buffer, SocketAddress}
+import zio.nio.core.{ Buffer, SocketAddress }
 
 object udp {
 

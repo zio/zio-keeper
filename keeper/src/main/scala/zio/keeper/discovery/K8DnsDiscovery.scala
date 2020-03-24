@@ -4,14 +4,14 @@ import java.net.UnknownHostException
 import java.util
 
 import javax.naming.directory.InitialDirContext
-import javax.naming.{Context, NamingException}
-import zio.{Cause, IO, UIO, URIO, ZIO}
+import javax.naming.{ Context, NamingException }
+import zio.{ Cause, IO, UIO, URIO, ZIO }
 import zio.duration.Duration
-import zio.keeper.{Error, ServiceDiscoveryError}
+import zio.keeper.{ Error, ServiceDiscoveryError }
 import zio.logging._
 import zio.logging.Logging
 import zio.logging.Logging.Logging
-import zio.nio.core.{InetAddress, InetSocketAddress, SocketAddress}
+import zio.nio.core.{ InetAddress, InetSocketAddress, SocketAddress }
 
 private trait K8DnsDiscovery extends Discovery.Service {
 

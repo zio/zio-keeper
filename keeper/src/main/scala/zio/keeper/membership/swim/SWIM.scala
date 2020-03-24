@@ -1,6 +1,5 @@
 package zio.keeper.membership.swim
 
-
 import izumi.reflect.Tags.Tag
 import zio._
 import zio.clock.Clock
@@ -9,18 +8,18 @@ import zio.keeper._
 import zio.keeper.discovery.Discovery
 import zio.keeper.membership.Membership.Membership
 import zio.keeper.membership.swim.protocols._
-import zio.keeper.membership.{Membership, MembershipEvent, NodeAddress, TaggedCodec}
+import zio.keeper.membership.{ Membership, MembershipEvent, NodeAddress, TaggedCodec }
 import zio.keeper.transport.Transport
 import zio.logging.Logging.Logging
 import zio.logging._
-import zio.stream.{Take, ZStream}
+import zio.stream.{ Take, ZStream }
 
 object SWIM {
 
   private def recoverErrors[R, E, A](stream: ZStream[R, E, A]): ZStream[R with Logging, Nothing, Take[E, A]] =
     ZStream
       .managed(stream.process)
-    .mapM(Take.fromPull)
+      .mapM(Take.fromPull)
 //      .map(
 //        pull =>
 //          pull.map(Some(_)).catchAll {
@@ -32,13 +31,11 @@ object SWIM {
 //      ).mapM(p => Take.fromPull)
 //      .flatMap(ZStream.fromPull)
 
-
   def run[B: TaggedCodec: Tag](
     port: Int
   ): ZLayer[Transport with Discovery with Logging with Clock, Error, Membership[B]] =
-    ZLayer.fromManaged(
-    for {
-      _   <- log.info("starting SWIM on port: " + port).toManaged_
+    ZLayer.fromManaged(for {
+      _ <- log.info("starting SWIM on port: " + port).toManaged_
 //      env <- ZManaged.environment[Transport with Discovery]
       messages <- Queue
                    .bounded[Take[Error, Message.Direct[Chunk[Byte]]]](1000)
@@ -117,22 +114,21 @@ object SWIM {
             )
     } yield new Membership.Service[B] {
 
+      override def events: ZStream[Any, Error, MembershipEvent] =
+        nodes0.events
 
-          override def events: ZStream[Any, Error, MembershipEvent] =
-            nodes0.events
+      override def localMember: NodeId = localNodeId
 
-          override def localMember: NodeId = localNodeId
+      override def nodes: ZIO[Any, Nothing, List[NodeId]] =
+        nodes0.onlyHealthyNodes.map(_.map(_._1))
 
-          override def nodes: ZIO[Any, Nothing, List[NodeId]] =
-            nodes0.onlyHealthyNodes.map(_.map(_._1))
+      override def receive: ZStream[Any, Error, (NodeId, B)] =
+        ZStream.fromQueue(userIn).collect {
+          case Message.Direct(n, m) => (n, m)
+        }
 
-          override def receive: ZStream[Any, Error, (NodeId, B)] =
-            ZStream.fromQueue(userIn).collect{
-              case Message.Direct(n, m) => (n, m)
-            }
-
-          override def send(data: B, receipt: NodeId): ZIO[Any, Error, Unit] =
-            userOut.offer(Message.Direct(receipt, data)).unit
+      override def send(data: B, receipt: NodeId): ZIO[Any, Error, Unit] =
+        userOut.offer(Message.Direct(receipt, data)).unit
 
     })
 }

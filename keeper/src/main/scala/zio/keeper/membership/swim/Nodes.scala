@@ -3,16 +3,16 @@ package zio.keeper.membership.swim
 import zio._
 import zio.keeper.ClusterError.UnknownNode
 import zio.keeper.Error
-import zio.keeper.membership.MembershipEvent.{Join, NodeStateChanged}
+import zio.keeper.membership.MembershipEvent.{ Join, NodeStateChanged }
 import zio.keeper.membership.swim.Nodes.NodeState
-import zio.keeper.membership.{ByteCodec, MembershipEvent, NodeAddress}
+import zio.keeper.membership.{ ByteCodec, MembershipEvent, NodeAddress }
 import zio.keeper.transport.Channel.Connection
 import zio.keeper.transport.Transport
 import zio.logging.Logging.Logging
 import zio.logging._
 import zio.nio.core.InetSocketAddress
 import zio.stm.TMap
-import zio.stream.{Take, ZStream}
+import zio.stream.{ Take, ZStream }
 
 /**
  * Nodes maintains state of the cluster.
@@ -26,14 +26,14 @@ import zio.stream.{Take, ZStream}
  * @param messages - queue with messages
  */
 class Nodes(
-             val local: NodeAddress,
-             localId: NodeId,
-             nodeChannels: TMap[NodeId, Connection],
-             nodeStates: TMap[NodeId, NodeState],
-             roundRobinOffset: Ref[Int],
-             transport: Transport.Service,
-             messages: Queue[Take[Error, Message.Direct[Chunk[Byte]]]],
-             eventsQueue: Queue[MembershipEvent]
+  val local: NodeAddress,
+  localId: NodeId,
+  nodeChannels: TMap[NodeId, Connection],
+  nodeStates: TMap[NodeId, NodeState],
+  roundRobinOffset: Ref[Int],
+  transport: Transport.Service,
+  messages: Queue[Take[Error, Message.Direct[Chunk[Byte]]]],
+  eventsQueue: Queue[MembershipEvent]
 ) {
 
   /**
@@ -53,7 +53,8 @@ class Nodes(
                .repeatEffect(
                  connection.read
                    .flatMap(messageCodec.fromChunk)
-                   .map(_.copy(nodeId = nodeId)))
+                   .map(_.copy(nodeId = nodeId))
+               )
                .into(messages)
                .fork
     } yield (nodeId, fork)

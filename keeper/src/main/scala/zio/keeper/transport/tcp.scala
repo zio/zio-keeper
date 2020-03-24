@@ -47,7 +47,8 @@ object tcp {
                                   // This is almost impossible here but still we need to handle it.
                                   ZIO.fail(ExceptionWrapper(new RuntimeException("cannot obtain address")))
                                 case Some(addr) =>
-                                  log.info(s"connection accepted from: $addr")
+                                  log
+                                    .info(s"connection accepted from: $addr")
                                     .flatMap(_ => createConnection(socket, addr, requestTimeout, close.unit))
                               }
                           }
