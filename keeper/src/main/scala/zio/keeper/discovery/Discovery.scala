@@ -1,25 +1,39 @@
 package zio.keeper.discovery
 
-import zio.ZIO
+import zio.{IO, Layer, UIO, ZLayer}
+import zio.duration.Duration
 import zio.keeper.Error
-import zio.nio.core.InetSocketAddress
-
-trait Discovery {
-  def discover: Discovery.Service[Any]
-}
+import zio.logging.Logging
+import zio.logging.Logging.Logging
+import zio.nio.core.{InetAddress, InetSocketAddress}
 
 object Discovery {
 
-  def staticList(addresses: Set[InetSocketAddress]): Discovery = new Discovery {
+  trait Service {
+    def discoverNodes: IO[Error, Set[InetSocketAddress]]
+  }
 
-    override def discover = new Service[Any] {
-
-      override def discoverNodes: ZIO[Any, Error, Set[InetSocketAddress]] =
-        ZIO.succeed(addresses)
+  def staticList(addresses: Set[InetSocketAddress]): Layer[Nothing, Discovery] =
+    ZLayer.succeed {
+      new Service {
+        final override val discoverNodes: UIO[Set[InetSocketAddress]] =
+          UIO.succeed(addresses)
+      }
     }
-  }
 
-  trait Service[R] {
-    def discoverNodes: ZIO[R, Error, Set[InetSocketAddress]]
-  }
+  /**
+   * This discovery strategy uses K8 service headless service dns to find other members of the cluster.
+   *
+   * Headless service is a service of type ClusterIP with the clusterIP property set to None.
+   *
+   */
+  def k8Dns(address: InetAddress, timeout: Duration, port: Int): ZLayer[Logging, Nothing, Discovery] =
+    ZLayer.fromFunction { logging0 =>
+      new K8DnsDiscovery {
+        val logging               = logging0
+        val serviceDns        = address
+        val serviceDnsTimeout = timeout
+        val servicePort       = port
+      }
+    }
 }

@@ -1,41 +1,41 @@
 //package zio.keeper.discovery
 //
 //import zio.keeper.membership.Member
-//import zio.{ Ref, UIO, ZIO }
-//
-//trait TestDiscovery extends Discovery {
-//  override def discover: TestDiscovery.Service[Any]
-//}
+//import zio.{ Has, IO, Layer, Ref, UIO, URIO, ZLayer }
 //
 //object TestDiscovery {
 //
-//  def test =
-//    Ref
-//      .make(Set.empty[Member])
-//      .map(
-//        ref =>
-//          new TestDiscovery {
-//            override def discover: Service[Any] = new Test(ref)
-//          }
-//      )
+//  type TestDiscovery = Has[Service]
 //
-//  trait Service[R] extends Discovery.Service[R] {
+//  def addMember(m: Member): URIO[TestDiscovery, Unit] =
+//    URIO.accessM[TestDiscovery](_.get.addMember(m))
+//
+//  def removeMember(m: Member): URIO[TestDiscovery, Unit] =
+//    URIO.accessM[TestDiscovery](_.get.removeMember(m))
+//
+//  def live: Layer[Nothing, Discovery with TestDiscovery] =
+//    ZLayer.fromEffectMany {
+//      Ref
+//        .make(Set.empty[Member])
+//        .map(new Test(_))
+//        .map(test => Has.allOf[Discovery.Service, Service](test, test))
+//    }
+//
+//  trait Service extends Discovery.Service {
 //    def addMember(m: Member): UIO[Unit]
-//
 //    def removeMember(m: Member): UIO[Unit]
 //  }
 //
-//  class Test(ref: Ref[Set[Member]]) extends Service[Any] {
+//  private class Test(ref: Ref[Set[Member]]) extends Service {
 //
-//    override val discoverNodes =
+//    val discoverNodes =
 //      for {
 //        members <- ref.get
-//        addrs   <- ZIO.collectAll(members.map(_.addr.socketAddress))
+//        addrs   <- IO.collectAll(members.map(_.addr.socketAddress))
 //      } yield addrs.toSet
 //
 //    def addMember(m: Member) = ref.update(_ + m).unit
 //
 //    def removeMember(m: Member) = ref.update(_ - m).unit
 //  }
-//
 //}

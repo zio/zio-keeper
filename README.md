@@ -2,14 +2,14 @@
 
 | CI                                       | Issues                                                      | Discord                                   |
 |------------------------------------------|-------------------------------------------------------------|-------------------------------------------|
-| [![CircleCI][badge-circle]][link-circle] | [![Is it maintained?][badge-maintenance]][link-maintenance] | [![Discord][badge-discord]][link-discord] |
+| [![CircleCI][Badge-Circle]][Link-Circle] | [![Is it maintained?][Badge-Maintenance]][Link-Maintenance] | [![Discord][Badge-Discord]][Link-Discord] |
 
 ZIO Keeper is a purely-functional, type-safe library for building distributed
 systems. 
 
 It provides numerous primitives for tackling the common problems in distributed
 computing (e.g. leader election, cluster forming etc.). Under the hood, the
-library is backed by [ZIO][link-zio] and [ZIO NIO][link-nio], profiting from their
+library is backed by [ZIO][Link-ZIO] and [ZIO NIO][Link-NIO], profiting from their
 performant, type and resource-safe APIs.
 
 - **Composable**. Design complex systems by composing the available building blocks.
@@ -25,12 +25,12 @@ To learn more about ZIO Keeper, check out the following references:
 - [Milestones](https://github.com/zio/zio-keeper/milestones?direction=asc&sort=title&state=open)
 - [Pull Requests](https://github.com/zio/zio-keeper/pulls)
 
-[badge-circle]: https://circleci.com/gh/zio/zio-keeper/tree/master.svg?style=svg
-[badge-discord]: https://img.shields.io/discord/629491597070827530?logo=discord
-[badge-maintenance]: http://isitmaintained.com/badge/resolution/zio/zio-keeper.svg
-[link-circle]: https://circleci.com/gh/zio/zio-keeper/tree/master
-[link-discord]: https://discord.gg/2ccFBr4
-[link-maintenance]: http://isitmaintained.com/project/zio/zio-keeper 
-[link-zio]: https://zio.dev
-[link-nio]: https://zio.github.io/zio-nio/
+[Badge-Circle]: https://circleci.com/gh/zio/zio-keeper/tree/master.svg?style=svg
+[Badge-Discord]: https://img.shields.io/discord/629491597070827530?logo=discord
+[Badge-Maintenance]: http://isitmaintained.com/badge/resolution/zio/zio-keeper.svg
+[Link-Circle]: https://circleci.com/gh/zio/zio-keeper/tree/master
+[Link-Discord]: https://discord.gg/2ccFBr4
+[Link-Maintenance]: http://isitmaintained.com/project/zio/zio-keeper 
+[Link-ZIO]: https://zio.dev
+[Link-NIO]: https://zio.github.io/zio-nio/
 

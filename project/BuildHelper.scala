@@ -14,8 +14,9 @@ object BuildHelper {
   final private val Scala212 = "2.12.10"
   final private val Scala213 = "2.13.1"
 
-  final val ZioVersion = "1.0.0-RC17"
-  final val NioVersion = "1.0.0-RC2+3-dc6764e1+20200217-0043"
+  final val ZioVersion        = "1.0.0-RC18-2"
+  final val NioVersion        = "1.0.0-RC5"
+  final val ZioLoggingVersion = "0.2.5"
 
   final private val CommonOpts =
     Seq(

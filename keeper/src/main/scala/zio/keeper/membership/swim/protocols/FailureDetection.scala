@@ -4,7 +4,7 @@ import upickle.default._
 import zio.duration._
 import zio.keeper.membership.swim.Nodes.NodeState
 import zio.keeper.membership.swim.{Message, NodeId, Nodes, Protocol}
-import zio.keeper.{ByteCodec, TaggedCodec}
+import zio.keeper.membership.{ByteCodec, TaggedCodec}
 import zio.stm.TMap
 import zio.stream.ZStream
 import zio.{Ref, Schedule, ZIO}
@@ -83,7 +83,7 @@ object FailureDetection {
 
         def withAck(onBehalf: Option[(NodeId, Long)], fn: Long => Message.Direct[FailureDetection]) =
           for {
-            ackId      <- ackId.update(_ + 1)
+            ackId      <- ackId.updateAndGet(_ + 1)
             nodeAndMsg = fn(ackId)
             _          <- acks.put(ackId, _Ack(nodeAndMsg.nodeId, onBehalf)).commit
           } yield nodeAndMsg

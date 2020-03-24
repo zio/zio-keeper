@@ -1,7 +1,7 @@
 package zio.keeper.membership.swim
 
 import upickle.default._
-import zio.keeper.ByteCodec
+import zio.keeper.membership.ByteCodec
 import zio.{Chunk, IO}
 
 

@@ -1,9 +1,12 @@
 package zio.keeper
-import zio.ZIO
+
+import zio.{ Has, ZIO }
 import zio.nio.core.InetSocketAddress
 
-package object discovery extends Discovery.Service[Discovery] {
+package object discovery {
 
-  override def discoverNodes: ZIO[Discovery, Error, Set[InetSocketAddress]] =
-    ZIO.accessM(_.discover.discoverNodes)
+  type Discovery = Has[Discovery.Service]
+
+  def discoverNodes: ZIO[Discovery, Error, Set[InetSocketAddress]] =
+    ZIO.accessM(_.get.discoverNodes)
 }

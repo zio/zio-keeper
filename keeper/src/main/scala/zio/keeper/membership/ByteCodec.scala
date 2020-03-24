@@ -1,8 +1,9 @@
-package zio.keeper
+package zio.keeper.membership
 
 import zio._
 import upickle.default._
-import zio.keeper.SerializationError.{ DeserializationTypeError, SerializationTypeError }
+import zio.keeper.SerializationError.DeserializationTypeError
+import zio.keeper.SerializationError.SerializationTypeError
 
 trait ByteCodec[A] {
   def fromChunk(chunk: Chunk[Byte]): IO[DeserializationTypeError, A]

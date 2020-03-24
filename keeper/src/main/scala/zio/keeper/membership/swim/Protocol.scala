@@ -1,7 +1,9 @@
 package zio.keeper.membership.swim
 
-import zio.keeper.{Error, TaggedCodec}
-import zio.logging.Logging
+import zio.keeper.Error
+import zio.keeper.membership.TaggedCodec
+import zio.logging.Logging.Logging
+import zio.logging._
 import zio.stream.ZStream
 import zio.{Chunk, ZIO}
 
@@ -54,17 +56,17 @@ trait Protocol[M] {
   /**
    * Adds logging to each received and sent message.
    */
-  val debug: ZIO[Logging[String], Error, Protocol[M]] =
-    ZIO.access[Logging[String]] { env =>
+  val debug: ZIO[Logging, Error, Protocol[M]] =
+    ZIO.access[Logging] { env =>
       new Protocol[M] {
         override def onMessage: Message.Direct[M] => ZIO[Any, Error, Option[Message[M]]] =
           msg =>
-            env.logging.info("Receive [" + msg + "]") *>
+            env.get.logger.log(LogLevel.Info)("Receive [" + msg + "]") *>
               self.onMessage(msg)
 
         override def produceMessages: ZStream[Any, Error, Message[M]] =
           self.produceMessages.tap { msg =>
-              env.logging.info("Sending [" + msg + "]")
+            env.get.logger.log(LogLevel.Info)("Sending [" + msg + "]")
           }
       }
     }

@@ -3,7 +3,7 @@ package zio.keeper.membership.swim.protocols
 import upickle.default.{readBinary, writeBinary}
 import zio.keeper.SerializationError._
 import zio.keeper.membership.swim.{Message, Protocol}
-import zio.keeper.{ByteCodec, TaggedCodec}
+import zio.keeper.membership.{ByteCodec, TaggedCodec}
 import zio.stream.ZStream
 import zio.{Chunk, IO, ZIO}
 

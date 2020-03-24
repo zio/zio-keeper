@@ -7,9 +7,9 @@ import zio.keeper.discovery.Discovery
 import zio.keeper.membership.NodeAddress
 import zio.keeper.membership.swim.Nodes.NodeState
 import zio.keeper.membership.swim.{Message, Nodes, Protocol}
-import zio.keeper.{ByteCodec, TaggedCodec}
-import zio.logging.Logging
-import zio.logging.slf4j._
+import zio.keeper.membership.{ByteCodec, TaggedCodec}
+import zio.logging.Logging.Logging
+import zio.logging._
 import zio.stream.ZStream
 
 sealed trait Initial
@@ -53,7 +53,7 @@ object Initial {
   }
 
   def protocol(nodes: Nodes) =
-    ZIO.accessM[Discovery with Logging[String]](
+    ZIO.accessM[Discovery with Logging](
       env =>
         Protocol[Initial](
           {
@@ -74,12 +74,12 @@ object Initial {
                 .changeNodeState(sender, NodeState.Healthy)
                 .as(None)
             case Message.Direct(sender, Reject(msg)) =>
-              logger.error("Rejected from cluster: " + msg) *>
+              log(LogLevel.Error)("Rejected from cluster: " + msg) *>
                 nodes.disconnect(sender).as(None)
           },
           ZStream
             .fromIterator(
-              env.discover.discoverNodes.map(_.iterator)
+              env.get.discoverNodes.map(_.iterator)
             )
             .mapM(
               node =>

@@ -1,27 +1,17 @@
 package zio.keeper.membership
 
-import zio.ZIO
-import zio.keeper.Error
 import zio.keeper.membership.swim.NodeId
-import zio.stream.ZStream
-
-trait Membership[B] {
-  def membership: Membership.Service[Any, B]
-}
+import zio.stream.Stream
+import zio.{Has, IO, UIO, ZIO}
 
 object Membership {
+  type Membership[A] = Has[Membership.Service[A]]
 
-  trait Service[R, B] {
-
-    def events: ZStream[R, Error, MembershipEvent]
-
+  trait Service[A] {
+    def events: Stream[zio.keeper.Error, MembershipEvent]
     def localMember: NodeId
-
-    def nodes: ZIO[R, Nothing, List[NodeId]]
-
-    def receive: ZStream[R, Error, (NodeId, B)]
-
-    def send(data: B, receipt: NodeId): ZIO[R, Error, Unit]
+    def nodes: UIO[List[NodeId]]
+    def receive: Stream[zio.keeper.Error, (NodeId, A)]
+    def send(data: A, receipt: NodeId): IO[zio.keeper.Error, Unit]
   }
-
 }

@@ -3,6 +3,7 @@ package zio.keeper
 import zio.Chunk
 import zio.duration.Duration
 import zio.keeper.membership.NodeAddress
+import zio.keeper.membership.swim.NodeId
 import zio.nio.core.SocketAddress
 
 sealed abstract class Error(val msg: String = "") {
@@ -43,7 +44,7 @@ sealed abstract class ClusterError(msg: String = "") extends Error(msg = msg)
 
 object ClusterError {
 
-  final case class SendError[A](nodeId: NodeAddress, message: A, error: TransportError)
+  final case class SendError[A](nodeId: NodeId, message: A, error: TransportError)
       extends ClusterError(msg = s"Failed to send message[$message] to $nodeId")
 
   final case class HandshakeError(addr: SocketAddress, error: Error)

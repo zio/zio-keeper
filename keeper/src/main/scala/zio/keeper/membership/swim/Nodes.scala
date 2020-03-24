@@ -2,16 +2,17 @@ package zio.keeper.membership.swim
 
 import zio._
 import zio.keeper.ClusterError.UnknownNode
-import zio.keeper.membership.MembershipEvent.{ Join, NodeStateChanged }
+import zio.keeper.Error
+import zio.keeper.membership.MembershipEvent.{Join, NodeStateChanged}
 import zio.keeper.membership.swim.Nodes.NodeState
-import zio.keeper.membership.{ MembershipEvent, NodeAddress }
-import zio.keeper.transport.{ Connection, Transport }
-import zio.keeper.{ ByteCodec, Error }
-import zio.logging.Logging
-import zio.logging.slf4j._
+import zio.keeper.membership.{ByteCodec, MembershipEvent, NodeAddress}
+import zio.keeper.transport.Channel.Connection
+import zio.keeper.transport.Transport
+import zio.logging.Logging.Logging
+import zio.logging._
 import zio.nio.core.InetSocketAddress
 import zio.stm.TMap
-import zio.stream.{ Take, ZStream }
+import zio.stream.{Take, ZStream}
 
 /**
  * Nodes maintains state of the cluster.
@@ -30,7 +31,7 @@ class Nodes(
              nodeChannels: TMap[NodeId, Connection],
              nodeStates: TMap[NodeId, NodeState],
              roundRobinOffset: Ref[Int],
-             transport: Transport.Service[Any],
+             transport: Transport.Service,
              messages: Queue[Take[Error, Message.Direct[Chunk[Byte]]]],
              eventsQueue: Queue[MembershipEvent]
 ) {
@@ -84,8 +85,8 @@ class Nodes(
    * @param addr - inet address
    * @return - NodeId of new member.
    */
-  final def connect(addr: InetSocketAddress): ZIO[Logging[String], Error, NodeId] =
-    logger.info("New connection: " + addr) *>
+  final def connect(addr: InetSocketAddress): ZIO[Logging, Error, NodeId] =
+    log.info("New connection: " + addr) *>
       Promise.make[Error, NodeId].flatMap { init =>
         transport
           .connect(addr)
@@ -102,7 +103,7 @@ class Nodes(
       }
 
   private def connection(id: NodeId): ZIO[Any, Error, Connection] =
-    nodeChannels.get(id).commit.get.asError(UnknownNode(id))
+    nodeChannels.get(id).commit.get.orElseFail(UnknownNode(id))
 
   /**
    * close connection and remove Node from cluster.
@@ -130,14 +131,14 @@ class Nodes(
   final val next: UIO[Option[NodeId]] /*(exclude: List[NodeId] = Nil)*/ =
     for {
       list      <- onlyHealthyNodes
-      nextIndex <- roundRobinOffset.update(old => if (old < list.size - 1) old + 1 else 0)
+      nextIndex <- roundRobinOffset.updateAndGet(old => if (old < list.size - 1) old + 1 else 0)
     } yield list.drop(nextIndex).headOption.map(_._1)
 
   /**
    * Node state for given NodeId.
    */
   def nodeState(id: NodeId): IO[Error, NodeState] =
-    nodeStates.get(id).commit.get.asError(UnknownNode(id))
+    nodeStates.get(id).commit.get.orElseFail(UnknownNode(id))
 
   /**
    * Lists members that are in healthy state.
@@ -204,7 +205,7 @@ object Nodes {
       nodeChannels,
       nodeStates,
       roundRobinOffset,
-      env.transport,
+      env.get,
       messages,
       events
     )
