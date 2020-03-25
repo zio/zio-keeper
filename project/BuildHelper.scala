@@ -16,7 +16,7 @@ object BuildHelper {
 
   final val ZioVersion        = "1.0.0-RC18-2"
   final val NioVersion        = "1.0.0-RC6"
-  final val ZioLoggingVersion = "0.2.4"
+  final val ZioLoggingVersion = "0.2.5"
 
   final private val CommonOpts =
     Seq(
