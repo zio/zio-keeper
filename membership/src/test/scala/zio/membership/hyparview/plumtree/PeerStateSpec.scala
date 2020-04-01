@@ -27,9 +27,9 @@ object PeerStateSpec extends KeeperSpec {
 
     val environment =
       (InMemoryTransport.make[Int]() ++ Logging.ignore ++ TRandom.live) >>>
-        (ZLayer.identity[Logging with TRandom with Transport[Int]] ++ TestPeerService.make(0)) >>>
+        (ZLayer.identity[Logging.Logging with TRandom with Transport[Int]] ++ TestPeerService.make(0)) >>>
         (ZLayer
-          .identity[Transport[Int] with Logging with TRandom with TestPeerService[Int] with PeerService[Int]] ++ PeerState
+          .identity[Transport[Int] with Logging.Logging with TRandom with TestPeerService[Int] with PeerService[Int]] ++ PeerState
           .live(2))
 
     suite("PeerState")(
@@ -38,7 +38,7 @@ object PeerStateSpec extends KeeperSpec {
           {
             for {
               _      <- TestPeerService.setPeers(peers).commit
-              result <- PeerState.live[Int](peers.size).build.use(_.get[PeerState.Service[Int]].eagerPushPeers.commit)
+              result <- PeerState.live[Int](peers.size).build.use(_.get.eagerPushPeers.commit)
             } yield assert(result)(hasSameElements(peers))
           }.provideCustomLayer(environment)
         }
@@ -48,7 +48,7 @@ object PeerStateSpec extends KeeperSpec {
           {
             for {
               _      <- TestPeerService.setPeers(peers).commit
-              result <- PeerState.live[Int](peers.size).build.use(_.get[PeerState.Service[Int]].lazyPushPeers.commit)
+              result <- PeerState.live[Int](peers.size).build.use(_.get.lazyPushPeers.commit)
             } yield assert(result)(isEmpty)
           }.provideCustomLayer(environment)
         }

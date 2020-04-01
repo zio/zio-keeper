@@ -9,7 +9,8 @@ import zio.membership.{ TransportError, uuid }
 import TransportError._
 import java.math.BigInteger
 
-import zio.logging.Logging
+import zio.logging.log
+import zio.logging.Logging.Logging
 import java.{ util => ju }
 
 import zio.membership.hyparview.ScopeIO
@@ -37,7 +38,7 @@ object tcp {
               size.toByte
             )
 
-            logging.logInfo(s"$id: Sending $size bytes") *>
+            log.info(s"$id: Sending $size bytes") *>
               writeLock
                 .withPermit {
                   channel
@@ -58,7 +59,7 @@ object tcp {
                                  c => ZIO.effect(new BigInteger(c.toArray).intValue())
                                )
                     data <- channel.read(length * 8)
-                    _    <- logging.logDebug(s"$id: Received $length bytes")
+                    _    <- log.debug(s"$id: Received $length bytes")
                   } yield data
                 }
               }
@@ -73,7 +74,7 @@ object tcp {
       override def connect(to: Address) = {
         for {
           id <- uuid.makeRandomUUID.toManaged_
-          _  <- logging.logDebug(s"$id: new outbound connection to $to").toManaged_
+          _  <- log.debug(s"$id: new outbound connection to $to").toManaged_
           connection <- AsynchronousSocketChannel().withEarlyRelease
                          .mapM {
                            case (close, channel) =>
@@ -109,7 +110,7 @@ object tcp {
                   case (channel, close) =>
                     for {
                       id         <- uuid.makeRandomUUID
-                      _          <- logging.logDebug(s"$id: new inbound connection")
+                      _          <- log.debug(s"$id: new inbound connection")
                       connection <- toConnection(channel, id, close.unit)
                     } yield connection
                 }
@@ -117,7 +118,7 @@ object tcp {
             }
         }
 
-        ZStream.fromEffect(logging.logInfo(s"Binding transport to $addr")) *> bindConnection
+        ZStream.fromEffect(log.info(s"Binding transport to $addr")) *> bindConnection
       }.provide(env)
     }
   }

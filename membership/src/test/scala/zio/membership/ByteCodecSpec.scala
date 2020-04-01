@@ -12,24 +12,24 @@ object ByteCodecSpec extends DefaultRunnableSpec {
 
   def spec =
     suite("ByteCodec")(
-      ByteCodecLaws[JoinReply[Int]](CustomGen.joinReply(Gen.anyInt)),
+      ByteCodecLaws[JoinReply[Int]](gens.joinReply(Gen.anyInt)),
       // initial protocol
-      ByteCodecLaws[Join[Int]](CustomGen.join(Gen.anyInt)),
-      ByteCodecLaws[ShuffleReply[Int]](CustomGen.shuffleReply(Gen.anyInt)),
-      ByteCodecLaws[Neighbor[Int]](CustomGen.neighbor(Gen.anyInt)),
-      ByteCodecLaws[ForwardJoinReply[Int]](CustomGen.forwardJoinReply(Gen.anyInt)),
+      ByteCodecLaws[Join[Int]](gens.join(Gen.anyInt)),
+      ByteCodecLaws[ShuffleReply[Int]](gens.shuffleReply(Gen.anyInt)),
+      ByteCodecLaws[Neighbor[Int]](gens.neighbor(Gen.anyInt)),
+      ByteCodecLaws[ForwardJoinReply[Int]](gens.forwardJoinReply(Gen.anyInt)),
       // neighborreply
-      ByteCodecLaws[Accept.type](CustomGen.accept),
-      ByteCodecLaws[Reject.type](CustomGen.reject),
+      ByteCodecLaws[Accept.type](gens.accept),
+      ByteCodecLaws[Reject.type](gens.reject),
       // active protocol
-      ByteCodecLaws[Disconnect[Int]](CustomGen.disconnect(Gen.anyInt)),
-      ByteCodecLaws[ForwardJoin[Int]](CustomGen.forwardJoin(Gen.anyInt)),
-      ByteCodecLaws[Shuffle[Int]](CustomGen.shuffle(Gen.anyInt)),
+      ByteCodecLaws[Disconnect[Int]](gens.disconnect(Gen.anyInt)),
+      ByteCodecLaws[ForwardJoin[Int]](gens.forwardJoin(Gen.anyInt)),
+      ByteCodecLaws[Shuffle[Int]](gens.shuffle(Gen.anyInt)),
       // plumtree messages
-      ByteCodecLaws[Prune.type](CustomGen.prune),
-      ByteCodecLaws[IHave](CustomGen.iHave),
-      ByteCodecLaws[Graft](CustomGen.graft),
-      ByteCodecLaws[UserMessage](CustomGen.userMessage),
-      ByteCodecLaws[Gossip](CustomGen.gossip)
+      ByteCodecLaws[Prune.type](gens.prune),
+      ByteCodecLaws[IHave](gens.iHave),
+      ByteCodecLaws[Graft](gens.graft),
+      ByteCodecLaws[UserMessage](gens.userMessage),
+      ByteCodecLaws[Gossip](gens.gossip)
     )
 }

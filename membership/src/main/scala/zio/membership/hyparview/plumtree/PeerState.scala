@@ -1,7 +1,8 @@
 package zio.membership.hyparview.plumtree
 
 import zio._
-import zio.logging.Logging
+import zio.logging.log
+import zio.logging.Logging.Logging
 import zio.stm._
 import zio.membership.hyparview.{ PeerService, TRandom }
 
@@ -37,6 +38,7 @@ object PeerState {
       for {
         activeView <- PeerService.getPeers[A]
         initial    <- TRandom.using(_.selectN(activeView.toList, initialEagerPeers).commit)
+        _          <- log.info(s"Creating PeerState with initial peers ${initial.mkString("[", ", ", "]")}")
         eagerPeers <- TSet.fromIterable(initial).commit
         lazyPeers  <- TSet.empty[A].commit
       } yield new Service[A] {

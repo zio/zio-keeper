@@ -6,7 +6,8 @@ import zio.membership.{ Error, SendError, TransportError }
 import zio.duration._
 import zio.clock.Clock
 import zio.stream.{ Stream, Take, ZStream }
-import zio.logging.Logging
+import zio.logging.Logging.Logging
+import zio.logging.log
 import zio.membership.hyparview.ActiveProtocol.PlumTreeProtocol
 import zio.keeper.membership.{ ByteCodec, TaggedCodec }
 
@@ -28,9 +29,9 @@ object HyParView {
       for {
         env <- ZManaged.environment[R1]
         cfg <- getConfig.toManaged_
-        _ <- logging
-              .logInfo(s"Starting HyParView on $localAddr with configuration:\n${cfg.prettyPrint}")
-              .toManaged(_ => logging.logInfo("Shut down HyParView"))
+        _ <- log
+              .info(s"Starting HyParView on $localAddr with configuration:\n${cfg.prettyPrint}")
+              .toManaged(_ => log.info("Shut down HyParView"))
         scope <- ScopeIO.make
         connections <- Queue
                         .bounded[(T, Chunk[Byte] => IO[TransportError, Unit], Stream[Error, Chunk[Byte]], UIO[_])](

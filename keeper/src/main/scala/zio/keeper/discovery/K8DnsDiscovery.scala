@@ -6,16 +6,15 @@ import java.util
 import javax.naming.directory.InitialDirContext
 import javax.naming.{ Context, NamingException }
 
-import zio.{ Cause, IO, UIO, URIO, ZIO }
+import zio.{ IO, UIO, ZIO }
 import zio.duration.Duration
 import zio.keeper.{ Error, ServiceDiscoveryError }
-import zio.logging
 import zio.logging.Logging
 import zio.nio.core.{ InetAddress, SocketAddress }
 
 private trait K8DnsDiscovery extends Discovery.Service {
 
-  val log: Logging
+  val log: Logging.Service
 
   val serviceDns: InetAddress
 
@@ -28,16 +27,15 @@ private trait K8DnsDiscovery extends Discovery.Service {
       addresses <- lookup(serviceDns, serviceDnsTimeout)
       nodes     <- IO.foreach(addresses)(addr => SocketAddress.inetSocketAddress(addr, servicePort))
     } yield nodes.toSet[SocketAddress]
-  }.catchAll { ex =>
-      logging.logError(Cause.fail(s"discovery strategy ${this.getClass.getSimpleName} failed.")) *>
-        IO.fail(ServiceDiscoveryError(ex.getMessage))
-    }
-    .provide(log)
+  }.catchAllCause { ex =>
+    log.logger.error(s"discovery strategy ${this.getClass.getSimpleName} failed.", ex) *>
+      IO.halt(ex.map(e => ServiceDiscoveryError(e.getMessage)))
+  }
 
   private def lookup(
     serviceDns: InetAddress,
     serviceDnsTimeout: Duration
-  ): ZIO[Logging, Exception, Set[InetAddress]] = {
+  ): IO[Exception, Set[InetAddress]] = {
     import scala.jdk.CollectionConverters._
 
     val env = new util.Hashtable[String, String]
@@ -61,8 +59,8 @@ private trait K8DnsDiscovery extends Discovery.Service {
     } yield addresses
   }
 
-  private def extractHost(server: String): URIO[Logging, String] =
-    logging.logDebug(s"k8 dns on response: $server") *>
+  private def extractHost(server: String): UIO[String] =
+    log.logger.debug(s"k8 dns on response: $server") *>
       UIO.effectTotal {
         val host = server.split(" ")(3)
         host.replaceAll("\\\\.$", "")

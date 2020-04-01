@@ -10,7 +10,7 @@ import zio.membership.hyparview._
 import zio.random.Random
 import zio.test._
 
-object CustomGen {
+object gens {
 
   val timeToLive: Gen[Random, TimeToLive] =
     Gen.anyInt.map(TimeToLive.apply)
@@ -60,7 +60,7 @@ object CustomGen {
     for {
       sender         <- gen
       originalSender <- gen
-      ttl            <- CustomGen.timeToLive
+      ttl            <- gens.timeToLive
     } yield ForwardJoin(sender, originalSender, ttl)
 
   def shuffle[R <: Random with Sized, A](gen: Gen[R, A]): Gen[R, Shuffle[A]] =
@@ -69,7 +69,7 @@ object CustomGen {
       originalSender <- gen
       activeNodes    <- Gen.listOf(gen)
       passiveNodes   <- Gen.listOf(gen)
-      ttl            <- CustomGen.timeToLive
+      ttl            <- gens.timeToLive
     } yield Shuffle(sender, originalSender, activeNodes, passiveNodes, ttl)
 
   def uuid: Gen[Any, UUID] =

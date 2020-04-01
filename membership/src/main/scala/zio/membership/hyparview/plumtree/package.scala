@@ -5,7 +5,8 @@ import java.util.UUID
 import zio._
 import zio.clock.Clock
 import zio.duration._
-import zio.logging._
+import zio.logging.log
+import zio.logging.Logging.Logging
 import zio.stream._
 import zio.membership.SendError
 
@@ -36,9 +37,8 @@ package object plumtree {
                       PeerService
                         .send(next, ActiveProtocol.Graft(uuid))
                         .foldCauseM(
-//                          e => logError(s"Failed to send Graft message for $uuid to $next", e),
-                          logError,
-                          _ => logDebug(s"Sent Graft message for $uuid to $next")
+                          log.error(s"Failed to send Graft message for $uuid to $next", _),
+                          _ => log.debug(s"Sent Graft message for $uuid to $next")
                         )
                   )
                 )
@@ -64,9 +64,8 @@ package object plumtree {
               PeerService
                 .send(target, ActiveProtocol.IHave(xs))
                 .foldCauseM(
-//                  e => logError("Failed sending IHave message", e),
-                  logError,
-                  _ => logDebug("Sent IHave message")
+                  log.error("Failed sending IHave message", _),
+                  _ => log.debug("Sent IHave message")
                 )
             case _ =>
               ZIO.unit

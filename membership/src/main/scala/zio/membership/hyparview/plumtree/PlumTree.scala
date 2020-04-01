@@ -7,6 +7,7 @@ import zio.clock.Clock
 import zio.duration._
 import zio.logging._
 import zio.keeper.membership.ByteCodec
+import zio.logging.Logging.Logging
 import zio.membership.hyparview.ActiveProtocol._
 import zio.membership.hyparview.PeerEvent._
 import zio.membership.{ Membership, SendError }
@@ -54,27 +55,26 @@ object PlumTree {
               PeerState.moveToLazyPeers(sender).commit
             case Graft(uuid) =>
               deduplication.get(uuid).commit.flatMap {
-                case None => logWarn(s"Expected to find message $uuid but didn't")
+                case None => log.warn(s"Expected to find message $uuid but didn't")
                 case Some(msg) =>
                   PeerService
                     .send(sender, msg)
                     .foldCauseM(
-//                      e => log.error(s"Failed replying to Graft message from $sender", e),
-                      logError,
-                      _ => logDebug(s"Replied to Graft message from $sender")
+                      log.error(s"Failed replying to Graft message from $sender", _),
+                      _ => log.debug(s"Replied to Graft message from $sender")
                     ) *> PeerState.addToEagerPeers(sender).commit
               }
             case IHave(uuids) =>
               def process(uuid: UUID) =
                 deduplication.contains(uuid).commit.flatMap {
                   case true =>
-                    logDebug(s"Received IHave for already received message $uuid")
+                    log.debug(s"Received IHave for already received message $uuid")
                   case false =>
                     onReceive(Right((uuid, sender)))
                 }
               ZIO.foreach_(uuids)(process)
             case UserMessage(payload) =>
-              userOut(payload) <* logDebug(s"Received userMessage from $sender")
+              userOut(payload) <* log.debug(s"Received userMessage from $sender")
             case m @ Gossip(uuid, payload) =>
               deduplication.add(uuid, m).commit.flatMap {
                 case true =>
@@ -88,9 +88,8 @@ object PlumTree {
                             PeerService
                               .send(peer, m)
                               .foldCauseM(
-//                                e => log.error(s"Failed sending message to $peer", e),
-                                logError,
-                                _ => logInfo(s"Sent Gossip to $peer")
+                                log.error(s"Failed sending message to $peer", _),
+                                _ => log.info(s"Sent Gossip to $peer")
                               )
                           }
 
@@ -104,9 +103,8 @@ object PlumTree {
                   PeerService
                     .send(sender, Prune)
                     .foldCauseM(
-//                      e => logError(s"Failed to send prune message to $sender", e),
-                      logError,
-                      _ => logDebug(s"Sent prune message to $sender")
+                      log.error(s"Failed to send prune message to $sender", _),
+                      _ => log.debug(s"Sent prune message to $sender")
                     )
               }
           }
@@ -116,9 +114,9 @@ object PlumTree {
         for {
           env          <- ZManaged.environment[TRandom with PeerService[T] with Logging with PeerState[T]]
           messages     <- BoundedTMap.make[UUID, Gossip](deduplicationBuffer).toManaged_
-          gossip       <- Queue.sliding[(T, UUID)](gossipBuffer).toManaged_
-          userMessages <- Queue.sliding[Chunk[Byte]](messagesBuffer).toManaged_
-          graftQueue   <- Queue.sliding[Either[UUID, (UUID, T)]](graftMessagesBuffer).toManaged_
+          gossip       <- Queue.sliding[(T, UUID)](gossipBuffer).toManaged(_.shutdown)
+          userMessages <- Queue.sliding[Chunk[Byte]](messagesBuffer).toManaged(_.shutdown)
+          graftQueue   <- Queue.sliding[Either[UUID, (UUID, T)]](graftMessagesBuffer).toManaged(_.shutdown)
           _            <- processEvents.toManaged_.fork
           _ <- processMessages(
                 messages,
@@ -152,9 +150,8 @@ object PlumTree {
                         PeerService
                           .send(peer, Gossip(uuid, chunk))
                           .foldCauseM(
-                            // e => log.error(s"Failed sending message to $peer", e),
-                            logError,
-                            _ => logInfo(s"Sent Gossip to $peer")
+                            log.error(s"Failed sending message to $peer", _),
+                            _ => log.info(s"Sent Gossip to $peer")
                           )
                       }
 
@@ -173,8 +170,7 @@ object PlumTree {
                 ByteCodec[A]
                   .fromChunk(chunk)
                   .foldCauseM(
-                    //                  e => log.error("Failed to read user message", e).as(None),
-                    logError(_).as(None),
+                    log.error("Failed to read user message", _).as(None),
                     m => ZIO.succeed(Some(m))
                   )
               }
