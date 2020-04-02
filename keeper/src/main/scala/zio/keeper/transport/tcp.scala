@@ -8,7 +8,8 @@ import zio.duration._
 import zio.keeper.TransportError
 import zio.keeper.TransportError._
 import zio.keeper.transport.Channel._
-import zio.logging._
+import zio.logging.Logging.Logging
+import zio.logging.log
 import zio.nio.channels._
 import zio.nio.core.SocketAddress
 
@@ -32,7 +33,7 @@ object tcp {
             .mapError(BindFailed(addr, _))
             .withEarlyRelease
             .onExit { _ =>
-              logInfo("shutting down server")
+              log.info("shutting down server")
             }
             .mapM {
               case (close, server) =>
@@ -46,7 +47,8 @@ object tcp {
                                   // This is almost impossible here but still we need to handle it.
                                   ZIO.fail(ExceptionWrapper(new RuntimeException("cannot obtain address")))
                                 case Some(addr) =>
-                                  logInfo(s"connection accepted from: $addr")
+                                  log
+                                    .info(s"connection accepted from: $addr")
                                     .flatMap(_ => createConnection(socket, addr, requestTimeout, close.unit))
                               }
                           }
@@ -72,7 +74,7 @@ object tcp {
                   .mapError(ExceptionWrapper)
                   .timeoutFail(ConnectionTimeout(to, connectionTimeout))(connectionTimeout)
                   .toManaged_
-            _ <- logInfo(s"transport connected to $to").toManaged_
+            _ <- log.info(s"transport connected to $to").toManaged_
             connection <- createConnection(
                            socketChannel,
                            to,

@@ -15,6 +15,21 @@ object ByteCodec {
   def apply[A](implicit ev: ByteCodec[A]): ByteCodec[A] =
     ev
 
+  def instance[A](
+    f: Chunk[Byte] => IO[DeserializationTypeError, A]
+  )(g: A => IO[SerializationTypeError, Chunk[Byte]]): ByteCodec[A] =
+    new ByteCodec[A] {
+      override def fromChunk(chunk: Chunk[Byte]): IO[DeserializationTypeError, A] = f(chunk)
+
+      override def toChunk(a: A): IO[SerializationTypeError, Chunk[Byte]] = g(a)
+    }
+
+  def fromChunk[A: ByteCodec](chunk: Chunk[Byte]): IO[DeserializationTypeError, A] =
+    ByteCodec[A].fromChunk(chunk)
+
+  def toChunk[A: ByteCodec](a: A): IO[SerializationTypeError, Chunk[Byte]] =
+    ByteCodec[A].toChunk(a)
+
   def fromReadWriter[A](rw: ReadWriter[A]): ByteCodec[A] =
     new ByteCodec[A] {
 

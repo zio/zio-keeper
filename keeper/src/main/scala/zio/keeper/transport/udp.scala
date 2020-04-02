@@ -5,7 +5,8 @@ import zio.clock.Clock
 import zio.keeper.TransportError
 import zio.keeper.TransportError._
 import zio.keeper.transport.Channel._
-import zio.logging._
+import zio.logging.Logging.Logging
+import zio.logging.log
 import zio.nio.channels._
 import zio.nio.core.{ Buffer, SocketAddress }
 
@@ -25,7 +26,7 @@ object udp {
             .mapError(BindFailed(addr, _))
             .withEarlyRelease
             .onExit { _ =>
-              logInfo("shutting down server")
+              log.info("shutting down server")
             }
             .mapM {
               case (close, server) =>

@@ -27,7 +27,7 @@ object SwimSpec extends DefaultRunnableSpec {
   }
 
   private def member(port: Int): ZIO[
-    Logging with Clock with Random with Transport with Discovery with TestDiscovery.TestDiscovery,
+    Logging.Logging with Clock with Random with Transport with Discovery with TestDiscovery.TestDiscovery,
     Error,
     MemberHolder
   ] =

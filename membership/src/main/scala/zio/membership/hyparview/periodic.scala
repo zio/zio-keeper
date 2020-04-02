@@ -3,7 +3,8 @@ package zio.membership.hyparview
 import zio._
 import zio.stm._
 import zio.membership.SendError
-import zio.logging.Logging
+import zio.logging.log
+import zio.logging.Logging.Logging
 
 object periodic {
 
@@ -46,7 +47,7 @@ object periodic {
           for {
             active  <- views.activeViewSize
             passive <- views.passiveViewSize
-          } yield logging.logInfo(
+          } yield log.info(
             s"HyParView: { addr: ${views.myself}, activeView: $active/${views.activeViewCapacity}, passiveView: $passive/${views.passiveViewCapacity} }"
           )
         }

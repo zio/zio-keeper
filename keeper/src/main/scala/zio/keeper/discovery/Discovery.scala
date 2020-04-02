@@ -26,10 +26,10 @@ object Discovery {
    * Headless service is a service of type ClusterIP with the clusterIP property set to None.
    *
    */
-  def k8Dns(address: InetAddress, timeout: Duration, port: Int): ZLayer[Logging, Nothing, Discovery] =
+  def k8Dns(address: InetAddress, timeout: Duration, port: Int): ZLayer[Logging.Logging, Nothing, Discovery] =
     ZLayer.fromFunction { logging =>
       new K8DnsDiscovery {
-        val log               = logging
+        val log               = logging.get[Logging.Service]
         val serviceDns        = address
         val serviceDnsTimeout = timeout
         val servicePort       = port
