@@ -109,16 +109,19 @@ object FailureDetection {
           },
           ZStream
             .repeatEffectWith(
-              log.info("start failure detection round."),
+              log.info("start failure detection round.") *> nodes.next,
               Schedule.spaced(protocolPeriod)
-            )
-            *>
-              ZStream
-                .fromEffect(nodes.next)
-                .collectM {
-                  case Some(next) =>
-                    withAck(None, ackId => Message.Direct(next, Ping(ackId)))
-                }
+            ).collectM {
+              case Some(next) =>
+                withAck(None, ackId => Message.Direct(next, Ping(ackId)))
+            }
+//            *>
+//              ZStream
+//                .fromEffect(nodes.next)
+//                .collectM {
+//                  case Some(next) =>
+//                    withAck(None, ackId => Message.Direct(next, Ping(ackId)))
+//                }
 //                .merge(
 //                  // Every protocol round check for outstanding acks
 //                  ZStream

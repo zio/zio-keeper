@@ -2,12 +2,12 @@ package zio.keeper.membership.swim
 
 import zio._
 import zio.keeper.Error
-import zio.keeper.membership.{ByteCodec, NodeAddress}
+import zio.keeper.membership.{ ByteCodec, NodeAddress }
 import zio.keeper.transport.Channel.Connection
 import zio.keeper.transport.Transport
 import zio.logging.Logging.Logging
 import zio.logging.log
-import zio.stream.{Take, ZStream}
+import zio.stream.{ Take, ZStream }
 
 class Messages(
   val local: NodeAddress,
@@ -27,7 +27,6 @@ class Messages(
           .flatMap(ByteCodec[Message.Direct[Chunk[Byte]]].fromChunk)
       )
       .flatMap(messages.offer)
-      .tap(_ => connection.close)
       .unit
 
   private def recoverErrors[R, E, A](stream: ZStream[R, E, A]): ZStream[R with Logging, Nothing, Take[E, Option[A]]] =
@@ -51,59 +50,65 @@ class Messages(
   def bind =
     for {
       localAddress <- local.socketAddress.toManaged_
-      _ <- log.info("bind to " + localAddress).toManaged_
-      logger <- ZManaged.environment[Logging]
+      _            <- log.info("bind to " + localAddress).toManaged_
+      logger       <- ZManaged.environment[Logging]
       _ <- transport
-        .bind(localAddress) { conn =>
-          read(conn).tap(_ => log.info("reading").provide(logger))
-            .catchAll(ex => log.error("fail to read", Cause.fail(ex)).unit.provide(logger))
-        }
+            .bind(localAddress) { conn =>
+              read(conn)
+                .tap(_ => log.info("reading").provide(logger))
+                .catchAll(ex => log.error("fail to read", Cause.fail(ex)).unit.provide(logger))
+            }
     } yield ()
 
   final def process(protocol: Protocol[Chunk[Byte]]) =
-      ZStream
-        .fromQueue(messages)
-        .collectM {
-          case Take.Value(msg) =>
-            Take.fromEffect(
-              protocol.onMessage(msg)
-            )
-        }
-        .merge(
-          protocol.produceMessages
-        )
-        .foreachWhile {
-          case msg: Message.Direct[Chunk[Byte]] =>
-            log.debug("sending") *>
-              send(msg)
-                .catchAll(e => log.error("error during send: " + e)) *> messages.isShutdown
-          case Take.Value(Some(msg: Message.Direct[Chunk[Byte]])) =>
-            log.debug("sending") *>
-              send(msg)
-                .catchAll(e => log.error("error during send: " + e)) *> messages.isShutdown
-          case Take.Fail(cause) =>
-            log.error("error: ", cause) *> messages.isShutdown
-          case Take.End =>
-            log.error("end") *> messages.isShutdown
-          case res => log.error("res: " + res) *> messages.isShutdown
-        }
-
-
+    ZStream
+      .fromQueue(messages)
+      .collectM {
+        case Take.Value(msg) =>
+          Take.fromEffect(
+            protocol.onMessage(msg)
+          )
+      }
+      .collectM {
+        case Take.Value(Some(msg: Message.Direct[Chunk[Byte]])) =>
+          log.debug("sending") *>
+            send(msg)
+              .catchAll(e => log.error("error during send: " + e))
+        case Take.Fail(cause) =>
+          log.error("error: ", cause)
+        case Take.End =>
+          log.error("end")
+        case res => log.error("res: " + res)
+      }
+      .runDrain
+      .fork *> recoverErrors(protocol.produceMessages)
+      .collectM {
+        case Take.Value(Some(msg: Message.Direct[Chunk[Byte]])) =>
+          log.debug("sending") *>
+            send(msg)
+              .catchAll(e => log.error("error during send: " + e))
+        case Take.Fail(cause) =>
+          log.error("error: ", cause)
+        case Take.End =>
+          log.error("end")
+        case res => log.error("res: " + res)
+      }
+      .runDrain
+      .fork
 }
 
 object Messages {
+
   def make(
-            local: NodeAddress,
-            udpTransport: Transport.Service
-          ) =
+    local: NodeAddress,
+    udpTransport: Transport.Service
+  ) =
     for {
       messageQueue <- Queue
-      .bounded[Take[Error, Message.Direct[Chunk[Byte]]]](1000)
-      .toManaged(_.shutdown)
+                       .bounded[Take[Error, Message.Direct[Chunk[Byte]]]](1000)
+                       .toManaged(_.shutdown)
       messages = new Messages(local, messageQueue, udpTransport)
-      _ <- messages.bind
-
+      _        <- messages.bind
     } yield messages
-
 
 }

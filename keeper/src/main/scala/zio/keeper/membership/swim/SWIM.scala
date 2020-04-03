@@ -22,9 +22,7 @@ object SWIM {
     ZLayer.fromManaged(for {
       _            <- log.info("starting SWIM on port: " + port).toManaged_
       udpTransport <- transport.udp.live(10240).build.map(_.get)
-      messages <- Queue
-                   .bounded[Take[Error, Message.Direct[Chunk[Byte]]]](1000)
-                   .toManaged(_.shutdown)
+
       userIn <- Queue
                  .bounded[Message.Direct[B]](1000)
                  .toManaged(_.shutdown)

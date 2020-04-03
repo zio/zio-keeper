@@ -95,13 +95,14 @@ object MessagesSpec extends DefaultRunnableSpec {
           dl <- protocol
           f <- messages.process(dl.binary).fork
           _ <- testTransport.simulateNewConnection(Message.Direct(testNodeAddress, PingPong.Ping(123): PingPong))
+          _ <- testTransport.simulateNewConnection(Message.Direct(testNodeAddress, PingPong.Ping(321): PingPong))
           m <- testTransport.sentMessages.mapM { case (_, chunk) =>
             ByteCodec[Message.Direct[Chunk[Byte]]].fromChunk(chunk.drop(4))
           }.mapM{
             case Message.Direct(_, chunk) => TaggedCodec.read[PingPong](chunk)
-          }.runHead
+          }.take(1).runCollect
         _ <- f.join
-        } yield assert(m)(isSome(equalTo(PingPong.Pong(123))))
+        } yield assert(m)(equalTo(List(PingPong.Pong(123))))
 
       }
     }
