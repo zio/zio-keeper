@@ -29,7 +29,7 @@ object Node2 extends zio.ManagedApp {
 object Node3 extends zio.ManagedApp {
 
   def run(args: List[String]) =
-    TestNode.start(5559, Set(5558))
+    TestNode.start(5559, Set(5557))
 }
 
 object TestNode {
@@ -59,6 +59,7 @@ object TestNode {
   }
 
   def start(port: Int, otherPorts: Set[Int]) =
+//   Fiber.dumpAll.flatMap(ZIO.foreach(_)(_.prettyPrintM.flatMap(putStrLn(_).provideLayer(ZEnv.live)))).delay(10.seconds).uninterruptible.fork.toManaged_ *>
     environment(port, otherPorts).orDie.flatMap(
       env =>
         (for {

@@ -48,7 +48,7 @@ trait Protocol[M] {
           .onMessage(msg)
           .orElse(other.onMessage(msg))
 
-    override def produceMessages: ZStream[Any, Error, Message[M]] =
+    override val produceMessages: ZStream[Any, Error, Message[M]] =
       self.produceMessages
         .merge(other.produceMessages)
   }
@@ -63,8 +63,9 @@ trait Protocol[M] {
           msg =>
             env.get.logger.log(LogLevel.Info)("Receive [" + msg + "]") *>
               self.onMessage(msg)
+                .tap(_.map(msg => env.get.logger.log(LogLevel.Info)("Sending [" + msg + "]")).getOrElse(ZIO.unit))
 
-        override def produceMessages: ZStream[Any, Error, Message[M]] =
+        override val produceMessages: ZStream[Any, Error, Message[M]] =
           self.produceMessages.tap { msg =>
             env.get.logger.log(LogLevel.Info)("Sending [" + msg + "]")
           }
@@ -79,7 +80,7 @@ trait Protocol[M] {
   /**
    * Stream of outgoing messages.
    */
-  def produceMessages: zio.stream.ZStream[Any, Error, Message[M]]
+  val produceMessages: zio.stream.ZStream[Any, Error, Message[M]]
 
 }
 

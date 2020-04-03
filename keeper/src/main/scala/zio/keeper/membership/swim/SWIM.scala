@@ -15,11 +15,6 @@ import zio.stream.{ Take, ZStream }
 
 object SWIM {
 
-  private def recoverErrors[R, E, A](stream: ZStream[R, E, A]): ZStream[R with Logging, Nothing, Take[E, Option[A]]] =
-    ZStream
-      .managed(stream.process)
-      .mapM(Take.fromPull(_))
-      .map(_.map(Some(_)))
 
   def run[B: TaggedCodec: Tag](
     port: Int
@@ -36,13 +31,13 @@ object SWIM {
       userOut <- Queue
                   .bounded[Message.Direct[B]](1000)
                   .toManaged(_.shutdown)
-      localNodeAddress <- NodeAddress.local(port).toManaged_
+      localNodeAddress = NodeAddress(Array(0,0,0,0), port)
 
-      nodes0 <- Nodes.make(localNodeAddress, messages, udpTransport).toManaged_
+      nodes0 <- Nodes.make.toManaged_
       _      <- nodes0.prettyPrint.flatMap(log.info(_)).repeat(Schedule.spaced(5.seconds)).toManaged_.fork
 
       initial <- Initial
-                  .protocol(nodes0)
+                  .protocol(nodes0, localNodeAddress)
                   .flatMap(_.debug)
                   .toManaged_
 
@@ -51,11 +46,11 @@ object SWIM {
                            .flatMap(_.debug)
                            .map(_.binary)
                            .toManaged_
-//      suspicion <- Suspicion
-//                    .protocol(nodes0)
-//                    .flatMap(_.debug)
-//                    .map(_.binary)
-//                    .toManaged_
+      suspicion <- Suspicion
+                    .protocol(nodes0)
+                    .flatMap(_.debug)
+                    .map(_.binary)
+                    .toManaged_
 
       user <- User
                .protocol[B](userIn, userOut)
@@ -64,43 +59,11 @@ object SWIM {
       deadLetter <- DeadLetter.protocol.toManaged_
       swim = initial.binary
         .compose(failureDetection)
-        //        .compose(suspicion)
-        .compose(user)
-        .compose(deadLetter)
-      _ <- ZStream
-            .fromQueue(messages)
-            .collectM {
-              case Take.Value(msg) =>
-                Take.fromEffect(
-                  swim.onMessage(msg)
-                )
-            }
-            .merge(
-              recoverErrors(
-                swim.produceMessages
-              )
-            )
-            .collectM {
-              case Take.Value(Some(msg: Message.Broadcast[Chunk[Byte]])) =>
-                ???
-              case Take.Value(Some(msg: Message.Direct[Chunk[Byte]])) =>
-                nodes0
-                  .send(msg)
-                  .catchAll(e => log.error("error during send: " + e))
-            }
-            .runDrain
-            .toManaged_
-            .fork
-
-      _ <- localNodeAddress.socketAddress.toManaged_
-            .flatMap(
-              localAddress =>
-                udpTransport.bind(localAddress) { conn =>
-                  nodes0
-                    .read(conn)
-                    .ignore
-                }
-            )
+//        .compose(suspicion)
+//        .compose(user)
+//        .compose(deadLetter)
+    messages0 <- Messages.make(localNodeAddress, udpTransport)
+    _ <- messages0.process(swim).toManaged_
     } yield new Membership.Service[B] {
 
       override def events: ZStream[Any, Error, MembershipEvent] =

@@ -53,7 +53,7 @@ object UdpClient extends zio.App {
     (for {
       localHost <- InetAddress.localHost.orDie
       publicAddress <- SocketAddress
-                        .inetSocketAddress(localHost, 8010)
+                        .inetSocketAddress(localHost, 5557)
                         .orDie
       _ <- putStrLn("connect to address: " + publicAddress.toString())
       _ <- connect(publicAddress)

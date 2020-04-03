@@ -8,6 +8,7 @@ import zio.keeper.membership.{ ByteCodec, NodeAddress, TaggedCodec }
 import zio.stm.TMap
 import zio.stream.ZStream
 import zio.{ Ref, Schedule, ZIO }
+import zio.logging._
 
 sealed trait FailureDetection
 
@@ -108,7 +109,7 @@ object FailureDetection {
           },
           ZStream
             .repeatEffectWith(
-              ZIO.unit,
+              log.info("start failure detection round."),
               Schedule.spaced(protocolPeriod)
             )
             *>
@@ -118,40 +119,40 @@ object FailureDetection {
                   case Some(next) =>
                     withAck(None, ackId => Message.Direct(next, Ping(ackId)))
                 }
-                .merge(
-                  // Every protocol round check for outstanding acks
-                  ZStream
-                    .fromIterator(
-                      acks.toList.commit.map(_.iterator)
-                    )
-                    .collectM {
-                      case (ackId, ack0) =>
-                        nodes
-                          .nodeState(ack0.target)
-                          .flatMap {
-                            case NodeState.Healthy =>
-                              nodes.next.flatMap {
-                                case Some(next) =>
-                                  nodes
-                                    .changeNodeState(ack0.target, NodeState.Unreachable)
-                                    .as(Some(Message.Direct(next, PingReq(ack0.target, ackId))))
-                                case None =>
-                                  nodes
-                                    .disconnect(ack0.target)
-                                    .as(None)
-                              }
-                            case NodeState.Unreachable =>
-                              ack(ackId) *>
-                                nodes
-                                  .changeNodeState(ack0.target, NodeState.Suspicion)
-                                  .as(None) //this should trigger suspicion mechanism
-                            case _ => ZIO.succeed(None)
-                          }
-                    }
-                    .collect {
-                      case Some(r) => r
-                    }
-                )
+//                .merge(
+//                  // Every protocol round check for outstanding acks
+//                  ZStream
+//                    .fromIterator(
+//                      acks.toList.commit.map(_.iterator)
+//                    )
+//                    .collectM {
+//                      case (ackId, ack0) =>
+//                        nodes
+//                          .nodeState(ack0.target)
+//                          .flatMap {
+//                            case NodeState.Healthy =>
+//                              nodes.next.flatMap {
+//                                case Some(next) =>
+//                                  nodes
+//                                    .changeNodeState(ack0.target, NodeState.Unreachable)
+//                                    .as(Some(Message.Direct(next, PingReq(ack0.target, ackId))))
+//                                case None =>
+//                                  nodes
+//                                    .disconnect(ack0.target)
+//                                    .as(None)
+//                              }
+//                            case NodeState.Unreachable =>
+//                              ack(ackId) *>
+//                                nodes
+//                                  .changeNodeState(ack0.target, NodeState.Suspicion)
+//                                  .as(None) //this should trigger suspicion mechanism
+//                            case _ => ZIO.succeed(None)
+//                          }
+//                    }
+//                    .collect {
+//                      case Some(r) => r
+//                    }
+//                )
         )
       }
     } yield protocol

@@ -52,25 +52,27 @@ object Initial {
       ByteCodec.fromReadWriter(macroRW[Reject])
   }
 
-  def protocol(nodes: Nodes) =
+  def protocol(nodes: Nodes, local: NodeAddress) =
     ZIO.accessM[Discovery with Logging](
       env =>
         Protocol[Initial](
           {
             case Message.Direct(_, Join(addr)) =>
+              nodes.addNode(addr) *>
               nodes
                 .changeNodeState(addr, NodeState.Healthy)
                 .as(Some(Message.Direct(addr, Accept)))
-                .catchSome {
-                  //this handle Join messages that was piggybacked
-                  case UnknownNode(_) =>
-                    nodes.addNode(addr) *>
-                      nodes
-                        .changeNodeState(addr, NodeState.Healthy)
-                        .as(None)
-                }
+//                .catchSome {
+//                  //this handle Join messages that was piggybacked
+//                  case UnknownNode(_) =>
+//                    nodes.addNode(addr) *>
+//                      nodes
+//                        .changeNodeState(addr, NodeState.Healthy)
+//                        .as(None)
+//                }
 
             case Message.Direct(sender, Accept) =>
+              nodes.addNode(sender) *>
               nodes
                 .changeNodeState(sender, NodeState.Healthy)
                 .as(None)
@@ -83,7 +85,10 @@ object Initial {
               env.get.discoverNodes.map(_.iterator)
             )
             .mapM(
-              node => NodeAddress(node).map(Message.Direct(_, Join(nodes.local)))
+              node => NodeAddress(node).map(
+                nodeAddress =>
+                  Message.Direct(nodeAddress, Join(local))
+              )
             )
         )
     )

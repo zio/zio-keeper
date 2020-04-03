@@ -3,46 +3,23 @@ package zio.keeper.membership.swim
 import zio._
 import zio.keeper.ClusterError.UnknownNode
 import zio.keeper.Error
-import zio.keeper.membership.MembershipEvent.{ Join, NodeStateChanged }
+import zio.keeper.membership.MembershipEvent.{Join, NodeStateChanged}
 import zio.keeper.membership.swim.Nodes.NodeState
-import zio.keeper.membership.{ ByteCodec, MembershipEvent, NodeAddress }
-import zio.keeper.transport.Channel.Connection
-import zio.keeper.transport.Transport
+import zio.keeper.membership.{MembershipEvent, NodeAddress}
 import zio.stm.TMap
-import zio.stream.{ Take, ZStream }
+import zio.stream.ZStream
 
 /**
  * Nodes maintains state of the cluster.
  *
- * @param local - local address
  * @param nodeStates - states
  * @param roundRobinOffset - offset for round-robin
- * @param transport - transport
- * @param messages - queue with messages
  */
 class Nodes(
-  val local: NodeAddress,
   nodeStates: TMap[NodeAddress, NodeState],
   roundRobinOffset: Ref[Int],
-  transport: Transport.Service,
-  messages: Queue[Take[Error, Message.Direct[Chunk[Byte]]]],
   eventsQueue: Queue[MembershipEvent]
 ) {
-
-  /**
-   * Reads message and put into queue.
-   * @param connection transport connection
-   */
-  final def read(connection: Connection): ZIO[Any, Error, Unit] =
-    Take
-      .fromEffect(
-        connection.read
-          .flatMap(ByteCodec[Message.Direct[Chunk[Byte]]].fromChunk)
-          .tap(msg => addNode(msg.node))
-      )
-      .flatMap(messages.offer)
-      .tap(_ => connection.close)
-      .unit
 
   def addNode(node: NodeAddress) =
     nodeStates
@@ -124,16 +101,6 @@ class Nodes(
           "]]"
     )
 
-  /**
-   * Sends message to target.
-   */
-  final def send(msg: Message.Direct[Chunk[Byte]]): IO[Error, Unit] =
-    ByteCodec[Message.Direct[Chunk[Byte]]]
-      .toChunk(msg.copy(node = local))
-      .flatMap(
-        chunk => msg.node.socketAddress.toManaged_.flatMap(transport.connect).use(_.send(chunk))
-      )
-
 }
 
 object Nodes {
@@ -147,21 +114,14 @@ object Nodes {
     case object Suspicion   extends NodeState
   }
 
-  def make(
-    local: NodeAddress,
-    messages: Queue[Take[Error, Message.Direct[Chunk[Byte]]]],
-    udpTransport: Transport.Service
-  ): ZIO[Any, Nothing, Nodes] =
+  def make: ZIO[Any, Nothing, Nodes] =
     for {
       nodeStates       <- TMap.empty[NodeAddress, NodeState].commit
       events           <- Queue.sliding[MembershipEvent](100)
       roundRobinOffset <- Ref.make(0)
     } yield new Nodes(
-      local,
       nodeStates,
       roundRobinOffset,
-      udpTransport,
-      messages,
       events
     )
 
