@@ -153,16 +153,14 @@ package object hyparview {
                             } else {
                               ZSTM.atomically {
                                 for {
-                                  full <- Views.isActiveViewFull
-                                  task <- if (full) {
+                                  task <- ZSTM.ifM(Views.isActiveViewFull)(
                                            Views
                                              .addToPassiveView(msg.sender)
                                              .as(
                                                reject
-                                             )
-                                         } else {
+                                             ),
                                            STM.succeed(accept)
-                                         }
+                                         )
                                 } yield task
                               }.flatten
                             }
@@ -223,7 +221,7 @@ package object hyparview {
           .repeatEffect[Views[T] with TRandom, Nothing, (T, Neighbor[T])] {
             ZSTM.atomically {
               for {
-                _              <- Views.isActiveViewFull.flatMap(full => STM.check(!full))
+                _              <- Views.isActiveViewFull.retryWhile(identity)
                 activeViewSize <- Views.activeViewSize
                 localAddr      <- Views.myself
                 nodeOpt        <- Views.passiveView.flatMap(xs => TRandom.selectOne(xs.toList))
