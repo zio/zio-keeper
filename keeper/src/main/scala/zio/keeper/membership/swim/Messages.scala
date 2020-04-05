@@ -11,7 +11,8 @@ import zio.stream.{ Take, ZStream }
 
 class Messages(
   val local: NodeAddress,
-  messages: Queue[Take[Error, Message.Direct[Chunk[Byte]]]],
+  messages: Queue[Take[Error, Message[Chunk[Byte]]]],
+  broadcast: Broadcast,
   transport: Transport.Service
 ) {
 
@@ -23,11 +24,14 @@ class Messages(
   final def read(connection: Connection): ZIO[Any, Error, Unit] =
     Take
       .fromEffect(
-        connection.read
-          .flatMap(ByteCodec[Message.Direct[Chunk[Byte]]].fromChunk)
-      )
-      .flatMap(messages.offer)
-      .unit
+        connection.read >>= ByteCodec[Message.WithPiggyback].fromChunk
+      ).flatMap {
+      case Take.Value(withPiggyback) =>
+        messages.offer(Take.Value(Message.Direct(withPiggyback.node, withPiggyback.message))) *>
+          ZIO.foreach(withPiggyback.gossip)(chunk => messages.offer(Take.Value(Message.Direct(withPiggyback.node, chunk))))
+      case other => messages.offer(other)
+    }.unit
+
 
   private def recoverErrors[R, E, A](stream: ZStream[R, E, A]): ZStream[R with Logging, Nothing, Take[E, Option[A]]] =
     stream.either.mapM(
@@ -41,11 +45,13 @@ class Messages(
    * Sends message to target.
    */
   final def send(msg: Message.Direct[Chunk[Byte]]): IO[Error, Unit] =
-    ByteCodec[Message.Direct[Chunk[Byte]]]
-      .toChunk(msg.copy(node = local))
-      .flatMap(
-        chunk => msg.node.socketAddress.toManaged_.flatMap(transport.connect).use(_.send(chunk))
-      )
+    for {
+      broadcast     <- broadcast.broadcast(msg.message.size)
+      withPiggyback = Message.WithPiggyback(local, msg.message, broadcast)
+      chunk         <- ByteCodec[Message.WithPiggyback].toChunk(withPiggyback)
+      nodeAddress   <- msg.node.socketAddress
+      _             <- transport.connect(nodeAddress).use(_.send(chunk))
+    } yield ()
 
   def bind =
     for {
@@ -64,13 +70,13 @@ class Messages(
     ZStream
       .fromQueue(messages)
       .collectM {
-        case Take.Value(msg) =>
+        case Take.Value(msg: Message.Direct[Chunk[Byte]]) =>
           Take.fromEffect(
             protocol.onMessage(msg)
           )
       }
       .collectM {
-        case Take.Value(Some(msg: Message.Direct[Chunk[Byte]])) =>
+        case Take.Value(msg: Message.Direct[Chunk[Byte]]) =>
           log.debug("sending") *>
             send(msg)
               .catchAll(e => log.error("error during send: " + e))
@@ -101,13 +107,14 @@ object Messages {
 
   def make(
     local: NodeAddress,
+    broadcast: Broadcast,
     udpTransport: Transport.Service
   ) =
     for {
       messageQueue <- Queue
-                       .bounded[Take[Error, Message.Direct[Chunk[Byte]]]](1000)
+                       .bounded[Take[Error, Message[Chunk[Byte]]]](1000)
                        .toManaged(_.shutdown)
-      messages = new Messages(local, messageQueue, udpTransport)
+      messages = new Messages(local, messageQueue, broadcast, udpTransport)
       _        <- messages.bind
     } yield messages
 

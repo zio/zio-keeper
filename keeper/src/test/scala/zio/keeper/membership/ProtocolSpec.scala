@@ -12,8 +12,8 @@ object ProtocolSpec extends DefaultRunnableSpec  {
   val protocolDefinition = Protocol[PingPong](
     {
       case Message.Direct(sender, Ping(i)) =>
-        ZIO.succeed(Option(Message.Direct(sender, Pong(i))))
-      case _ => ZIO.none
+        ZIO.succeed(Message.Direct(sender, Pong(i)))
+      case _ => ZIO.succeed(Message.NoResponse)
     },
     ZStream.empty
   )
@@ -25,7 +25,7 @@ object ProtocolSpec extends DefaultRunnableSpec  {
       for {
         protocol <- protocolDefinition
         response <- protocol.onMessage(Message.Direct(testNode, Ping(123)))
-      } yield assert(response)(isSome(equalTo(Message.Direct(testNode, Pong(123)))))
+      } yield assert(response)(equalTo(Message.Direct(testNode, Pong(123))))
     },
     testM("binary request response"){
       for {
@@ -33,10 +33,10 @@ object ProtocolSpec extends DefaultRunnableSpec  {
         binaryMessage <- TaggedCodec.write[PingPong](Ping(123))
         responseBinary <- protocol.onMessage(Message.Direct(testNode, binaryMessage))
         response <- responseBinary match {
-          case Some(Message.Direct(addr, chunk)) => TaggedCodec.read[PingPong](chunk).map(pp => Some(Message.Direct(addr, pp)))
-          case _ => ZIO.none
+          case Message.Direct(addr, chunk) => TaggedCodec.read[PingPong](chunk).map(pp => Message.Direct(addr, pp))
+          case _ => ZIO.succeed(Message.NoResponse)
         }
-      } yield assert(response)(isSome(equalTo(Message.Direct[PingPong](testNode, Pong(123)))))
+      } yield assert(response)(equalTo(Message.Direct[PingPong](testNode, Pong(123))))
     }
   )
 

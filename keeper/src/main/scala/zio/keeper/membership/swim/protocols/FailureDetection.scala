@@ -3,12 +3,12 @@ package zio.keeper.membership.swim.protocols
 import upickle.default._
 import zio.duration._
 import zio.keeper.membership.swim.Nodes.NodeState
-import zio.keeper.membership.swim.{ Message, NodeId, Nodes, Protocol }
-import zio.keeper.membership.{ ByteCodec, NodeAddress, TaggedCodec }
+import zio.keeper.membership.swim.{Message, Nodes, Protocol}
+import zio.keeper.membership.{ByteCodec, NodeAddress, TaggedCodec}
+import zio.logging._
 import zio.stm.TMap
 import zio.stream.ZStream
-import zio.{ Ref, Schedule, ZIO }
-import zio.logging._
+import zio.{Ref, Schedule, ZIO}
 
 sealed trait FailureDetection
 
@@ -91,37 +91,36 @@ object FailureDetection {
 
         Protocol[FailureDetection](
           {
-            case Message.Direct(_, Ack(ackId)) =>
-              ack(ackId).map {
+            case Message.Direct(sender, Ack(ackId)) =>
+              ack(ackId).flatMap {
                 case Some(_Ack(_, Some((node, originalAckId)))) =>
-                  Some(Message.Direct(node, Ack(originalAckId)))
+                  nodes.changeNodeState(sender, NodeState.Healthy).as(
+                    Message.Direct(node, Ack(originalAckId))
+                  )
                 case _ =>
-                  None
+                  ZIO.succeed(Message.NoResponse)
               }
             case Message.Direct(sender, Ping(ackId)) =>
-              ZIO.succeed(Some(Message.Direct(sender, Ack(ackId))))
+              ZIO.succeed(Message.Direct(sender, Ack(ackId)))
 
             case Message.Direct(sender, PingReq(to, originalAck)) =>
-              withAck(Some((sender, originalAck)), ackId => Message.Direct(to, Ping(ackId))).map(Some(_))
+              withAck(Some((sender, originalAck)), ackId => Message.Direct(to, Ping(ackId)))
 
             case Message.Direct(_, Nack(_)) =>
-              ZIO.succeed(None)
+              ZIO.succeed(Message.NoResponse)
           },
           ZStream
             .repeatEffectWith(
-              log.info("start failure detection round.") *> nodes.next,
+              log.info("start failure detection round."),
               Schedule.spaced(protocolPeriod)
-            ).collectM {
-              case Some(next) =>
-                withAck(None, ackId => Message.Direct(next, Ping(ackId)))
-            }
-//            *>
-//              ZStream
-//                .fromEffect(nodes.next)
-//                .collectM {
-//                  case Some(next) =>
-//                    withAck(None, ackId => Message.Direct(next, Ping(ackId)))
-//                }
+            )
+            *>
+              ZStream
+                .fromEffect(nodes.next)
+                .collectM {
+                  case Some(next) =>
+                    withAck(None, ackId => Message.Direct(next, Ping(ackId)))
+                }
 //                .merge(
 //                  // Every protocol round check for outstanding acks
 //                  ZStream
@@ -134,14 +133,14 @@ object FailureDetection {
 //                          .nodeState(ack0.target)
 //                          .flatMap {
 //                            case NodeState.Healthy =>
+//                              nodes
+//                                .changeNodeState(ack0.target, NodeState.Unreachable) *>
 //                              nodes.next.flatMap {
 //                                case Some(next) =>
-//                                  nodes
-//                                    .changeNodeState(ack0.target, NodeState.Unreachable)
-//                                    .as(Some(Message.Direct(next, PingReq(ack0.target, ackId))))
+//                                    ZIO.succeed(Some(Message.Direct(next, PingReq(ack0.target, ackId))))
 //                                case None =>
 //                                  nodes
-//                                    .disconnect(ack0.target)
+//                                    .changeNodeState(ack0.target, NodeState.Suspicion)
 //                                    .as(None)
 //                              }
 //                            case NodeState.Unreachable =>

@@ -61,7 +61,7 @@ object Initial {
               nodes.addNode(addr) *>
               nodes
                 .changeNodeState(addr, NodeState.Healthy)
-                .as(Some(Message.Direct(addr, Accept)))
+                .as(Message.Direct(addr, Accept))
 //                .catchSome {
 //                  //this handle Join messages that was piggybacked
 //                  case UnknownNode(_) =>
@@ -75,10 +75,10 @@ object Initial {
               nodes.addNode(sender) *>
               nodes
                 .changeNodeState(sender, NodeState.Healthy)
-                .as(None)
+                .as(Message.NoResponse)
             case Message.Direct(sender, Reject(msg)) =>
               log(LogLevel.Error)("Rejected from cluster: " + msg) *>
-                nodes.disconnect(sender).as(None)
+                nodes.disconnect(sender).as(Message.NoResponse)
           },
           ZStream
             .fromIterator(

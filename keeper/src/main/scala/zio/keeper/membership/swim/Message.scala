@@ -6,44 +6,34 @@ import zio.{ Chunk, IO }
 
 sealed trait Message[+A] {
   self =>
-  val message: A
-
-  final def transformM[B](fn: A => IO[zio.keeper.Error, B]): IO[zio.keeper.Error, Message[B]] =
-    self match {
-      case d: Message.Direct[A] =>
-        fn(message).map(b => d.copy(message = b))
-      case d: Message.Broadcast[A] =>
-        fn(message).map(b => d.copy(message = b))
-    }
-
-  final def transform[B](fn: A => B): Message[B] =
-    self match {
-      case d: Message.Direct[A] =>
-        d.copy(message = fn(message))
-      case d: Message.Broadcast[A] =>
-        d.copy(message = fn(message))
-    }
+//  val message: A
+//
+//  final def transformM[B](fn: A => IO[zio.keeper.Error, B]): IO[zio.keeper.Error, Message[B]] =
+//    self match {
+//      case d: Message.Direct[A] =>
+//        fn(message).map(b => d.copy(message = b))
+//      case d: Message.Broadcast[A] =>
+//        fn(message).map(b => d.copy(message = b))
+//    }
+//
+//  final def transform[B](fn: A => B): Message[B] =
+//    self match {
+//      case d: Message.Direct[A] =>
+//        d.copy(message = fn(message))
+//      case d: Message.Broadcast[A] =>
+//        d.copy(message = fn(message))
+//    }
 }
 
 object Message {
 
-  case class Direct[A](node: NodeAddress, message: A) extends Message[A] {
-
-    def reply[B <: A](message: B) =
-      this.copy(message = message)
-  }
+  case class Direct[A](node: NodeAddress, message: A) extends Message[A]
+  case class WithPiggyback(node: NodeAddress, message: Chunk[Byte], gossip: List[Chunk[Byte]]) extends Message[Chunk[Byte]]
   case class Broadcast[A](message: A) extends Message[A]
-//  def unapply[A](arg: Message[A]): Option[(NodeId, A)] =
-//    Some((arg.nodeId, arg.message))
-//
-//  def apply[A](nodeId: NodeId, message: A): Message[A] =
-//    new Message(nodeId, message, UUID.randomUUID())
-//
-//  def apply[A](nodeId: NodeId, message: A, correlationId: UUID): Message[A] =
-//    new Message(nodeId, message, correlationId)
+  case object NoResponse extends Message[Nothing]
 
-  implicit val codec: ByteCodec[Message.Direct[Chunk[Byte]]] =
-    ByteCodec.fromReadWriter(macroRW[Message.Direct[Chunk[Byte]]])
+  implicit val codec: ByteCodec[Message.WithPiggyback] =
+    ByteCodec.fromReadWriter(macroRW[Message.WithPiggyback])
 
   implicit val chunkRW: ReadWriter[Chunk[Byte]] =
     implicitly[ReadWriter[Array[Byte]]]

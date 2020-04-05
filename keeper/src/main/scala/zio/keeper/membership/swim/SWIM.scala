@@ -60,7 +60,7 @@ object SWIM {
 //        .compose(suspicion)
 //        .compose(user)
 //        .compose(deadLetter)
-    messages0 <- Messages.make(localNodeAddress, udpTransport)
+    messages0 <- Messages.make(localNodeAddress, new Broadcast,  udpTransport)
     _ <- messages0.process(swim).toManaged_
     } yield new Membership.Service[B] {
 

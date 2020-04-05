@@ -23,18 +23,23 @@ trait Protocol[M] {
   final def binary(implicit codec: TaggedCodec[M]): Protocol[Chunk[Byte]] =
     new Protocol[Chunk[Byte]] {
 
-      override val onMessage: Message.Direct[Chunk[Byte]] => ZIO[Any, Error, Option[Message[Chunk[Byte]]]] =
+      override val onMessage: Message.Direct[Chunk[Byte]] => ZIO[Any, Error, Message[Chunk[Byte]]] =
         msg =>
           TaggedCodec
             .read[M](msg.message)
             .flatMap(decoded => self.onMessage(Message.Direct(msg.node, decoded)))
             .flatMap {
-              case Some(res) => res.transformM(TaggedCodec.write[M]).map(Some(_))
-              case _         => ZIO.succeed(None)
+              case Message.Direct(node, message) => TaggedCodec.write[M](message).map(bytes => Message.Direct(node, bytes))
+              case Message.Broadcast(message) => TaggedCodec.write[M](message).map(bytes => Message.Broadcast(bytes))
+              case _         => ZIO.succeed(Message.NoResponse.asInstanceOf[Message[Chunk[Byte]]])
             }
 
       override val produceMessages: ZStream[Any, Error, Message[Chunk[Byte]]] =
-        self.produceMessages.mapM(_.transformM(TaggedCodec.write[M]))
+        self.produceMessages.mapM {
+          case Message.Direct(node, message) => TaggedCodec.write[M](message).map(bytes => Message.Direct(node, bytes))
+          case Message.Broadcast(message) => TaggedCodec.write[M](message).map(bytes => Message.Broadcast(bytes))
+          case Message.NoResponse => ZIO.succeed(Message.NoResponse.asInstanceOf[Message[Chunk[Byte]]])
+        }
     }
 
   /**
@@ -42,7 +47,7 @@ trait Protocol[M] {
    */
   final def compose(other: Protocol[M]): Protocol[M] = new Protocol[M] {
 
-    override def onMessage: Message.Direct[M] => ZIO[Any, Error, Option[Message[M]]] =
+    override def onMessage: Message.Direct[M] => ZIO[Any, Error, Message[M]] =
       msg =>
         self
           .onMessage(msg)
@@ -59,11 +64,11 @@ trait Protocol[M] {
   val debug: ZIO[Logging, Error, Protocol[M]] =
     ZIO.access[Logging] { env =>
       new Protocol[M] {
-        override def onMessage: Message.Direct[M] => ZIO[Any, Error, Option[Message[M]]] =
+        override def onMessage: Message.Direct[M] => ZIO[Any, Error, Message[M]] =
           msg =>
             env.get.logger.log(LogLevel.Info)("Receive [" + msg + "]") *>
               self.onMessage(msg)
-                .tap(_.map(msg => env.get.logger.log(LogLevel.Info)("Sending [" + msg + "]")).getOrElse(ZIO.unit))
+                .tap(msg => env.get.logger.log(LogLevel.Info)("Sending [" + msg + "]"))
 
         override val produceMessages: ZStream[Any, Error, Message[M]] =
           self.produceMessages.tap { msg =>
@@ -75,7 +80,7 @@ trait Protocol[M] {
   /**
    * Handler for incomming messages.
    */
-  def onMessage: Message.Direct[M] => ZIO[Any, Error, Option[Message[M]]]
+  def onMessage: Message.Direct[M] => ZIO[Any, Error, Message[M]]
 
   /**
    * Stream of outgoing messages.
@@ -89,14 +94,14 @@ object Protocol {
   class ProtocolBuilder[M] {
 
     def apply[R](
-      in: Message.Direct[M] => ZIO[R, Error, Option[Message[M]]],
+      in: Message.Direct[M] => ZIO[R, Error, Message[M]],
       out: zio.stream.ZStream[R, Error, Message[M]]
     ): ZIO[R, Error, Protocol[M]] =
       ZIO.access[R](
         env =>
           new Protocol[M] {
 
-            override val onMessage: Message.Direct[M] => ZIO[Any, Error, Option[Message[M]]] =
+            override val onMessage: Message.Direct[M] => ZIO[Any, Error, Message[M]] =
               msg => in(msg).provide(env)
 
             override val produceMessages: ZStream[Any, Error, Message[M]] =

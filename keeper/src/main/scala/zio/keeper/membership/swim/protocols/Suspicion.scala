@@ -2,8 +2,8 @@ package zio.keeper.membership.swim.protocols
 
 import upickle.default.macroRW
 import zio.ZIO
-import zio.keeper.membership.swim.{ NodeId, Nodes, Protocol }
-import zio.keeper.membership.{ ByteCodec, TaggedCodec }
+import zio.keeper.membership.swim.{Message, NodeId, Nodes, Protocol}
+import zio.keeper.membership.{ByteCodec, TaggedCodec}
 import zio.stream.ZStream
 
 sealed trait Suspicion
@@ -45,7 +45,7 @@ object Suspicion {
 
   def protocol(nodes: Nodes) = Protocol[Suspicion](
     {
-      case _ => ZIO.succeed(None)
+      case _ => ZIO.succeed(Message.NoResponse)
     },
     ZStream.empty
   )

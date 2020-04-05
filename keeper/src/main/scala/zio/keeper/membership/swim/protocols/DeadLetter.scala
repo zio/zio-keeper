@@ -1,7 +1,7 @@
 package zio.keeper.membership.swim.protocols
 
 import zio.Chunk
-import zio.keeper.membership.swim.Protocol
+import zio.keeper.membership.swim.{Message, Protocol}
 import zio.stream.ZStream
 import zio.logging._
 
@@ -11,7 +11,7 @@ object DeadLetter {
     Protocol[Chunk[Byte]].apply(
       { msg =>
         log(LogLevel.Error)("message [" + msg + "] in dead letter")
-          .as(None)
+          .as(Message.NoResponse)
       },
       ZStream.empty
     )
