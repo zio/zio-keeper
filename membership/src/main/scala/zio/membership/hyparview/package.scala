@@ -5,7 +5,7 @@ import java.util.UUID
 import zio._
 import zio.logging.Logging.Logging
 import zio.logging.log
-import zio.stm.STM
+import zio.stm.{ STM, ZSTM }
 import zio.stream._
 import zio.keeper.membership.{ ByteCodec, TaggedCodec }
 import zio.membership.hyparview.NeighborReply.{ Accept, Reject }
@@ -132,75 +132,66 @@ package object hyparview {
                         .tap(msg => log.debug(s"receiveInitialProtocol: $msg"))
                         .flatMap {
                           case msg: Neighbor[T] =>
-                            Views.using[T].apply {
-                              views =>
-                                val accept = for {
-                                  reply <- TaggedCodec
-                                            .write[NeighborReply](NeighborReply.Accept)
-                                            .mapError(e => zio.membership.SerializationError(e.msg))
-                                  _ <- log.debug(s"Accepting neighborhood request from ${msg.sender}")
-                                  _ <- con.send(reply)
-                                } yield Some(msg.sender)
+                            val accept = for {
+                              reply <- TaggedCodec
+                                        .write[NeighborReply](NeighborReply.Accept)
+                                        .mapError(e => zio.membership.SerializationError(e.msg))
+                              _ <- log.debug(s"Accepting neighborhood request from ${msg.sender}")
+                              _ <- con.send(reply)
+                            } yield Some(msg.sender)
 
-                                val reject = for {
-                                  reply <- TaggedCodec
-                                            .write[NeighborReply](NeighborReply.Reject)
-                                            .mapError(e => zio.membership.SerializationError(e.msg))
-                                  _ <- log.debug(s"Rejecting neighborhood request from ${msg.sender}")
-                                  _ <- con.send(reply)
-                                } yield None
+                            val reject = for {
+                              reply <- TaggedCodec
+                                        .write[NeighborReply](NeighborReply.Reject)
+                                        .mapError(e => zio.membership.SerializationError(e.msg))
+                              _ <- log.debug(s"Rejecting neighborhood request from ${msg.sender}")
+                              _ <- con.send(reply)
+                            } yield None
 
-                                if (msg.isHighPriority) {
-                                  accept
-                                } else {
-                                  STM.atomically {
-                                    for {
-                                      full <- views.isActiveViewFull
-                                      task <- if (full) {
-                                               views
-                                                 .addToPassiveView(msg.sender)
-                                                 .as(
-                                                   reject
-                                                 )
-                                             } else {
-                                               STM.succeed(accept)
-                                             }
-                                    } yield task
-                                  }.flatten
-                                }
+                            if (msg.isHighPriority) {
+                              accept
+                            } else {
+                              ZSTM.atomically {
+                                for {
+                                  task <- ZSTM.ifM(Views.isActiveViewFull)(
+                                           Views
+                                             .addToPassiveView(msg.sender)
+                                             .as(
+                                               reject
+                                             ),
+                                           STM.succeed(accept)
+                                         )
+                                } yield task
+                              }.flatten
                             }
                           case msg: Join[T] =>
-                            Views.using[T].apply {
-                              views =>
-                                for {
-                                  others <- views.activeView.map(_.filterNot(_ == msg.sender)).commit
-                                  config <- getConfig
-                                  _ <- ZIO
-                                        .foreachPar_(others)(
-                                          node =>
-                                            views
-                                              .send(
-                                                node,
-                                                ActiveProtocol
-                                                  .ForwardJoin(views.myself, msg.sender, TimeToLive(config.arwl))
-                                              )
-                                        )
-                                  reply <- ByteCodec
-                                            .toChunk(JoinReply(views.myself))
-                                            .mapError(e => zio.membership.SerializationError(e.msg))
-                                  _ <- con.send(reply)
-                                } yield Some(msg.sender)
-                            }
+                            for {
+                              others    <- Views.activeView.map(_.filterNot(_ == msg.sender)).commit
+                              localAddr <- Views.myself.commit
+                              config    <- getConfig
+                              _ <- ZIO
+                                    .foreachPar_(others)(
+                                      node =>
+                                        Views
+                                          .send(
+                                            node,
+                                            ActiveProtocol
+                                              .ForwardJoin(localAddr, msg.sender, TimeToLive(config.arwl))
+                                          )
+                                    )
+                              reply <- ByteCodec
+                                        .toChunk(JoinReply(localAddr))
+                                        .mapError(e => zio.membership.SerializationError(e.msg))
+                              _ <- con.send(reply)
+                            } yield Some(msg.sender)
                           case msg: ForwardJoinReply[T] =>
                             // nothing to do here, we just continue to the next protocol
                             ZIO.succeed(Some(msg.sender))
                           case msg: ShuffleReply[T] =>
-                            Views.using[T].apply { views =>
-                              views
-                                .addShuffledNodes(msg.sentOriginally.toSet, msg.passiveNodes.toSet)
-                                .commit
-                                .as(None)
-                            }
+                            Views
+                              .addShuffledNodes(msg.sentOriginally.toSet, msg.passiveNodes.toSet)
+                              .commit
+                              .as(None)
                         }
                     }
                   )
@@ -228,17 +219,14 @@ package object hyparview {
       .flatMap { preallocate =>
         ZStream
           .repeatEffect[Views[T] with TRandom, Nothing, (T, Neighbor[T])] {
-            Views.using[T].apply { views =>
-              TRandom.using { tRandom =>
-                STM.atomically {
-                  for {
-                    activeViewSize <- views.activeViewSize
-                    _              <- STM.check(activeViewSize < views.activeViewCapacity)
-                    nodeOpt        <- views.passiveView.flatMap(xs => tRandom.selectOne(xs.toList))
-                    node           <- nodeOpt.fold[STM[Nothing, T]](STM.retry)(STM.succeed(_))
-                  } yield (node, Neighbor(views.myself, activeViewSize <= 0))
-                }
-              }
+            ZSTM.atomically {
+              for {
+                _              <- Views.isActiveViewFull.retryWhile(identity)
+                activeViewSize <- Views.activeViewSize
+                localAddr      <- Views.myself
+                nodeOpt        <- Views.passiveView.flatMap(xs => TRandom.selectOne(xs.toList))
+                node           <- nodeOpt.fold[STM[Nothing, T]](STM.retry)(STM.succeed(_))
+              } yield (node, Neighbor(localAddr, activeViewSize <= 0))
             }
           }
           .mapM {
@@ -258,7 +246,7 @@ package object hyparview {
                 e =>
                   for {
                     _ <- log.error(s"Failed neighbor protocol with remote $node", e)
-                    _ <- Views.using[T].apply(_.removeFromPassiveView(node).commit)
+                    _ <- Views.removeFromPassiveView(node).commit
                   } yield None, {
                   case (None, release)                        => release.as(None)
                   case (Some((addr, send, receive)), release) => ZIO.succeed(Some((addr, send, receive, release)))
@@ -288,33 +276,27 @@ package object hyparview {
           end <- Promise.make[Unit, Nothing].toManaged_
           keepInPassive <- {
             for {
-              _ <- Views.using[T].apply { views =>
-                    views
-                      .addToActiveView(
-                        remote,
-                        msg =>
-                          (for {
-                            chunk <- TaggedCodec.write[ActiveProtocol[T]](msg).mapError(SendError.SerializationFailed)
-                            _     <- reply(chunk).mapError(SendError.TransportFailed)
-                            _     <- log.error(s"sendActiveProtocol: $remote -> $msg")
-                          } yield ())
-                            .tapCause(log.error(s"Failed sending message $msg to $remote", _))
-                            .provide(env),
-                        end.fail(()).unit
-                      )
-                      .commit
-                  }
+              _ <- Views
+                    .addToActiveView[T](
+                      remote,
+                      msg =>
+                        (for {
+                          chunk <- TaggedCodec.write[ActiveProtocol[T]](msg).mapError(SendError.SerializationFailed)
+                          _     <- reply(chunk).mapError(SendError.TransportFailed)
+                          _     <- log.error(s"sendActiveProtocol: $remote -> $msg")
+                        } yield ())
+                          .tapCause(log.error(s"Failed sending message $msg to $remote", _))
+                          .provide(env),
+                      end.fail(()).unit
+                    )
+                    .commit
               ref <- Ref.make(false)
             } yield ref
           }.toManaged(_.get.flatMap {
             case true =>
-              Views.using[T].apply { views =>
-                (views.removeFromActiveView(remote) *> views.addToPassiveView(remote)).commit
-              }
+              (Views.removeFromActiveView(remote) *> Views.addToPassiveView(remote)).commit
             case false =>
-              Views.using[T].apply { views =>
-                views.removeFromActiveView(remote).commit
-              }
+              Views.removeFromActiveView(remote).commit
           })
           config <- getConfig.toManaged_
         } yield (keepInPassive, end, config)
@@ -336,83 +318,80 @@ package object hyparview {
                   case msg: Disconnect[T] =>
                     keepInPassive.set(msg.alive).as((false, None))
                   case msg: ForwardJoin[T] =>
-                    Views.using[T].apply { views =>
-                      TRandom.using { tRandom =>
-                        val accept =
-                          log.info(s"Joining ${msg.originalSender} via ForwardJoin.") *>
-                            sendInitial(msg.originalSender, ForwardJoinReply(views.myself))
-
-                        val process = views.activeViewSize.map[(Int, Option[TimeToLive])]((_, msg.ttl.step)).flatMap {
-                          case (i, _) if i <= 1 =>
-                            STM.succeed(accept)
-                          case (_, None) =>
-                            STM.succeed(accept)
-                          case (_, Some(ttl)) =>
-                            for {
-                              list <- views.activeView
-                                       .map(_.filterNot(n => n == msg.sender || n == msg.originalSender).toList)
-                              _ <- if (ttl.count == config.prwl) views.addToPassiveView(msg.originalSender)
-                                  else STM.unit
-                              forward = msg.copy(sender = views.myself, ttl = ttl)
-                            } yield {
-                              def go(candidates: List[T]): UIO[Unit] =
-                                tRandom
-                                  .selectOne(candidates)
-                                  .commit
-                                  .flatMap(
-                                    _.fold(ZIO.unit)(
-                                      c => views.send(c, forward).orElse(go(candidates.filterNot(_ == c)))
-                                    )
-                                  )
-                              go(list)
-                            }
-                        }
-                        process.commit.flatten.as((true, None))
-                      }
-                    }
-                  case msg: Shuffle[T] =>
-                    Views.using[T].apply { views =>
-                      TRandom.using { tRandom =>
-                        views.activeViewSize
-                          .map[(Int, Option[TimeToLive])]((_, msg.ttl.step))
-                          .flatMap {
-                            case (0, _) | (_, None) =>
-                              for {
-                                passive   <- views.passiveView
-                                sentNodes = msg.activeNodes ++ msg.passiveNodes
-                                replyNodes <- tRandom.selectN(
-                                               passive.filterNot(_ == msg.originalSender).toList,
-                                               config.shuffleNActive + config.shuffleNPassive
-                                             )
-                                _ <- views.addAllToPassiveView(sentNodes)
-                              } yield sendInitial(
-                                msg.originalSender,
-                                ShuffleReply(replyNodes, sentNodes)
-                              ).ignore
-                            case (_, Some(ttl)) =>
-                              for {
-                                active <- views.activeView.map(
-                                           _.filterNot(n => n == msg.sender || n == msg.originalSender).toList
-                                         )
-                                forward = msg.copy(sender = views.myself, ttl = ttl)
-                              } yield {
-                                def go(candidates: List[T]): UIO[Unit] =
-                                  tRandom
-                                    .selectOne(candidates)
-                                    .commit
-                                    .flatMap(
-                                      _.fold(ZIO.unit)(
-                                        c => views.send(c, forward).orElse(go(candidates.filterNot(_ == c)))
-                                      )
-                                    )
-                                go(active)
-                              }
-                          }
+                    val accept =
+                      log.info(s"Joining ${msg.originalSender} via ForwardJoin.") *>
+                        Views
+                          .myself[T]
                           .commit
-                          .flatten
-                          .as((true, None))
-                      }
+                          .flatMap(localAddr => sendInitial(msg.originalSender, ForwardJoinReply(localAddr)))
+
+                    val process = Views.activeViewSize.map[(Int, Option[TimeToLive])]((_, msg.ttl.step)).flatMap {
+                      case (i, _) if i <= 1 =>
+                        STM.succeed(accept)
+                      case (_, None) =>
+                        STM.succeed(accept)
+                      case (_, Some(ttl)) =>
+                        for {
+                          list <- Views.activeView
+                                   .map(_.filterNot(n => n == msg.sender || n == msg.originalSender).toList)
+                          _ <- if (ttl.count == config.prwl) Views.addToPassiveView(msg.originalSender)
+                              else STM.unit
+                          localAddr <- Views.myself
+                          forward   = msg.copy(sender = localAddr, ttl = ttl)
+                        } yield {
+                          def go(candidates: List[T]): URIO[TRandom with Views[T], Unit] =
+                            TRandom
+                              .selectOne(candidates)
+                              .commit
+                              .flatMap(
+                                _.fold[URIO[TRandom with Views[T], Unit]](ZIO.unit)(
+                                  c => Views.send(c, forward).orElse(go(candidates.filterNot(_ == c)))
+                                )
+                              )
+                          go(list)
+                        }
                     }
+                    process.commit.flatten.as((true, None))
+                  case msg: Shuffle[T] =>
+                    Views.activeViewSize
+                      .map[(Int, Option[TimeToLive])]((_, msg.ttl.step))
+                      .flatMap {
+                        case (0, _) | (_, None) =>
+                          for {
+                            passive   <- Views.passiveView
+                            sentNodes = msg.activeNodes ++ msg.passiveNodes
+                            replyNodes <- TRandom.selectN(
+                                           passive.filterNot(_ == msg.originalSender).toList,
+                                           config.shuffleNActive + config.shuffleNPassive
+                                         )
+                            _ <- Views.addAllToPassiveView(sentNodes)
+                          } yield sendInitial(
+                            msg.originalSender,
+                            ShuffleReply(replyNodes, sentNodes)
+                          ).ignore
+                        case (_, Some(ttl)) =>
+                          for {
+                            active <- Views.activeView.map(
+                                       _.filterNot(n => n == msg.sender || n == msg.originalSender).toList
+                                     )
+                            localAddr <- Views.myself
+                            forward   = msg.copy(sender = localAddr, ttl = ttl)
+                          } yield {
+                            def go(candidates: List[T]): URIO[TRandom with Views[T], Unit] =
+                              TRandom
+                                .selectOne(candidates)
+                                .commit
+                                .flatMap(
+                                  _.fold[URIO[TRandom with Views[T], Unit]](ZIO.unit)(
+                                    c => Views.send(c, forward).orElse(go(candidates.filterNot(_ == c)))
+                                  )
+                                )
+                            go(active)
+                          }
+                      }
+                      .commit
+                      .flatten
+                      .as((true, None))
                   case m: PlumTreeProtocol =>
                     // message is handled by next layer
                     ZIO.succeed((true, Some(remote -> m)))

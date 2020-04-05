@@ -50,22 +50,63 @@ private object Views {
       } yield ViewState(activeViewSize, activeViewCapacity, passiveViewSize, passiveViewCapacity)
   }
 
-  final class Using[T: Tagged] {
+  def myself[T: Tagged]: ZSTM[Views[T], Nothing, T] =
+    ZSTM.access(_.get.myself)
 
-    def apply[R <: Views[T], E, A](f: Service[T] => ZIO[R, E, A]): ZIO[R, E, A] =
-      ZIO.environment[Views[T]].flatMap(r => f(r.get))
-  }
+  def activeViewCapacity[T: Tagged]: ZSTM[Views[T], Nothing, Int] =
+    ZSTM.access(_.get.activeViewCapacity)
 
-  final class UsingManaged[T: Tagged] {
+  def passiveViewCapacity[T: Tagged]: ZSTM[Views[T], Nothing, Int] =
+    ZSTM.access(_.get.passiveViewCapacity)
 
-    def apply[R <: Views[T], E, A](
-      f: Service[T] => ZManaged[R, E, A]
-    ): ZManaged[R, E, A] =
-      ZManaged.environment[Views[T]].flatMap(r => f(r.get))
-  }
+  def activeView[T: Tagged]: ZSTM[Views[T], Nothing, Set[T]] =
+    ZSTM.accessM(_.get.activeView)
 
-  def using[T: Tagged]: Using[T]               = new Using[T]
-  def usingManaged[T: Tagged]: UsingManaged[T] = new UsingManaged[T]
+  def passiveView[T: Tagged]: ZSTM[Views[T], Nothing, Set[T]] =
+    ZSTM.accessM(_.get.passiveView)
+
+  def activeViewSize[T: Tagged]: ZSTM[Views[T], Nothing, Int] =
+    ZSTM.accessM(_.get.activeViewSize)
+
+  def passiveViewSize[T: Tagged]: ZSTM[Views[T], Nothing, Int] =
+    ZSTM.accessM(_.get.passiveViewSize)
+
+  def isActiveViewFull[T: Tagged]: ZSTM[Views[T], Nothing, Boolean] =
+    ZSTM.accessM(_.get.isActiveViewFull)
+
+  def isPassiveViewFull[T: Tagged]: ZSTM[Views[T], Nothing, Boolean] =
+    ZSTM.accessM(_.get.isPassiveViewFull)
+
+  def addToActiveView[T: Tagged](
+    node: T,
+    send: ActiveProtocol[T] => IO[SendError, Unit],
+    disconnect: UIO[Unit]
+  ): ZSTM[Views[T], Unit, Unit] =
+    ZSTM.accessM(_.get.addToActiveView(node, send, disconnect))
+
+  def addToPassiveView[T: Tagged](node: T): ZSTM[Views[T], Nothing, Unit] =
+    ZSTM.accessM(_.get.addToPassiveView(node))
+
+  def addAllToPassiveView[T: Tagged](nodes: List[T]): ZSTM[Views[T], Nothing, Unit] =
+    ZSTM.accessM(_.get.addAllToPassiveView(nodes))
+
+  def removeFromActiveView[T: Tagged](node: T): ZSTM[Views[T], Nothing, Unit] =
+    ZSTM.accessM(_.get.removeFromActiveView(node))
+
+  def removeFromPassiveView[T: Tagged](node: T): ZSTM[Views[T], Nothing, Unit] =
+    ZSTM.accessM(_.get.removeFromPassiveView(node))
+
+  def addShuffledNodes[T: Tagged](
+    sentOriginally: Set[T],
+    replied: Set[T]
+  ): ZSTM[Views[T], Nothing, Unit] =
+    ZSTM.accessM(_.get.addShuffledNodes(sentOriginally, replied))
+
+  def viewState[T: Tagged]: ZSTM[Views[T], Nothing, ViewState] =
+    ZSTM.accessM(_.get.viewState)
+
+  def send[T: Tagged](to: T, msg: ActiveProtocol[T]): ZIO[Views[T], SendError, Unit] =
+    ZIO.accessM(_.get.send(to, msg))
 
   def fromConfig[T: Tagged](
     localAddr: T
@@ -93,7 +134,7 @@ private object Views {
     for {
       activeView0  <- TMap.empty[T, (ActiveProtocol[T] => IO[SendError, Unit], UIO[Unit])].commit
       passiveView0 <- TSet.empty[T].commit
-      tRandom      <- URIO.environment[TRandom]
+      tRandom      <- URIO.environment[TRandom].map(_.get)
     } yield new Service[T] {
 
       val myself: T =
@@ -199,7 +240,7 @@ private object Views {
       private val dropOneFromPassive: STM[Nothing, Unit] =
         for {
           list    <- passiveView0.toList
-          dropped <- tRandom.get.selectOne(list)
+          dropped <- tRandom.selectOne(list)
           _       <- STM.foreach(dropped)(passiveView0.delete(_))
         } yield ()
     }
