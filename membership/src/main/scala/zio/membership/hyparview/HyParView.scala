@@ -32,7 +32,7 @@ object HyParView {
         _ <- log
               .info(s"Starting HyParView on $localAddr with configuration:\n${cfg.prettyPrint}")
               .toManaged(_ => log.info("Shut down HyParView"))
-        scope <- ScopeIO.make
+        scope <- ZManaged.scope
         connections <- Queue
                         .bounded[(T, Chunk[Byte] => IO[TransportError, Unit], Stream[Error, Chunk[Byte]], UIO[_])](
                           cfg.connectionBuffer
