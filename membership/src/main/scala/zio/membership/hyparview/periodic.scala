@@ -2,7 +2,6 @@ package zio.membership.hyparview
 
 import zio._
 import zio.stm._
-import zio.membership.SendError
 import zio.logging.log
 import zio.logging.Logging.Logging
 
