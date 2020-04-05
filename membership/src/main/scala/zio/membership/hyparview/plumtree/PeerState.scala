@@ -37,7 +37,7 @@ object PeerState {
     ZLayer.fromEffect {
       for {
         activeView <- PeerService.getPeers[A]
-        initial    <- TRandom.using(_.selectN(activeView.toList, initialEagerPeers).commit)
+        initial    <- TRandom.selectN(activeView.toList, initialEagerPeers).commit
         _          <- log.info(s"Creating PeerState with initial peers ${initial.mkString("[", ", ", "]")}")
         eagerPeers <- TSet.fromIterable(initial).commit
         lazyPeers  <- TSet.empty[A].commit

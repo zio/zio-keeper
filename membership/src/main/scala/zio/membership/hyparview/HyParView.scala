@@ -67,21 +67,16 @@ object HyParView {
               .repeat(Schedule.spaced(2.seconds))
               .toManaged_
               .fork
-        _ <- Views
-              .using[T]
-              .apply { views =>
-                ZIO.foreach_(seedNodes)(sendInitial0(_, InitialProtocol.Join(views.myself)))
-              }
-              .toManaged_
+        _ <- ZIO.foreach_(seedNodes)(sendInitial0(_, InitialProtocol.Join(localAddr))).toManaged_
       } yield new PeerService.Service[T] {
         override val identity: ZIO[Any, Nothing, T] =
           ZIO.succeed(localAddr)
 
         override val getPeers: IO[Nothing, Set[T]] =
-          Views.using[T].apply(_.activeView.commit).provide(env)
+          Views.activeView.commit.provide(env)
 
         override def send(to: T, message: PlumTreeProtocol): IO[SendError, Unit] =
-          Views.using[T].apply(_.send(to, message)).provide(env)
+          Views.send(to, message).provide(env)
 
         override val receive: ZStream[Any, Error, (T, PlumTreeProtocol)] =
           ZStream.fromQueue(plumTreeMessages).unTake
