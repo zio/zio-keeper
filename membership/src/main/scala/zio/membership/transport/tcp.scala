@@ -13,8 +13,6 @@ import zio.logging.log
 import zio.logging.Logging.Logging
 import java.{ util => ju }
 
-import zio.membership.hyparview.ScopeIO
-
 object tcp {
 
   def make(
@@ -103,7 +101,7 @@ object tcp {
 
         val bindConnection = bind.flatMap {
           case (server, lock) =>
-            ZStream.managed(ScopeIO.make).flatMap { allocate =>
+            ZStream.managed(ZManaged.scope).flatMap { allocate =>
               ZStream
                 .repeatEffect(allocate(lock.withPermitManaged *> server.accept))
                 .mapM {

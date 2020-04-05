@@ -70,7 +70,7 @@ package object hyparview {
   private[hyparview] def sendInitial[T: Tagged](
     to: T,
     msg: InitialMessage[T],
-    allocate: ScopeIO,
+    allocate: ZManaged.Scope,
     connections: Enqueue[(T, Chunk[Byte] => IO[TransportError, Unit], Stream[Error, Chunk[Byte]], UIO[_])]
   )(
     implicit
@@ -117,7 +117,7 @@ package object hyparview {
     ev1: TaggedCodec[InitialProtocol[T]],
     ev2: ByteCodec[JoinReply[T]]
   ): ZStream[R, E, (T, Chunk[Byte] => IO[TransportError, Unit], Stream[Error, Chunk[Byte]], UIO[_])] =
-    ZStream.managed(ScopeIO.make).flatMap { allocate =>
+    ZStream.managed(ZManaged.scope).flatMap { allocate =>
       stream
         .mapMPar(concurrentConnections) { con =>
           allocate {
@@ -213,9 +213,7 @@ package object hyparview {
     implicit ev: TaggedCodec[InitialProtocol[T]]
   ): ZStream[Views[T] with Logging with Transport[T] with Views[T] with TRandom, Nothing, (T, Chunk[Byte] => ZIO[Any, TransportError, Unit], Stream[Error, Chunk[Byte]], UIO[_])] =
     ZStream
-      .managed(
-        ScopeIO.make
-      )
+      .managed(ZManaged.scope)
       .flatMap { preallocate =>
         ZStream
           .repeatEffect[Views[T] with TRandom, Nothing, (T, Neighbor[T])] {
