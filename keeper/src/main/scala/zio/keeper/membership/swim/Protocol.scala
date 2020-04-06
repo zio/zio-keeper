@@ -28,18 +28,10 @@ trait Protocol[M] {
           TaggedCodec
             .read[M](msg.message)
             .flatMap(decoded => self.onMessage(Message.Direct(msg.node, decoded)))
-            .flatMap {
-              case Message.Direct(node, message) => TaggedCodec.write[M](message).map(bytes => Message.Direct(node, bytes))
-              case Message.Broadcast(message) => TaggedCodec.write[M](message).map(bytes => Message.Broadcast(bytes))
-              case _         => ZIO.succeed(Message.NoResponse.asInstanceOf[Message[Chunk[Byte]]])
-            }
+            .flatMap(_.transformM(TaggedCodec.write[M]))
 
       override val produceMessages: ZStream[Any, Error, Message[Chunk[Byte]]] =
-        self.produceMessages.mapM {
-          case Message.Direct(node, message) => TaggedCodec.write[M](message).map(bytes => Message.Direct(node, bytes))
-          case Message.Broadcast(message) => TaggedCodec.write[M](message).map(bytes => Message.Broadcast(bytes))
-          case Message.NoResponse => ZIO.succeed(Message.NoResponse.asInstanceOf[Message[Chunk[Byte]]])
-        }
+        self.produceMessages.mapM (_.transformM(TaggedCodec.write[M]))
     }
 
   /**

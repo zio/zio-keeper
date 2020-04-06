@@ -80,6 +80,14 @@ class Messages(
           log.debug("sending") *>
             send(msg)
               .catchAll(e => log.error("error during send: " + e))
+        case Take.Value(Message.Batch(first, second, rest))  =>
+          ZIO.foreach(first :: second :: rest :: Nil){
+            case msg@Message.Broadcast(_) => broadcast.add(msg)
+            case msg@Message.Direct(_, _) =>
+              log.debug("sending with broadcast") *>
+              send(msg)
+              .catchAll(e => log.error("error during send: " + e))
+          }
         case Take.Fail(cause) =>
           log.error("error: ", cause)
         case Take.End =>

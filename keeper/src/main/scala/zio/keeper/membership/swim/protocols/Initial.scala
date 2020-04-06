@@ -57,11 +57,11 @@ object Initial {
       env =>
         Protocol[Initial](
           {
-            case Message.Direct(_, Join(addr)) =>
+            case Message.Direct(_, join@Join(addr)) =>
               nodes.addNode(addr) *>
               nodes
                 .changeNodeState(addr, NodeState.Healthy)
-                .as(Message.Direct(addr, Accept))
+                .as(Message.Batch[Initial](Message.Direct(addr, Accept), Message.Broadcast(join)))
 //                .catchSome {
 //                  //this handle Join messages that was piggybacked
 //                  case UnknownNode(_) =>
