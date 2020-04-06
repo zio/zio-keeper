@@ -80,9 +80,10 @@ class Messages(
           log.debug("sending") *>
             send(msg)
               .catchAll(e => log.error("error during send: " + e))
-        case Take.Value(Message.Batch(first, second, rest))  =>
-          ZIO.foreach(first :: second :: rest :: Nil){
-            case msg@Message.Broadcast(_) => broadcast.add(msg)
+        case Take.Value(msg: Message.Batch[Chunk[Byte]])  =>
+          ZIO.foreach(msg.first :: msg.second :: Nil){
+            case msg@Message.Broadcast(_) =>
+              broadcast.add(msg)
             case msg@Message.Direct(_, _) =>
               log.debug("sending with broadcast") *>
               send(msg)

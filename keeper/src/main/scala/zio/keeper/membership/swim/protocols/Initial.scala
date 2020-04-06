@@ -56,20 +56,15 @@ object Initial {
       env =>
         Protocol[Initial](
           {
+            case Message.Direct(_, Join(addr)) if addr == local =>
+              ZIO.succeed(Message.NoResponse)
             case Message.Direct(_, join@Join(addr)) =>
-              nodes.addNode(addr) *>
-              nodes
-                .changeNodeState(addr, NodeState.Healthy)
-                .as(Message.Batch[Initial](Message.Direct(addr, Accept), Message.Broadcast(join)))
-//                .catchSome {
-//                  //this handle Join messages that was piggybacked
-//                  case UnknownNode(_) =>
-//                    nodes.addNode(addr) *>
-//                      nodes
-//                        .changeNodeState(addr, NodeState.Healthy)
-//                        .as(None)
-//                }
-
+              nodes.nodeState(addr).as(Message.NoResponse).orElse(
+                nodes.addNode(addr) *>
+                  nodes
+                    .changeNodeState(addr, NodeState.Healthy)
+                    .as(Message.Batch[Initial](Message.Direct(addr, Accept), Message.Broadcast(join)))
+              )
             case Message.Direct(sender, Accept) =>
               nodes.addNode(sender) *>
               nodes
@@ -77,7 +72,8 @@ object Initial {
                 .as(Message.NoResponse)
             case Message.Direct(sender, Reject(msg)) =>
               log(LogLevel.Error)("Rejected from cluster: " + msg) *>
-                nodes.disconnect(sender).as(Message.NoResponse)
+                nodes.disconnect(sender)
+                  .as(Message.NoResponse)
           },
           ZStream
             .fromIterator(

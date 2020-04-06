@@ -8,10 +8,13 @@ import zio.keeper._
 import zio.keeper.discovery.Discovery
 import zio.keeper.membership.Membership.Membership
 import zio.keeper.membership.swim.protocols._
-import zio.keeper.membership.{ Membership, MembershipEvent, NodeAddress, TaggedCodec }
+import zio.keeper.membership.{Membership, MembershipEvent, NodeAddress, TaggedCodec}
 import zio.logging.Logging.Logging
 import zio.logging._
-import zio.stream.{ Take, ZStream }
+import zio.stm.TRef
+import zio.stream.{Take, ZStream}
+
+import scala.collection.mutable
 
 object SWIM {
 
@@ -21,7 +24,7 @@ object SWIM {
   ): ZLayer[Discovery with Logging with Clock, Error, Membership[B]] =
     ZLayer.fromManaged(for {
       _            <- log.info("starting SWIM on port: " + port).toManaged_
-      udpTransport <- transport.udp.live(10240).build.map(_.get)
+      udpTransport <- transport.udp.live(1024000).build.map(_.get)
 
       userIn <- Queue
                  .bounded[Message.Direct[B]](1000)
@@ -60,7 +63,8 @@ object SWIM {
 //        .compose(suspicion)
 //        .compose(user)
 //        .compose(deadLetter)
-    messages0 <- Messages.make(localNodeAddress, new Broadcast,  udpTransport)
+    tref <- TRef.makeCommit(mutable.PriorityQueue[Broadcast.Item]()).toManaged_
+    messages0 <- Messages.make(localNodeAddress, new Broadcast(tref),  udpTransport)
     _ <- messages0.process(swim).toManaged_
     } yield new Membership.Service[B] {
 

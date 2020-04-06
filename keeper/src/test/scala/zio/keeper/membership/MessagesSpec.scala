@@ -15,6 +15,9 @@ import zio._
 import zio.logging._
 import zio.duration._
 import zio.keeper.membership.PingPong.{Ping, Pong}
+import zio.stm.TRef
+
+import scala.collection.mutable
 
 object MessagesSpec extends DefaultRunnableSpec {
 
@@ -75,7 +78,8 @@ object MessagesSpec extends DefaultRunnableSpec {
   val messages = for {
     local     <- NodeAddress.local(1111).toManaged_
     transport <- TestTransport.make
-    messages <- Messages.make(local, new Broadcast, transport)
+    tref <- TRef.makeCommit(mutable.PriorityQueue[Broadcast.Item]()).toManaged_
+    messages <- Messages.make(local, new Broadcast(tref), transport)
   } yield (transport, messages)
 
   val protocol = Protocol[PingPong](
