@@ -1,7 +1,7 @@
 package zio.keeper
 
-import zio.{ Has, ZIO }
 import zio.nio.core.InetSocketAddress
+import zio.{Has, ZIO}
 
 package object discovery {
 

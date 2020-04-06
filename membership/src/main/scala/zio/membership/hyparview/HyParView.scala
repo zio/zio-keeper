@@ -2,109 +2,88 @@ package zio.membership.hyparview
 
 import zio._
 import zio.membership.transport.Transport
-import zio.keeper.membership.{ ByteCodec, TaggedCodec }
-import zio.membership.{ Error, Membership, ScopeIO, SendError, TransportError, transport }
+import zio.membership.{ Error, SendError, TransportError }
 import zio.duration._
 import zio.clock.Clock
 import zio.stream.{ Stream, Take, ZStream }
-import zio.logging._
 import zio.logging.Logging.Logging
+import zio.logging.log
+import zio.membership.hyparview.ActiveProtocol.PlumTreeProtocol
+import zio.keeper.membership.{ ByteCodec, TaggedCodec }
 
 object HyParView {
 
-  def live[T: Tagged](
+  def live[R <: Transport[T] with TRandom with Logging with Clock with HyParViewConfig, T: Tagged](
     localAddr: T,
-    shuffleSchedule: Schedule[Transport[T] with TRandom with Logging with Clock with HyParViewConfig, ViewState, Any]
+    seedNodes: List[T],
+    shuffleSchedule: Schedule[R, ViewState, Any]
   )(
     implicit
     ev1: TaggedCodec[InitialProtocol[T]],
-    ev2: ByteCodec[JoinReply[T]],
-    ev3: TaggedCodec[ActiveProtocol[T]]
-  ): ZLayer[HyParViewConfig with Logging with Transport[T] with TRandom with Clock, Error, Membership[T]] =
-    ZLayer.fromFunctionManaged { env =>
+    ev2: TaggedCodec[ActiveProtocol[T]],
+    ev3: ByteCodec[JoinReply[T]]
+  ): ZLayer[R, Error, PeerService[T]] = {
+    type R1 = R with Views[T]
+    val layer = ZLayer.identity[R] ++ Views.fromConfig(localAddr)
+    layer >>> ZLayer.fromManaged {
       for {
-        views <- Managed.succeed(Views.fromConfig(localAddr))
-        cfg   <- getConfig.toManaged_.provide(env)
+        env <- ZManaged.environment[R1]
+        cfg <- getConfig.toManaged_
         _ <- log
               .info(s"Starting HyParView on $localAddr with configuration:\n${cfg.prettyPrint}")
               .toManaged(_ => log.info("Shut down HyParView"))
-              .provide(env)
-        scope <- ScopeIO.make
+        scope <- ZManaged.scope
         connections <- Queue
                         .bounded[(T, Chunk[Byte] => IO[TransportError, Unit], Stream[Error, Chunk[Byte]], UIO[_])](
                           cfg.connectionBuffer
                         )
                         .toManaged(_.shutdown)
-        userMessages <- Queue.dropping[Take[Error, Chunk[Byte]]](cfg.userMessagesBuffer).toManaged(_.shutdown)
-        sendInitial0 = (to: T, msg: InitialMessage[T]) => sendInitial[T](to, msg, scope, connections).provide(env)
-        _ <- receiveInitialProtocol[Clock with TRandom with Transport[T] with Logging with HyParViewConfig with Views[
-              T
-            ], Error, T](transport.bind(localAddr), cfg.concurrentIncomingConnections)
+        plumTreeMessages <- Queue
+                             .sliding[Take[Error, (T, PlumTreeProtocol)]](cfg.userMessagesBuffer)
+                             .toManaged(_.shutdown)
+        peerEvents <- Queue.sliding[PeerEvent[T]](128).toManaged(_.shutdown)
+        sendInitial0 = (to: T, msg: InitialProtocol.InitialMessage[T]) =>
+          sendInitial[T](to, msg, scope, connections).provide(env)
+        _ <- receiveInitialProtocol[R1, Error, T](Transport.bind(localAddr), cfg.concurrentIncomingConnections)
               .merge(ZStream.fromQueue(connections))
-              .merge(neighborProtocol.scheduleElements(Schedule.spaced(2.seconds)))
+              .merge(neighborProtocol[T].scheduleElements(Schedule.spaced(2.seconds)))
               .flatMapParSwitch(cfg.activeViewCapacity) {
                 case (addr, send, receive, release) =>
-                  runActiveProtocol[Views[T] with HyParViewConfig with Logging with TRandom, Error, T](
-                    receive,
-                    addr,
-                    send,
-                    sendInitial0
-                  ).ensuring(release)
+                  ZStream
+                    .fromEffect(peerEvents.offer(PeerEvent.NeighborUp(addr)))
+                    .ensuring(peerEvents.offer(PeerEvent.NeighborDown(addr)))
+                    .flatMap(_ => runActiveProtocol[R1, Error, T](addr, send, sendInitial0)(receive).ensuring(release))
               }
-              .into(userMessages)
+              .into(plumTreeMessages)
               .toManaged_
-              .provideSomeLayer[HyParViewConfig with Logging with Transport[T] with TRandom with Clock](views)
-              .provide(env)
               .fork
         _ <- periodic
               .doShuffle[T]
               .repeat(shuffleSchedule)
               .toManaged_
-              .provideSomeLayer[HyParViewConfig with Logging with Transport[T] with TRandom with Clock](views)
-              .provide(env)
               .fork
         _ <- periodic
               .doReport[T]
               .repeat(Schedule.spaced(2.seconds))
               .toManaged_
-              .provideSomeLayer[HyParViewConfig with Logging with Transport[T] with TRandom with Clock](views)
-              .provide(env)
               .fork
-      } yield new Membership.Service[T] {
+        _ <- ZIO.foreach_(seedNodes)(sendInitial0(_, InitialProtocol.Join(localAddr))).toManaged_
+      } yield new PeerService.Service[T] {
+        override val identity: ZIO[Any, Nothing, T] =
+          ZIO.succeed(localAddr)
 
-        override val identity = ZIO.succeed(localAddr)
+        override val getPeers: IO[Nothing, Set[T]] =
+          Views.activeView.commit.provide(env)
 
-        override val nodes = Views
-          .using[T]
-          .apply(_.activeView.commit)
-          .provideSomeLayer[HyParViewConfig with Logging with Transport[T] with TRandom with Clock](views)
-          .provide(env)
+        override def send(to: T, message: PlumTreeProtocol): IO[SendError, Unit] =
+          Views.send(to, message).provide(env)
 
-        override def join(node: T): IO[Error, Unit] =
-          Views
-            .using[T]
-            .apply(s => UIO.succeed(s.myself))
-            .flatMap { my =>
-              sendInitial0(node, InitialMessage.Join(my))
-            }
-            .provideSomeLayer[HyParViewConfig with Logging with Transport[T] with TRandom with Clock](views)
-            .provide(env)
+        override val receive: ZStream[Any, Error, (T, PlumTreeProtocol)] =
+          ZStream.fromQueue(plumTreeMessages).unTake
 
-        override def send[A: ByteCodec](to: T, payload: A) =
-          (for {
-            chunk <- ByteCodec[A].toChunk(payload).mapError(SendError.SerializationFailed)
-            _     <- Views.using[T].apply(_.send(to, ActiveProtocol.UserMessage(chunk)))
-          } yield ())
-            .provideSomeLayer[HyParViewConfig with Logging with Transport[T] with TRandom with Clock](views)
-            .provide(env)
-
-        override def broadcast[A: ByteCodec](payload: A) = ???
-
-        override def receive[A: ByteCodec] =
-          ZStream
-            .fromQueue(userMessages)
-            .unTake
-            .mapM(ByteCodec[A].fromChunk(_).mapError(e => zio.membership.DeserializationError(e.msg)))
+        override val events: ZStream[Any, Nothing, PeerEvent[T]] =
+          ZStream.fromQueue(peerEvents)
       }
     }
+  }
 }

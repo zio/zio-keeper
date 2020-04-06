@@ -6,7 +6,7 @@ import zio.keeper.TransportError
 import zio.keeper.TransportError._
 import zio.keeper.transport.Channel._
 import zio.logging.Logging.Logging
-import zio.logging._
+import zio.logging.log
 import zio.nio.channels._
 import zio.nio.core.{ Buffer, SocketAddress }
 
@@ -75,13 +75,7 @@ object udp {
             .mapM(
               channel =>
                 Connection.withLock(
-                  (bytes: Int) =>
-                    Buffer
-                      .byte(bytes)
-                      .tap(bb => channel.receive(bb))
-                      .tap(_.flip)
-                      .flatMap(_.getChunk(bytes))
-                      .mapError(ExceptionWrapper),
+                  channel.read(_).mapError(ExceptionWrapper),
                   channel.write(_).mapError(ExceptionWrapper).unit,
                   ZIO.succeed(true),
                   ZIO.unit

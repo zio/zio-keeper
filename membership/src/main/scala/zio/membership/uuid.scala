@@ -1,10 +1,11 @@
 package zio.membership
 
-import zio._
-import java.{ util => ju }
+import java.util.UUID
+
+import zio.{ UIO, ZIO }
 
 object uuid {
 
-  val makeRandom: UIO[ju.UUID] = ZIO.effectTotal(ju.UUID.randomUUID())
+  val makeRandomUUID: UIO[UUID] = ZIO.effectTotal(UUID.randomUUID())
 
 }

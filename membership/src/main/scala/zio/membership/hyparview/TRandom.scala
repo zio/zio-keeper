@@ -25,8 +25,11 @@ object TRandom {
     def selectN[A](values: List[A], n: Int): STM[Nothing, List[A]]
   }
 
-  def using[R <: TRandom, E, A](f: Service => ZIO[R, E, A]): ZIO[R, E, A] =
-    ZIO.environment[TRandom].flatMap(env => f(env.get))
+  def selectOne[A](values: List[A]): ZSTM[TRandom, Nothing, Option[A]] =
+    ZSTM.accessM(_.get.selectOne(values))
+
+  def selectN[A](values: List[A], n: Int): ZSTM[TRandom, Nothing, List[A]] =
+    ZSTM.accessM(_.get.selectN(values, n))
 
   def live: ZLayer[Random, Nothing, TRandom] = {
     @silent("deprecated")

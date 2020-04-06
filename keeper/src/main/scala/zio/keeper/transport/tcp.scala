@@ -9,7 +9,7 @@ import zio.keeper.TransportError
 import zio.keeper.TransportError._
 import zio.keeper.transport.Channel._
 import zio.logging.Logging.Logging
-import zio.logging._
+import zio.logging.log
 import zio.nio.channels._
 import zio.nio.core.SocketAddress
 

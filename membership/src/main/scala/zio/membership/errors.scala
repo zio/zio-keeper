@@ -20,7 +20,7 @@ object TransportError {
   final case class ConnectionTimeout(timeout: Duration) extends TransportError(msg = s"Connection timed out $timeout.")
   final case class RequestTimeout(timeout: Duration)    extends TransportError(msg = s"Request timeout $timeout.")
 
-  final case class BindFailed(addr: Address, exc: Throwable)
+  final case class BindFailed[T](addr: T, exc: Throwable)
       extends TransportError(msg = s"Failed binding to address $addr.", cause = exc)
 }
 
