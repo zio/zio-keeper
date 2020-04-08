@@ -6,6 +6,7 @@ import java.net.InetAddress
 import zio._
 import zio.test._
 import zio.test.Assertion._
+import zio.test.TestAspect.{ flaky, timeout }
 import zio.clock.Clock
 import zio.duration._
 import zio.logging.Logging
@@ -43,7 +44,7 @@ object TcpTransportSpec extends KeeperSpec {
 
   val makeAddr = findAvailableTCPPort(49152, 65535).map(Address("localhost", _))
 
-  val spec = suite("TcpTransport")(
+  val spec = (suite("TcpTransport")(
     testM("can send and receive messages") {
       checkM(Gen.listOf(Gen.anyByte)) { bytes =>
         val payload = Chunk.fromIterable(bytes)
@@ -108,5 +109,5 @@ object TcpTransportSpec extends KeeperSpec {
         _      <- ZIO.collectAll((f1 :: f2).map(_.await))
       } yield assert(result)(equalTo(10))
     }
-  ).provideCustomLayer(environment)
+  ) @@ timeout(15.seconds) @@ flaky).provideCustomLayer(environment)
 }
