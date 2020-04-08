@@ -17,7 +17,6 @@ package object hyparview {
   type TRandom                     = Has[TRandom.Service]
   type HyParViewConfig             = Has[HyParViewConfig.Service]
   private[hyparview] type Views[T] = Has[Views.Service[T]]
-  type PeerService[T]              = Has[PeerService.Service[T]]
 
   type Enqueue[-A] = ZQueue[Any, Nothing, Any, Nothing, A, Any]
 

@@ -1,4 +1,4 @@
-package zio.membership.hyparview.plumtree
+package zio.membership.plumtree
 
 import java.util.UUID
 
@@ -9,10 +9,10 @@ import zio.logging._
 import zio.keeper.membership.ByteCodec
 import zio.logging.Logging.Logging
 import zio.membership.hyparview.ActiveProtocol._
-import zio.membership.hyparview.PeerEvent._
-import zio.membership.{ Membership, SendError }
+import zio.membership.PeerEvent._
+import zio.membership.{ Membership, PeerService, SendError }
 import zio.membership.uuid.makeRandomUUID
-import zio.membership.hyparview.{ PeerService, TRandom }
+import zio.membership.hyparview.TRandom
 import zio.stream.ZStream
 
 import scala.Function.untupled

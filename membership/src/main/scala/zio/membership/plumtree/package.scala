@@ -1,4 +1,4 @@
-package zio.membership.hyparview
+package zio.membership
 
 import java.util.UUID
 
@@ -8,7 +8,7 @@ import zio.duration._
 import zio.logging.log
 import zio.logging.Logging.Logging
 import zio.stream._
-import zio.membership.SendError
+import zio.membership.hyparview.ActiveProtocol
 
 package object plumtree {
 
