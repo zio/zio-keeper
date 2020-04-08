@@ -2,9 +2,9 @@ package zio.keeper.membership.swim.protocols
 
 import upickle.default.macroRW
 import zio.ZIO
-import zio.keeper.membership.swim.{Message, NodeId, Nodes, Protocol}
-import zio.keeper.membership.{ByteCodec, TaggedCodec}
-import zio.stream.ZStream
+import zio.keeper.membership.swim.Nodes.NodeState
+import zio.keeper.membership.swim.{Message, Nodes, Protocol}
+import zio.keeper.membership.{ByteCodec, MembershipEvent, NodeAddress, TaggedCodec}
 
 sealed trait Suspicion
 
@@ -28,25 +28,33 @@ object Suspicion {
       }
     )
 
-  case class Suspect(nodeId: NodeId) extends Suspicion
+  case class Suspect(nodeId: NodeAddress) extends Suspicion
 
   implicit val codecSuspect: ByteCodec[Suspect] =
     ByteCodec.fromReadWriter(macroRW[Suspect])
 
-  case class Alive(nodeId: NodeId) extends Suspicion
+  case class Alive(nodeId: NodeAddress) extends Suspicion
 
   implicit val codecAlive: ByteCodec[Alive] =
     ByteCodec.fromReadWriter(macroRW[Alive])
 
-  case class Dead(nodeId: NodeId) extends Suspicion
+  case class Dead(nodeId: NodeAddress) extends Suspicion
 
   implicit val codecDead: ByteCodec[Dead] =
     ByteCodec.fromReadWriter(macroRW[Dead])
 
-  def protocol(nodes: Nodes) = Protocol[Suspicion](
+  def protocol(nodes: Nodes, local: NodeAddress) = Protocol[Suspicion](
     {
+      case Message.Direct(sender, Suspect(`local`)) =>
+        ZIO.succeed(Message.Direct(sender, Alive(local)))
+      case Message.Direct(_, Suspect(node)) =>
+        nodes.changeNodeState(node, NodeState.Suspicion).ignore
+          .as(Message.NoResponse) //it will trigger broadcast by events
       case _ => ZIO.succeed(Message.NoResponse)
     },
-    ZStream.empty
+    nodes.events.collect{
+      case MembershipEvent.NodeStateChanged(node, _, NodeState.Suspicion) =>
+        Message.Broadcast(Suspect(node))
+    }
   )
 }

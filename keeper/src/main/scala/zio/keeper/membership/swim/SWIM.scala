@@ -12,7 +12,7 @@ import zio.keeper.membership.{Membership, MembershipEvent, NodeAddress, TaggedCo
 import zio.logging.Logging.Logging
 import zio.logging._
 import zio.stm.TRef
-import zio.stream.{Take, ZStream}
+import zio.stream.ZStream
 
 import scala.collection.mutable
 
@@ -48,7 +48,7 @@ object SWIM {
                            .map(_.binary)
                            .toManaged_
       suspicion <- Suspicion
-                    .protocol(nodes0)
+                    .protocol(nodes0, localNodeAddress)
                     .flatMap(_.debug)
                     .map(_.binary)
                     .toManaged_
@@ -60,11 +60,12 @@ object SWIM {
       deadLetter <- DeadLetter.protocol.toManaged_
       swim = initial.binary
         .compose(failureDetection)
-//        .compose(suspicion)
-//        .compose(user)
-//        .compose(deadLetter)
+        .compose(suspicion)
+        .compose(user)
+        .compose(deadLetter)
     tref <- TRef.makeCommit(mutable.PriorityQueue[Broadcast.Item]()).toManaged_
-    messages0 <- Messages.make(localNodeAddress, new Broadcast(tref),  udpTransport)
+      sequenceId <- TRef.makeCommit(0).toManaged_
+    messages0 <- Messages.make(localNodeAddress, new Broadcast(tref, sequenceId),  udpTransport)
     _ <- messages0.process(swim).toManaged_
     } yield new Membership.Service[B] {
 

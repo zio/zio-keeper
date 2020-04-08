@@ -23,8 +23,6 @@ object MessagesSpec extends DefaultRunnableSpec {
 
   val logger = Logging.console((_, line) => line)
 
-
-
   class TestTransport(
                        in: Queue[Connection],
                        out: Queue[(SocketAddress, Chunk[Byte])]) extends Transport.Service {
@@ -79,7 +77,8 @@ object MessagesSpec extends DefaultRunnableSpec {
     local     <- NodeAddress.local(1111).toManaged_
     transport <- TestTransport.make
     tref <- TRef.makeCommit(mutable.PriorityQueue[Broadcast.Item]()).toManaged_
-    messages <- Messages.make(local, new Broadcast(tref), transport)
+    sequenceId <- TRef.makeCommit(0).toManaged_
+    messages <- Messages.make(local, new Broadcast(tref, sequenceId), transport)
   } yield (transport, messages)
 
   val protocol = Protocol[PingPong](
@@ -97,7 +96,7 @@ object MessagesSpec extends DefaultRunnableSpec {
       messages.tap(_._2.bind).use { case (testTransport, messages) =>
         for {
           dl <- protocol
-          f <- messages.process(dl.binary).fork
+          _ <- messages.process(dl.binary)
           _ <- testTransport.simulateNewConnection(Message.Direct(testNodeAddress, PingPong.Ping(123): PingPong))
           _ <- testTransport.simulateNewConnection(Message.Direct(testNodeAddress, PingPong.Ping(321): PingPong))
           m <- testTransport.sentMessages.mapM { case (_, chunk) =>
@@ -105,9 +104,7 @@ object MessagesSpec extends DefaultRunnableSpec {
           }.mapM{
             case Message.WithPiggyback(_, chunk, _) => TaggedCodec.read[PingPong](chunk)
           }.take(1).runCollect
-        _ <- f.join
         } yield assert(m)(equalTo(List(PingPong.Pong(123))))
-
       }
     }
   ).provideCustomLayer(logger)

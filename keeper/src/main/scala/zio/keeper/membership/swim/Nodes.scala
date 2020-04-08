@@ -70,6 +70,7 @@ class Nodes(
     for {
       list      <- onlyHealthyNodes
       nextIndex <- roundRobinOffset.updateAndGet(old => if (old < list.size - 1) old + 1 else 0)
+      _ <- nodeStates.removeIf((_, v) => v == NodeState.Death).when(nextIndex == 0).commit
     } yield list.drop(nextIndex).headOption.map(_._1)
 
   /**
@@ -112,6 +113,7 @@ object Nodes {
     case object Healthy     extends NodeState
     case object Unreachable extends NodeState
     case object Suspicion   extends NodeState
+    case object Death   extends NodeState
   }
 
   def make: ZIO[Any, Nothing, Nodes] =

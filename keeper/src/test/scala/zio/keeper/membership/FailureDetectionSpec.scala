@@ -17,15 +17,18 @@ object FailureDetectionSpec extends DefaultRunnableSpec{
 
   val spec = suite("failure detection")(
     testM("Ping") {
-      val testNodeAddress = NodeAddress(Array(1,2,3,4), 1111)
+      val nodeAddress1 = NodeAddress(Array(1,2,3,4), 1111)
+      val nodeAddress2 = NodeAddress(Array(11,22,33,44), 1111)
       Nodes.make.flatMap(nodes =>
         for {
           protocol <- FailureDetection.protocol(nodes, 1.second)
-          _ <- nodes.addNode(testNodeAddress)
-          _ <- nodes.changeNodeState(testNodeAddress, NodeState.Healthy)
+          _ <- nodes.addNode(nodeAddress1)
+          _ <- nodes.changeNodeState(nodeAddress1, NodeState.Healthy)
+          _ <- nodes.addNode(nodeAddress2)
+          _ <- nodes.changeNodeState(nodeAddress2, NodeState.Healthy)
           _ <- TestClock.adjust(1.second)
-          ping <- protocol.produceMessages.take(3).runCollect
-        } yield assert(ping)(equalTo(List(Message.Direct(testNodeAddress, Ping(1)))))
+          ping <- protocol.produceMessages.take(2).runCollect
+        } yield assert(ping)(equalTo(List(Message.Direct(nodeAddress2, Ping(1)), Message.Direct(nodeAddress1, Ping(2)))))
       )
     }
   ).provideCustomLayer(logger)

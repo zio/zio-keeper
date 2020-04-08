@@ -25,13 +25,16 @@ class Messages(
     Take
       .fromEffect(
         connection.read >>= ByteCodec[Message.WithPiggyback].fromChunk
-      ).flatMap {
-      case Take.Value(withPiggyback) =>
-        messages.offer(Take.Value(Message.Direct(withPiggyback.node, withPiggyback.message))) *>
-          ZIO.foreach(withPiggyback.gossip)(chunk => messages.offer(Take.Value(Message.Direct(withPiggyback.node, chunk))))
-      case other => messages.offer(other)
-    }.unit
-
+      )
+      .flatMap {
+        case Take.Value(withPiggyback) =>
+          messages.offer(Take.Value(Message.Direct(withPiggyback.node, withPiggyback.message))) *>
+            ZIO.foreach(withPiggyback.gossip)(
+              chunk => messages.offer(Take.Value(Message.Direct(withPiggyback.node, chunk)))
+            )
+        case other => messages.offer(other)
+      }
+      .unit
 
   private def recoverErrors[R, E, A](stream: ZStream[R, E, A]): ZStream[R with Logging, Nothing, Take[E, Option[A]]] =
     stream.either.mapM(
@@ -61,7 +64,6 @@ class Messages(
       _ <- transport
             .bind(localAddress) { conn =>
               read(conn)
-                .tap(_ => log.info("reading").provide(logger))
                 .catchAll(ex => log.error("fail to read", Cause.fail(ex)).unit.provide(logger))
             }
     } yield ()
@@ -77,36 +79,28 @@ class Messages(
       }
       .collectM {
         case Take.Value(msg: Message.Direct[Chunk[Byte]]) =>
-          log.debug("sending") *>
-            send(msg)
-              .catchAll(e => log.error("error during send: " + e))
-        case Take.Value(msg: Message.Batch[Chunk[Byte]])  =>
-          ZIO.foreach(msg.first :: msg.second :: Nil){
-            case msg@Message.Broadcast(_) =>
+          send(msg)
+            .catchAll(e => log.error("error during send: " + e))
+        case Take.Value(msg: Message.Batch[Chunk[Byte]]) =>
+          ZIO.foreach(msg.first :: msg.second :: Nil) {
+            case msg @ Message.Broadcast(_) =>
               broadcast.add(msg)
-            case msg@Message.Direct(_, _) =>
-              log.debug("sending with broadcast") *>
+            case msg @ Message.Direct(_, _) =>
               send(msg)
-              .catchAll(e => log.error("error during send: " + e))
+                .catchAll(e => log.error("error during send: " + e))
           }
         case Take.Fail(cause) =>
           log.error("error: ", cause)
-        case Take.End =>
-          log.error("end")
         case res => log.error("res: " + res)
       }
       .runDrain
       .fork *> recoverErrors(protocol.produceMessages)
       .collectM {
         case Take.Value(Some(msg: Message.Direct[Chunk[Byte]])) =>
-          log.debug("sending") *>
             send(msg)
               .catchAll(e => log.error("error during send: " + e))
         case Take.Fail(cause) =>
           log.error("error: ", cause)
-        case Take.End =>
-          log.error("end")
-        case res => log.error("res: " + res)
       }
       .runDrain
       .fork
