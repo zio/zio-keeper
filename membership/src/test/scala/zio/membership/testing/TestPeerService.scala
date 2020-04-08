@@ -1,4 +1,4 @@
-package zio.membership.hyparview.testing
+package zio.membership.testing
 
 import java.math.BigInteger
 import java.nio.ByteBuffer
@@ -6,11 +6,11 @@ import java.nio.ByteBuffer
 import zio._
 import zio.keeper.SerializationError.{ DeserializationTypeError, SerializationTypeError }
 import zio.keeper.membership.{ ByteCodec, TaggedCodec }
-import zio.membership.SendError
+import zio.membership.PeerEvent.{ NeighborDown, NeighborUp }
+import zio.membership.hyparview.ActiveProtocol
 import zio.membership.hyparview.ActiveProtocol.PlumTreeProtocol
-import zio.membership.hyparview.PeerEvent.{ NeighborDown, NeighborUp }
-import zio.membership.hyparview.{ ActiveProtocol, PeerEvent, PeerService }
 import zio.membership.transport.Transport
+import zio.membership.{ PeerEvent, PeerService, SendError }
 import zio.stm._
 import zio.stream.{ Take, ZStream }
 

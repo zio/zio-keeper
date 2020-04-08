@@ -7,20 +7,20 @@ package object membership {
   type Membership = Has[Membership.Service]
 
   def broadcast(data: Chunk[Byte]): ZIO[Membership, Error, Unit] =
-    ZIO.accessM[Membership](_.get.broadcast(data))
+    ZIO.accessM(_.get.broadcast(data))
 
   def events: ZStream[Membership, Error, MembershipEvent] =
-    ZStream.unwrap(ZIO.access[Membership](_.get.events))
+    ZStream.accessStream(_.get.events)
 
   def localMember: ZIO[Membership, Nothing, Member] =
-    ZIO.accessM[Membership](_.get.localMember)
+    ZIO.accessM(_.get.localMember)
 
   def nodes: ZIO[Membership, Nothing, List[NodeId]] =
-    ZIO.accessM[Membership](_.get.nodes)
+    ZIO.accessM(_.get.nodes)
 
   def receive: ZStream[Membership, Error, Message] =
-    ZStream.unwrap(ZIO.access[Membership](_.get.receive))
+    ZStream.accessStream(_.get.receive)
 
   def send(data: Chunk[Byte], receipt: NodeId): ZIO[Membership, Error, Unit] =
-    ZIO.accessM[Membership](_.get.send(data, receipt))
+    ZIO.accessM(_.get.send(data, receipt))
 }

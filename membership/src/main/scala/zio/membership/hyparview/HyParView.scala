@@ -2,7 +2,7 @@ package zio.membership.hyparview
 
 import zio._
 import zio.membership.transport.Transport
-import zio.membership.{ Error, SendError, TransportError }
+import zio.membership.{ Error, PeerEvent, PeerService, SendError, TransportError }
 import zio.duration._
 import zio.clock.Clock
 import zio.stream.{ Stream, Take, ZStream }

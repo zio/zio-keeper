@@ -1,17 +1,17 @@
-package zio.membership.hyparview.plumtree
+package zio.membership.plumtree
 
 import java.math.BigInteger
 
 import zio._
 import zio.test._
 import zio.test.Assertion._
-import zio.membership.KeeperSpec
-import zio.membership.hyparview.{ PeerService, TRandom }
+import zio.membership.{ KeeperSpec, PeerService }
+import zio.membership.hyparview.TRandom
 import zio.keeper.membership.ByteCodec
 import upickle.default._
 import zio.keeper.SerializationError.DeserializationTypeError
 import zio.logging.Logging
-import zio.membership.hyparview.testing.TestPeerService
+import zio.membership.testing.TestPeerService
 import zio.membership.transport.Transport
 import zio.membership.transport.testing.InMemoryTransport
 import zio.stm._
