@@ -92,11 +92,10 @@ object FailureDetection {
         Protocol[FailureDetection](
           {
             case Message.Direct(sender, Ack(ackId)) =>
+              log.debug(s"received ack[$ackId] from $sender") *>
               ack(ackId).flatMap {
                 case Some(_Ack(_, Some((node, originalAckId)))) =>
-                  nodes.changeNodeState(sender, NodeState.Healthy).as(
-                    Message.Direct(node, Ack(originalAckId))
-                  )
+                  ZIO.succeed(Message.Direct(node, Ack(originalAckId)))
                 case _ =>
                   ZIO.succeed(Message.NoResponse)
               }
@@ -115,47 +114,47 @@ object FailureDetection {
               Schedule.spaced(protocolPeriod)
             )
             *>
+            // Every protocol round check for outstanding acks
+            (ZStream
+              .fromIterator(
+                acks.toList.commit.map(_.iterator)
+              )
+              .collectM {
+                case (ackId, ack0) =>
+                  nodes
+                    .nodeState(ack0.target)
+                    .flatMap {
+                      case NodeState.Healthy =>
+                        nodes
+                          .changeNodeState(ack0.target, NodeState.Unreachable) *>
+                          log.warn(s"${ack0.target} missed ack $ackId") *>
+                          nodes.next.flatMap {
+                            case Some(next) =>
+                              ZIO.succeed(Some(Message.Direct(next, PingReq(ack0.target, ackId))))
+                            case None =>
+                              nodes
+                                .changeNodeState(ack0.target, NodeState.Suspicion)
+                                .as(None)
+                          }
+                      case NodeState.Unreachable =>
+                        ack(ackId) *>
+                          nodes
+                            .changeNodeState(ack0.target, NodeState.Suspicion)
+                            .as(None) //this should trigger suspicion mechanism
+                      case _ => ZIO.succeed(None)
+                    }
+              }
+              .collect {
+                case Some(r) => r
+              } ++
               ZStream
                 .fromEffect(nodes.next)
                 .collectM {
                   case Some(next) =>
                     withAck(None, ackId => Message.Direct(next, Ping(ackId)))
                 }
-//                .merge(
-//                  // Every protocol round check for outstanding acks
-//                  ZStream
-//                    .fromIterator(
-//                      acks.toList.commit.map(_.iterator)
-//                    )
-//                    .collectM {
-//                      case (ackId, ack0) =>
-//                        nodes
-//                          .nodeState(ack0.target)
-//                          .flatMap {
-//                            case NodeState.Healthy =>
-//                              nodes
-//                                .changeNodeState(ack0.target, NodeState.Unreachable) *>
-//                              nodes.next.flatMap {
-//                                case Some(next) =>
-//                                    ZIO.succeed(Some(Message.Direct(next, PingReq(ack0.target, ackId))))
-//                                case None =>
-//                                  nodes
-//                                    .changeNodeState(ack0.target, NodeState.Suspicion)
-//                                    .as(None)
-//                              }
-//                            case NodeState.Unreachable =>
-//                              ack(ackId) *>
-//                                nodes
-//                                  .changeNodeState(ack0.target, NodeState.Suspicion)
-//                                  .as(None) //this should trigger suspicion mechanism
-//                            case _ => ZIO.succeed(None)
-//                          }
-//                    }
-//                    .collect {
-//                      case Some(r) => r
-//                    }
-//                )
-        )
+
+        ))
       }
     } yield protocol
 

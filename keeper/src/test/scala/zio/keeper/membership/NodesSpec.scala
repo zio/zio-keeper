@@ -2,10 +2,13 @@ package zio.keeper.membership
 
 import zio.keeper.membership.swim.Nodes
 import zio.keeper.membership.swim.Nodes.NodeState
+import zio.logging.Logging
 import zio.test.Assertion._
 import zio.test.{DefaultRunnableSpec, _}
 
 object NodesSpec extends DefaultRunnableSpec {
+
+  val logger = Logging.console((_, line) => line)
 
   val spec = suite("nodes")(
     testM("add node") {
@@ -33,6 +36,6 @@ object NodesSpec extends DefaultRunnableSpec {
     }
 
 
-  )
+  ).provideCustomLayer(logger)
 
 }

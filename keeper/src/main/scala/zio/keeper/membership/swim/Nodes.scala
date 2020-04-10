@@ -8,6 +8,7 @@ import zio.keeper.membership.swim.Nodes.NodeState
 import zio.keeper.membership.{MembershipEvent, NodeAddress}
 import zio.stm.TMap
 import zio.stream.ZStream
+import zio.logging._
 
 /**
  * Nodes maintains state of the cluster.
@@ -33,22 +34,28 @@ class Nodes(
    * @param id - member id
    * @param newState - new state
    */
-  def changeNodeState(id: NodeAddress, newState: NodeState): IO[Error, Unit] =
+  def changeNodeState(id: NodeAddress, newState: NodeState): ZIO[Logging.Logging, Error, Unit] =
     nodeState(id)
       .flatMap { prev =>
-        nodeStates
-          .put(id, newState)
-          .commit
-          .as(
-            if (newState == NodeState.Healthy && prev == NodeState.Init) {
-              Join(id)
-            } else {
-              NodeStateChanged(id, prev, newState)
-            }
-          )
+        if(prev != newState) {
+          log.info(s"changing node[$id] status from: [$prev] to: $newState") *>
+          nodeStates
+            .put(id, newState)
+            .commit
+            .tap(_ =>
+              if (newState == NodeState.Healthy && prev == NodeState.Init) {
+                eventsQueue.offer(Join(id)).unit
+              } else if (prev != newState) {
+                eventsQueue.offer(NodeStateChanged(id, prev, newState)).unit
+              } else {
+                ZIO.unit
+              }
+            )
+        } else {
+          ZIO.unit
+        }
+
       }
-      .flatMap(eventsQueue.offer)
-      .unit
 
   /**
    * close connection and remove Node from cluster.
@@ -78,6 +85,9 @@ class Nodes(
    */
   def nodeState(id: NodeAddress): IO[Error, NodeState] =
     nodeStates.get(id).commit.get.orElseFail(UnknownNode(id))
+
+  def numberOfNodes =
+    nodeStates.keys.map(_.size).commit
 
   /**
    * Lists members that are in healthy state.
@@ -114,6 +124,7 @@ object Nodes {
     case object Unreachable extends NodeState
     case object Suspicion   extends NodeState
     case object Death   extends NodeState
+    case object Left extends NodeState
   }
 
   def make: ZIO[Any, Nothing, Nodes] =

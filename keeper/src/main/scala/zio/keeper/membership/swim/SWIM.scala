@@ -48,7 +48,7 @@ object SWIM {
                            .map(_.binary)
                            .toManaged_
       suspicion <- Suspicion
-                    .protocol(nodes0, localNodeAddress)
+                    .protocol(nodes0, localNodeAddress, 3, 3.seconds)
                     .flatMap(_.debug)
                     .map(_.binary)
                     .toManaged_
@@ -58,11 +58,9 @@ object SWIM {
                .map(_.binary)
                .toManaged_
       deadLetter <- DeadLetter.protocol.toManaged_
-      swim = initial.binary
-        .compose(failureDetection)
-        .compose(suspicion)
-        .compose(user)
-        .compose(deadLetter)
+      swim = Protocol.compose(initial.binary, failureDetection, suspicion)
+//        .compose(user)
+//        .compose(deadLetter)
     tref <- TRef.makeCommit(mutable.PriorityQueue[Broadcast.Item]()).toManaged_
       sequenceId <- TRef.makeCommit(0).toManaged_
     messages0 <- Messages.make(localNodeAddress, new Broadcast(tref, sequenceId),  udpTransport)

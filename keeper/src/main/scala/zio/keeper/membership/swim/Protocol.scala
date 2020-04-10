@@ -34,21 +34,6 @@ trait Protocol[M] {
         self.produceMessages.mapM (_.transformM(TaggedCodec.write[M]))
     }
 
-  /**
-   * Composes two protocols together.
-   */
-  final def compose(other: Protocol[M]): Protocol[M] = new Protocol[M] {
-
-    override def onMessage: Message.Direct[M] => ZIO[Any, Error, Message[M]] =
-      msg =>
-        self
-          .onMessage(msg)
-          .orElse(other.onMessage(msg))
-
-    override val produceMessages: ZStream[Any, Error, Message[M]] =
-      self.produceMessages
-        .merge(other.produceMessages)
-  }
 
   /**
    * Adds logging to each received and sent message.
@@ -60,7 +45,7 @@ trait Protocol[M] {
           msg =>
             env.get.logger.log(LogLevel.Info)("Receive [" + msg + "]") *>
               self.onMessage(msg)
-                .tap(msg => env.get.logger.log(LogLevel.Info)("Sending [" + msg + "]"))
+                .tap(msg => env.get.logger.log(LogLevel.Info)("Replied with [" + msg + "]"))
 
         override val produceMessages: ZStream[Any, Error, Message[M]] =
           self.produceMessages.tap { msg =>
@@ -82,6 +67,20 @@ trait Protocol[M] {
 }
 
 object Protocol {
+
+  def compose[A](first: Protocol[A], second: Protocol[A], rest: Protocol[A]*): Protocol[A] =
+    new Protocol[A] {
+
+      override val onMessage: Message.Direct[A] => ZIO[Any, Error, Message[A]] =
+        msg =>
+          (second :: rest.toList).foldLeft(first.onMessage(msg))((acc, a) => acc.orElse(a.onMessage(msg)))
+
+
+      override val produceMessages: ZStream[Any, Error, Message[A]] =
+        ZStream.mergeAllUnbounded()((first.produceMessages :: second.produceMessages :: rest.map(_.produceMessages).toList):_*)
+
+    }
+
 
   class ProtocolBuilder[M] {
 

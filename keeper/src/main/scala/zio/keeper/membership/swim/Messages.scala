@@ -2,12 +2,12 @@ package zio.keeper.membership.swim
 
 import zio._
 import zio.keeper.Error
-import zio.keeper.membership.{ ByteCodec, NodeAddress }
+import zio.keeper.membership.{ByteCodec, NodeAddress}
 import zio.keeper.transport.Channel.Connection
 import zio.keeper.transport.Transport
 import zio.logging.Logging.Logging
 import zio.logging.log
-import zio.stream.{ Take, ZStream }
+import zio.stream.{Take, ZStream}
 
 class Messages(
   val local: NodeAddress,
@@ -21,7 +21,7 @@ class Messages(
    *
    * @param connection transport connection
    */
-  final def read(connection: Connection): ZIO[Any, Error, Unit] =
+  final def read(connection: Connection): IO[Error, Unit] =
     Take
       .fromEffect(
         connection.read >>= ByteCodec[Message.WithPiggyback].fromChunk
@@ -36,11 +36,11 @@ class Messages(
       }
       .unit
 
-  private def recoverErrors[R, E, A](stream: ZStream[R, E, A]): ZStream[R with Logging, Nothing, Take[E, Option[A]]] =
+  private def recoverErrors[R, E, A](stream: ZStream[R, E, A]): ZStream[R with Logging, Nothing, Take[E, A]] =
     stream.either.mapM(
       _.fold(
         e => log.error("error during sending", Cause.fail(e)).as(Take.Fail(Cause.fail(e))),
-        v => ZIO.succeedNow(Take.Value(Some(v)))
+        v => ZIO.succeedNow(Take.Value(v))
       )
     )
 
@@ -69,15 +69,15 @@ class Messages(
     } yield ()
 
   final def process(protocol: Protocol[Chunk[Byte]]) =
-    ZStream
-      .fromQueue(messages)
-      .collectM {
-        case Take.Value(msg: Message.Direct[Chunk[Byte]]) =>
-          Take.fromEffect(
-            protocol.onMessage(msg)
-          )
-      }
-      .collectM {
+    ZStream.mergeAll(2)(
+      ZStream
+        .fromQueue(messages)
+        .collectM {
+          case Take.Value(msg: Message.Direct[Chunk[Byte]]) =>
+            Take.fromEffect(protocol.onMessage(msg))
+        },
+      recoverErrors(protocol.produceMessages)
+    ).collectM {
         case Take.Value(msg: Message.Direct[Chunk[Byte]]) =>
           send(msg)
             .catchAll(e => log.error("error during send: " + e))
@@ -91,19 +91,8 @@ class Messages(
           }
         case Take.Fail(cause) =>
           log.error("error: ", cause)
-        case res => log.error("res: " + res)
       }
       .runDrain
-      .fork *> recoverErrors(protocol.produceMessages)
-      .collectM {
-        case Take.Value(Some(msg: Message.Direct[Chunk[Byte]])) =>
-            send(msg)
-              .catchAll(e => log.error("error during send: " + e))
-        case Take.Fail(cause) =>
-          log.error("error: ", cause)
-      }
-      .runDrain
-      .fork
 }
 
 object Messages {

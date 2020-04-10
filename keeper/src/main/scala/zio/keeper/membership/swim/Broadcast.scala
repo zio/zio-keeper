@@ -1,6 +1,6 @@
 package zio.keeper.membership.swim
 
-import zio.stm.{TMap, TRef}
+import zio.stm.TRef
 import zio.{Chunk, ZIO}
 
 import scala.collection.mutable
@@ -10,7 +10,7 @@ class Broadcast(ref: TRef[mutable.PriorityQueue[Broadcast.Item]], sequenceId: TR
   def add(message: Message.Broadcast[Chunk[Byte]]): ZIO[Any, Nothing, Unit] =
     sequenceId.getAndUpdate(_ + 1).flatMap(seqId =>
       ref.update(q => {
-        q.+=(Broadcast.Item(seqId, 100, message.message))
+        q.+=(Broadcast.Item(seqId, 10, message.message))
         q
       })
     ).commit
