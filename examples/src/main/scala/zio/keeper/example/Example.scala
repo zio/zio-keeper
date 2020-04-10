@@ -79,7 +79,7 @@ object TestNode {
           .catchAll(ex => putStrLn("error: " + ex).toManaged_.as(1))
     )
 
-  private def environment(port: Int, others: Set[Int]) =
+  def environment(port: Int, others: Set[Int]) =
     discovery(others).map { dsc =>
       val mem = (dsc ++ logging ++ Clock.live ++ Random.live) >>> membership(port)
       dsc ++ logging ++ mem
