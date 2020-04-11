@@ -21,7 +21,7 @@ object FailureDetectionSpec extends DefaultRunnableSpec{
       val nodeAddress2 = NodeAddress(Array(11,22,33,44), 1111)
       Nodes.make.flatMap(nodes =>
         for {
-          protocol <- FailureDetection.protocol(nodes, 1.second)
+          protocol <- FailureDetection.protocol(nodes, 1.second, 500.milliseconds)
           _ <- nodes.addNode(nodeAddress1)
           _ <- nodes.changeNodeState(nodeAddress1, NodeState.Healthy)
           _ <- nodes.addNode(nodeAddress2)

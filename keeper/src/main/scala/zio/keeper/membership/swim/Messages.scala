@@ -1,13 +1,18 @@
 package zio.keeper.membership.swim
 
+import upickle.default.macroRW
 import zio._
+import zio.clock.Clock
 import zio.keeper.Error
+import zio.keeper.membership.swim.Message.WithTimeout
 import zio.keeper.membership.{ByteCodec, NodeAddress}
 import zio.keeper.transport.Channel.Connection
 import zio.keeper.transport.Transport
 import zio.logging.Logging.Logging
 import zio.logging.log
 import zio.stream.{Take, ZStream}
+import upickle.default._
+import zio.keeper.membership.swim.Messages.WithPiggyback
 
 class Messages(
   val local: NodeAddress,
@@ -24,7 +29,7 @@ class Messages(
   final def read(connection: Connection): IO[Error, Unit] =
     Take
       .fromEffect(
-        connection.read >>= ByteCodec[Message.WithPiggyback].fromChunk
+        connection.read >>= ByteCodec[WithPiggyback].fromChunk
       )
       .flatMap {
         case Take.Value(withPiggyback) =>
@@ -32,7 +37,8 @@ class Messages(
             ZIO.foreach(withPiggyback.gossip)(
               chunk => messages.offer(Take.Value(Message.Direct(withPiggyback.node, chunk)))
             )
-        case other => messages.offer(other)
+        case err: Take.Fail[Error] => messages.offer(err)
+        case Take.End => messages.offer(Take.End)
       }
       .unit
 
@@ -44,17 +50,29 @@ class Messages(
       )
     )
 
+
   /**
    * Sends message to target.
    */
-  final def send(msg: Message.Direct[Chunk[Byte]]): IO[Error, Unit] =
-    for {
-      broadcast     <- broadcast.broadcast(msg.message.size)
-      withPiggyback = Message.WithPiggyback(local, msg.message, broadcast)
-      chunk         <- ByteCodec[Message.WithPiggyback].toChunk(withPiggyback)
-      nodeAddress   <- msg.node.socketAddress
-      _             <- transport.connect(nodeAddress).use(_.send(chunk))
-    } yield ()
+  final def send(msg: Message[Chunk[Byte]]): ZIO[Clock, Error, Unit] =
+    msg match {
+      case Message.NoResponse => ZIO.unit
+      case Message.Direct(nodeAddress, message) =>
+        for {
+          broadcast     <- broadcast.broadcast(message.size)
+          withPiggyback = WithPiggyback(local, message, broadcast)
+          chunk         <- ByteCodec[WithPiggyback].toChunk(withPiggyback)
+          nodeAddress   <- nodeAddress.socketAddress
+          _             <- transport.connect(nodeAddress).use(_.send(chunk))
+        } yield ()
+      case msg: Message.Batch[Chunk[Byte]] =>
+        ZIO.foreach(msg.first :: msg.second :: msg.rest.toList)(send).unit
+      case msg@Message.Broadcast(_) =>
+        broadcast.add(msg)
+      case WithTimeout(message, action, timeout) =>
+        send(message) *> action.delay(timeout).flatMap(send).unit
+    }
+
 
   def bind =
     for {
@@ -78,17 +96,9 @@ class Messages(
         },
       recoverErrors(protocol.produceMessages)
     ).collectM {
-        case Take.Value(msg: Message.Direct[Chunk[Byte]]) =>
+        case Take.Value(msg) =>
           send(msg)
             .catchAll(e => log.error("error during send: " + e))
-        case Take.Value(msg: Message.Batch[Chunk[Byte]]) =>
-          ZIO.foreach(msg.first :: msg.second :: Nil) {
-            case msg @ Message.Broadcast(_) =>
-              broadcast.add(msg)
-            case msg @ Message.Direct(_, _) =>
-              send(msg)
-                .catchAll(e => log.error("error during send: " + e))
-          }
         case Take.Fail(cause) =>
           log.error("error: ", cause)
       }
@@ -96,6 +106,18 @@ class Messages(
 }
 
 object Messages {
+
+  case class WithPiggyback(node: NodeAddress, message: Chunk[Byte], gossip: List[Chunk[Byte]])
+
+  implicit val codec: ByteCodec[WithPiggyback] =
+    ByteCodec.fromReadWriter(macroRW[WithPiggyback])
+
+  implicit val chunkRW: ReadWriter[Chunk[Byte]] =
+    implicitly[ReadWriter[Array[Byte]]]
+      .bimap[Chunk[Byte]](
+        ch => ch.toArray,
+        arr => Chunk.fromArray(arr)
+      )
 
   def make(
     local: NodeAddress,

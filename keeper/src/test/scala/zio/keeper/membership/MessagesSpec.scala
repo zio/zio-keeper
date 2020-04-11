@@ -1,21 +1,18 @@
 package zio.keeper.membership
 
-import upickle.default.macroRW
-import zio.keeper.membership.swim.protocols.Initial.Join
+import zio._
+import zio.keeper.TransportError
+import zio.keeper.membership.PingPong.{Ping, Pong}
+import zio.keeper.membership.swim.Messages.WithPiggyback
 import zio.keeper.membership.swim.{Broadcast, Message, Messages, Protocol}
 import zio.keeper.transport.Channel.Connection
 import zio.keeper.transport.{Channel, Transport}
-import zio.keeper.{TransportError, transport}
 import zio.logging.Logging
-import zio.nio.core.{InetSocketAddress, SocketAddress}
-import zio.stream.{Take, ZStream}
+import zio.nio.core.SocketAddress
+import zio.stm.TRef
+import zio.stream.ZStream
 import zio.test.Assertion._
 import zio.test._
-import zio._
-import zio.logging._
-import zio.duration._
-import zio.keeper.membership.PingPong.{Ping, Pong}
-import zio.stm.TRef
 
 import scala.collection.mutable
 
@@ -47,8 +44,8 @@ object MessagesSpec extends DefaultRunnableSpec {
     def simulateNewConnection[A: TaggedCodec](message: Message.Direct[A]) =
       for {
         queue <- ZQueue.unbounded[Byte]
-        _ <- TaggedCodec.write(message.message).map(Message.WithPiggyback(message.node, _, List.empty))
-            .flatMap(ByteCodec[Message.WithPiggyback].toChunk)
+        _ <- TaggedCodec.write(message.message).map(WithPiggyback(message.node, _, List.empty))
+            .flatMap(ByteCodec[WithPiggyback].toChunk)
               .map { chunk =>
                 val size = chunk.size
                 Chunk((size >>> 24).toByte, (size >>> 16).toByte, (size >>> 8).toByte, size.toByte) ++ chunk
@@ -100,9 +97,9 @@ object MessagesSpec extends DefaultRunnableSpec {
           _ <- testTransport.simulateNewConnection(Message.Direct(testNodeAddress, PingPong.Ping(123): PingPong))
           _ <- testTransport.simulateNewConnection(Message.Direct(testNodeAddress, PingPong.Ping(321): PingPong))
           m <- testTransport.sentMessages.mapM { case (_, chunk) =>
-            ByteCodec[Message.WithPiggyback].fromChunk(chunk.drop(4))
+            ByteCodec[WithPiggyback].fromChunk(chunk.drop(4))
           }.mapM{
-            case Message.WithPiggyback(_, chunk, _) => TaggedCodec.read[PingPong](chunk)
+            case WithPiggyback(_, chunk, _) => TaggedCodec.read[PingPong](chunk)
           }.take(1).runCollect
         } yield assert(m)(equalTo(List(PingPong.Pong(123))))
       }

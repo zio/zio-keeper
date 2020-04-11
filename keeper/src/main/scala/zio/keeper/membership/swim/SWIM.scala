@@ -43,7 +43,7 @@ object SWIM {
                   .toManaged_
 
       failureDetection <- FailureDetection
-                           .protocol(nodes0, 3.seconds)
+                           .protocol(nodes0, 3.seconds, 1.second)
                            .flatMap(_.debug)
                            .map(_.binary)
                            .toManaged_
@@ -58,7 +58,7 @@ object SWIM {
                .map(_.binary)
                .toManaged_
       deadLetter <- DeadLetter.protocol.toManaged_
-      swim = Protocol.compose(initial.binary, failureDetection, suspicion)
+      swim = Protocol.compose(initial.binary, failureDetection/*, suspicion*/)
 //        .compose(user)
 //        .compose(deadLetter)
     tref <- TRef.makeCommit(mutable.PriorityQueue[Broadcast.Item]()).toManaged_
