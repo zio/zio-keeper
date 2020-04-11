@@ -99,9 +99,9 @@ object FailureDetection {
               log.debug(s"received ack[$ackId] from $sender") *>
                 ack(ackId).flatMap {
                   case Some(_Ack(Some((node, originalAckId)))) =>
-                    ZIO.succeed(Message.Direct(node, Ack(originalAckId)))
+                    Message.direct(node, Ack(originalAckId))
                   case _ =>
-                    ZIO.succeed(Message.NoResponse)
+                    Message.noResponse
                 }
             case Message.Direct(sender, Ping(ackId)) =>
               ZIO.succeed(Message.Direct(sender, Ack(ackId)))
@@ -118,7 +118,7 @@ object FailureDetection {
               )
 
             case Message.Direct(_, Nack(_)) =>
-              ZIO.succeed(Message.NoResponse)
+              Message.noResponse
           },
           ZStream
             .repeatEffectWith(nodes.next, Schedule.spaced(protocolPeriod))
@@ -159,20 +159,20 @@ object FailureDetection {
               deleteAck(ackId).flatMap{
                 case Some(_) =>
                   nodes
-                    .changeNodeState(probedNode, NodeState.Suspicion)
-                    .as(Message.NoResponse)
+                    .changeNodeState(probedNode, NodeState.Suspicion) *>
+                    Message.noResponse
                 case None =>
-                  ZIO.succeed(Message.NoResponse)
+                  Message.noResponse
               },
               protocolTimeout
             )
           case None =>
             nodes
-              .changeNodeState(probedNode, NodeState.Suspicion)
-              .as(Message.NoResponse)
+              .changeNodeState(probedNode, NodeState.Suspicion) *>
+                Message.noResponse
         }
       case None =>
-        ZIO.succeed(Message.NoResponse)
+        Message.noResponse
 
     }
 

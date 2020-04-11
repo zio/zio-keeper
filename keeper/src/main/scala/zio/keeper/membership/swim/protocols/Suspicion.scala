@@ -11,8 +11,6 @@ import zio.keeper.membership.swim.{Message, Nodes, Protocol}
 import zio.keeper.membership.{ByteCodec, MembershipEvent, NodeAddress, TaggedCodec}
 import zio.stm.TMap
 
-import scala.concurrent.duration.Deadline
-
 sealed trait Suspicion
 
 object Suspicion {
@@ -35,7 +33,7 @@ object Suspicion {
       }
     )
 
-  case class Suspect(nodeId: NodeAddress) extends Suspicion
+  case class Suspect(from: NodeAddress, nodeId: NodeAddress) extends Suspicion
 
   implicit val codecSuspect: ByteCodec[Suspect] =
     ByteCodec.fromReadWriter(macroRW[Suspect])
@@ -50,23 +48,27 @@ object Suspicion {
   implicit val codecDead: ByteCodec[Dead] =
     ByteCodec.fromReadWriter(macroRW[Dead])
 
-  private case class _Suspicion(start: Long, confirmations: Set[NodeAddress], requiredConfirmations: Int, deadline: Deadline)
 
-  def protocol(nodes: Nodes, local: NodeAddress, suspicionMultiplier: Int, interval: Duration) =
+  def protocol(nodes: Nodes, local: NodeAddress, timeout: Duration) =
     for {
-      suspects <- TMap.empty[NodeAddress, _Suspicion].commit
+      suspects <- TMap.empty[NodeAddress, Unit].commit
       protocol <- Protocol[Suspicion](
         {
-          case Message.Direct(sender, Suspect(`local`)) =>
+          case Message.Direct(sender, Suspect(_, `local`)) =>
             ZIO.succeed(
               Message.Batch(
                 Message.Direct(sender, Alive(local)),
                 Message.Broadcast(Alive(local))
               ))
 
-          case Message.Direct(_, Suspect(node)) =>
-            nodes.changeNodeState(node, NodeState.Suspicion).ignore
-              .as(Message.NoResponse) //it will trigger broadcast by events
+          case Message.Direct(_, Suspect(from, node)) =>
+            suspects.get(node).commit.flatMap{
+              case Some(_) =>
+                Message.noResponse
+              case None =>
+                nodes.changeNodeState(node, NodeState.Suspicion).ignore *>
+                  Message.noResponse//it will trigger broadcast by events
+            }
 
           case Message.Direct(sender, msg@Dead(nodeAddress)) if sender == nodeAddress =>
             nodes.changeNodeState(nodeAddress, NodeState.Left).ignore
@@ -77,33 +79,28 @@ object Suspicion {
               .as(Message.Broadcast(msg))
 
           case Message.Direct(_, msg@Alive(nodeAddress)) =>
+            suspects.delete(nodeAddress).commit *>
             nodes.changeNodeState(nodeAddress, NodeState.Healthy).ignore
               .as(Message.Broadcast(msg))
         },
         nodes.events.collectM {
           case MembershipEvent.NodeStateChanged(node, _, NodeState.Suspicion) =>
-            for {
-              time <- currentTime(TimeUnit.MILLISECONDS)
-              numOfNodes <- nodes.numberOfNodes
-              requiredConfirmations = if(numOfNodes < suspicionMultiplier) 0 else suspicionMultiplier - 2
-              _ <- suspects.put(
-                node,
-                _Suspicion(
-                  time,
-                  Set.empty,
-                  requiredConfirmations,
-                  suspicionTimeout(suspicionMultiplier, numOfNodes, interval)
-                )
-              ).commit
-            } yield Message.Broadcast(Suspect(node))
+            suspects.put(
+              node,
+              ()
+            ).commit.flatMap( _ =>
+              Message.withTimeout(
+                Message.Broadcast(Suspect(local, node)),
+                ZIO.ifM(suspects.contains(node).commit) (
+                  nodes.changeNodeState(node, NodeState.Death)
+                    .as(Message.Broadcast(Dead(node))),
+                  Message.noResponse
+                ),
+                timeout
+              )
+            )
         }
       )
     } yield protocol
 
-
-  private def suspicionTimeout(suspicionMultiplier: Int, numberOfNodes: Int, protocolInterval: Duration) = {
-    val nodeScale = math.max(1.0, math.log10(math.max(1.0, numberOfNodes.toDouble)))
-    val timeout = protocolInterval * (suspicionMultiplier * nodeScale)
-    timeout.fold(Deadline.now, finite => Deadline.now + finite.asScala)
-  }
 }

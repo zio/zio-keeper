@@ -1,10 +1,9 @@
 package zio.keeper.membership.swim
 
-import upickle.default._
 import zio.duration.Duration
+import zio.keeper.membership.NodeAddress
 import zio.keeper.membership.swim.Message.{NoResponse, WithTimeout}
-import zio.keeper.membership.{ByteCodec, NodeAddress}
-import zio.{Chunk, IO, ZIO, keeper}
+import zio.{IO, ZIO, keeper}
 
 sealed trait Message[+A] {
   self =>
@@ -38,9 +37,14 @@ object Message {
   case class WithTimeout[A](message: Message[A], action: IO[keeper.Error, Message[A]], timeout: Duration) extends Message[A]
   case object NoResponse extends Message[Nothing]
 
+  def direct[A](node: NodeAddress, message: A) =
+    ZIO.succeedNow(Direct(node, message))
+
   def withTimeout[R, A](message: Message[A], action: ZIO[R, keeper.Error, Message[A]], timeout: Duration) =
     for {
       env <- ZIO.environment[R]
     } yield WithTimeout(message, action.provide(env), timeout)
+
+  val noResponse = ZIO.succeedNow(NoResponse)
 
 }

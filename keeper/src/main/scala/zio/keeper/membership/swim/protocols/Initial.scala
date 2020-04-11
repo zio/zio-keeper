@@ -68,12 +68,12 @@ object Initial {
             case Message.Direct(sender, Accept) =>
               nodes.addNode(sender) *>
               nodes
-                .changeNodeState(sender, NodeState.Healthy)
-                .as(Message.NoResponse)
+                .changeNodeState(sender, NodeState.Healthy) *>
+                Message.noResponse
             case Message.Direct(sender, Reject(msg)) =>
               log(LogLevel.Error)("Rejected from cluster: " + msg) *>
-                nodes.disconnect(sender)
-                  .as(Message.NoResponse)
+                nodes.disconnect(sender) *>
+                Message.noResponse
           },
           ZStream
             .fromIterator(
