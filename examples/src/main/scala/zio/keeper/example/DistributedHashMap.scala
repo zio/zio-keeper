@@ -142,8 +142,8 @@ object DistributedHashMap {
     ZLayer
       .fromServiceManyManaged[ReceiverAdapter.Service with SimpleStringMap, Any, keeper.Error, ReceiverAdapter with Has[
         SimpleStringMap
-      ]] { y =>
-        ZLayer.succeedMany(Has.allOf[ReceiverAdapter.Service, SimpleStringMap](y, y)).build
+      ]] { service =>
+        ZLayer.succeedMany(Has.allOf[ReceiverAdapter.Service, SimpleStringMap](service, service)).build
       }
 
   val transformedComponents = hashMapComponents >>> layerTransformer
