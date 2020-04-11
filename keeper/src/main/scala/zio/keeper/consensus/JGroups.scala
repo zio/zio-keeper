@@ -32,7 +32,7 @@ object JGroups {
   private case class UserMessage(payload: Chunk[Byte])   extends JGroupsProtocol
 
   private val stateRequestCodec = ByteCodec.fromReadWriter(
-    implicitly[ReadWriter[Array[Byte]]].bimap[StateRequest.type](_ => Array(1,1), _ => StateRequest)
+    implicitly[ReadWriter[Array[Byte]]].bimap[StateRequest.type](_ => Array(1, 1), _ => StateRequest)
   )
 
   private val StateResponseCodec = ByteCodec.fromReadWriter(

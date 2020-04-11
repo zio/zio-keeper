@@ -5,8 +5,8 @@ import java.util.UUID
 import zio._
 import zio.clock.Clock
 import zio.keeper.membership.{ ByteCodec, Membership, MembershipEvent, NodeId, TaggedCodec }
-import zio.keeper.{Error, Message, membership}
-import zio.stream.{Stream, ZSink}
+import zio.keeper.{ Error, Message, membership }
+import zio.stream.{ Stream, ZSink }
 import zio.keeper.protocol.InternalProtocol._
 import upickle.default._
 import zio.duration.Duration
@@ -107,7 +107,7 @@ object Coordinator {
               case ConsensusViewResponse(view) =>
                 logging.logInfo(s"[CONSENSUS] Received view response") *> ref.set(view)
               case ConsensusUserMsg(payload) =>
-                logging.logInfo("[CONSENSUS Received user msg]") *> queue.offer(
+                logging.logInfo("[CONSENSUS] Received user msg") *> queue.offer(
                   Message(UUID.randomUUID(), msg.sender, payload)
                 )
             }

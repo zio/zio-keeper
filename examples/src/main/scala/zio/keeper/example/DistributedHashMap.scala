@@ -22,13 +22,13 @@ object HashMapRun1 extends App {
 
 }
 
-object hashMapRun2 extends App {
+object HashMapRun2 extends App {
 
   def run(args: List[String]) = program(8888, Set(8887)).fold(_ => 1, _ => 0)
 
 }
 
-object hashMapRun3 extends App {
+object HashMapRun3 extends App {
 
   def run(args: List[String]) = program(8889, Set(8888, 8887)).fold(_ => 1, _ => 0)
 
@@ -63,8 +63,8 @@ object DistributedHashMap {
         case 32 => remMapCodec.asInstanceOf[ByteCodec[HashMapOperation]]
       }
     )
-  implicit val hashMapByteCodec = ByteCodec.fromReadWriter(macroRW[HashMap[String, String]])
-  implicit val hashMapTagCodec  = TaggedCodec.instance[HashMap[String, String]](_ => 100, { case _ => hashMapByteCodec })
+  implicit val hashMapByteCodec = ByteCodec.fromReadWriter(upickle.default.readwriter[Map[String, String]])
+  implicit val hashMapTagCodec  = TaggedCodec.instance[Map[String, String]](_ => 100, { case _ => hashMapByteCodec })
 
   //========== HERE ARE BUILDING BLOCKS ==========
 
@@ -73,7 +73,7 @@ object DistributedHashMap {
    */
   val hashmapBuildBlocks: ZLayer[JGroups with Logging, Nothing, Has[ReceiverAdapter.Service with SimpleStringMap]] =
     ZLayer.fromEffect[JGroups with Logging, Nothing, ReceiverAdapter.Service with SimpleStringMap](for {
-      mapRef <- Ref.make(HashMap.empty[String, String])
+      mapRef <- Ref.make[Map[String, String]](HashMap.empty[String, String])
       jg     <- ZIO.access[JGroups](_.get[JGroups.Service])
       logger <- ZIO.environment[Logging]
     } yield new ReceiverAdapter.Service with SimpleStringMap {
@@ -92,7 +92,7 @@ object DistributedHashMap {
 
       override def setState(data: Chunk[Byte]): IO[keeper.Error, Unit] =
         for {
-          state <- TaggedCodec.read[HashMap[String, String]](data)
+          state <- TaggedCodec.read[Map[String, String]](data)
           _     <- logging.log.info(s"@@HASHMAP@@ SET STATE ${state}").provide(logger)
           _     <- hashMapRef.set(state)
         } yield ()
@@ -101,7 +101,7 @@ object DistributedHashMap {
         for {
           state    <- hashMapRef.get
           _        <- logging.log.info(s"@@HASHMAP@@ GET STATE ${state}").provide(logger)
-          rawState <- TaggedCodec.write[HashMap[String,String]](state)
+          rawState <- TaggedCodec.write[Map[String,String]](state)
         } yield rawState
 
       override def containsKey(key: String): UIO[Boolean] =
