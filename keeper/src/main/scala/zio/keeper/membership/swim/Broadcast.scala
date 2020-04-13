@@ -19,7 +19,7 @@ class Broadcast(ref: TRef[TreeSet[Item]], sequenceId: TRef[Int], messageOverhead
       )
       .commit
 
-  def broadcast(currentMessageSize: Int): ZIO[Any, Nothing, List[Chunk[Byte]]] =
+  def broadcast(currentMessageSize: Int): UIO[List[Chunk[Byte]]] =
     ref.modify { items =>
       val (toSend, toReschedule, _) = items.foldRight((Vector.empty[Item], Vector.empty[Item], currentMessageSize)) {
         case (item, (toSend, toReschedule, size))
