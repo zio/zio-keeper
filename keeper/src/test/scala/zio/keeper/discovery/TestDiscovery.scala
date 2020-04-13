@@ -1,7 +1,7 @@
 package zio.keeper.discovery
 
 import zio.keeper.membership.NodeAddress
-import zio.{Has, IO, Layer, Ref, UIO, URIO, ZLayer}
+import zio.{ Has, IO, Layer, Ref, UIO, URIO, ZLayer }
 
 object TestDiscovery {
 

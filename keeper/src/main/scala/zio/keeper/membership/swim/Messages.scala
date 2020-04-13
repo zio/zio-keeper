@@ -5,15 +5,22 @@ import zio._
 import zio.clock.Clock
 import zio.keeper.Error
 import zio.keeper.membership.swim.Message.WithTimeout
-import zio.keeper.membership.{ByteCodec, NodeAddress}
+import zio.keeper.membership.{ ByteCodec, NodeAddress }
 import zio.keeper.transport.Channel.Connection
 import zio.keeper.transport.Transport
 import zio.logging.Logging.Logging
 import zio.logging.log
-import zio.stream.{Take, ZStream}
+import zio.stream.{ Take, ZStream }
 import upickle.default._
 import zio.keeper.membership.swim.Messages.WithPiggyback
 
+/**
+ * Represents main messages loop. responsible for receiving and sending messages.
+ * @param local - local node
+ * @param messages - internal queue used to process incomming messages
+ * @param broadcast - broadcast for messages
+ * @param transport - UDP transport
+ */
 class Messages(
   val local: NodeAddress,
   messages: Queue[Take[Error, Message[Chunk[Byte]]]],
@@ -38,7 +45,7 @@ class Messages(
               chunk => messages.offer(Take.Value(Message.Direct(withPiggyback.node, chunk)))
             )
         case err: Take.Fail[Error] => messages.offer(err)
-        case Take.End => messages.offer(Take.End)
+        case Take.End              => messages.offer(Take.End)
       }
       .unit
 
@@ -50,11 +57,10 @@ class Messages(
       )
     )
 
-
   /**
    * Sends message to target.
    */
-  final def send(msg: Message[Chunk[Byte]]): ZIO[Clock, Error, Unit] =
+  final def send(msg: Message[Chunk[Byte]]): ZIO[Clock with Logging, Error, Unit] =
     msg match {
       case Message.NoResponse => ZIO.unit
       case Message.Direct(nodeAddress, message) =>
@@ -67,14 +73,13 @@ class Messages(
         } yield ()
       case msg: Message.Batch[Chunk[Byte]] =>
         ZIO.foreach(msg.first :: msg.second :: msg.rest.toList)(send).unit
-      case msg@Message.Broadcast(_) =>
+      case msg @ Message.Broadcast(_) =>
         broadcast.add(msg)
       case WithTimeout(message, action, timeout) =>
         send(message) *> action.delay(timeout).flatMap(send).unit
     }
 
-
-  def bind =
+  private def bind =
     for {
       localAddress <- local.socketAddress.toManaged_
       _            <- log.info("bind to " + localAddress).toManaged_
@@ -87,22 +92,26 @@ class Messages(
     } yield ()
 
   final def process(protocol: Protocol[Chunk[Byte]]) =
-    ZStream.mergeAll(2)(
-      ZStream
-        .fromQueue(messages)
-        .collectM {
-          case Take.Value(msg: Message.Direct[Chunk[Byte]]) =>
-            Take.fromEffect(protocol.onMessage(msg))
-        },
-      recoverErrors(protocol.produceMessages)
-    ).collectM {
+    ZStream
+      .mergeAll(2)(
+        ZStream
+          .fromQueue(messages)
+          .collectM {
+            case Take.Value(msg: Message.Direct[Chunk[Byte]]) =>
+              Take.fromEffect(protocol.onMessage(msg))
+          },
+        recoverErrors(protocol.produceMessages)
+      )
+      .mapMPar(10) {
         case Take.Value(msg) =>
           send(msg)
             .catchAll(e => log.error("error during send: " + e))
         case Take.Fail(cause) =>
           log.error("error: ", cause)
+        case Take.End => ZIO.unit
       }
       .runDrain
+      .fork
 }
 
 object Messages {

@@ -56,7 +56,6 @@ lazy val keeper = project
       "dev.zio"                %% "zio-test"                % ZioVersion % Test,
       "dev.zio"                %% "zio-test-sbt"            % ZioVersion % Test
     ),
-    scalacOptions --= Seq("-Xfatal-warnings"),
     testFrameworks := Seq(new TestFramework("zio.test.sbt.ZTestFramework"))
   )
 

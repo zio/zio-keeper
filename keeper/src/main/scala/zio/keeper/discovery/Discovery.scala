@@ -1,10 +1,10 @@
 package zio.keeper.discovery
 
-import zio.{IO, Layer, UIO, ZLayer}
 import zio.duration.Duration
 import zio.keeper.Error
 import zio.logging.Logging
-import zio.nio.core.{InetAddress, InetSocketAddress, SocketAddress}
+import zio.nio.core.{ InetAddress, InetSocketAddress }
+import zio.{ IO, Layer, UIO, ZLayer }
 
 object Discovery {
 

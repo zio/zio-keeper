@@ -1,6 +1,5 @@
 package zio.keeper.membership
 
-import upickle.default.macroRW
 import zio.keeper.membership.swim.protocols.User
 import zio.test.Assertion._
 import zio.test._

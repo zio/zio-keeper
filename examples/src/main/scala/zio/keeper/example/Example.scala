@@ -64,6 +64,7 @@ object TestNode {
       env =>
         (for {
           membership0 <- ZManaged.access[Membership[PingPong]](_.get)
+          _           <- membership0.events.mapM(event => putStrLn(s"EVENT: $event")).runDrain.toManaged_.fork
           _           <- sleep(5.seconds).toManaged_
           nodes       <- membership0.nodes.toManaged_
           _           <- ZIO.foreach(nodes)(n => membership0.send(Ping(1), n)).toManaged_

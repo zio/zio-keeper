@@ -58,17 +58,20 @@ object Initial {
           {
             case Message.Direct(_, Join(addr)) if addr == local =>
               ZIO.succeed(Message.NoResponse)
-            case Message.Direct(_, join@Join(addr)) =>
-              nodes.nodeState(addr).as(Message.NoResponse).orElse(
-                nodes.addNode(addr) *>
-                  nodes
-                    .changeNodeState(addr, NodeState.Healthy)
-                    .as(Message.Batch[Initial](Message.Direct(addr, Accept), Message.Broadcast(join)))
-              )
+            case Message.Direct(_, join @ Join(addr)) =>
+              nodes
+                .nodeState(addr)
+                .as(Message.NoResponse)
+                .orElse(
+                  nodes.addNode(addr) *>
+                    nodes
+                      .changeNodeState(addr, NodeState.Healthy)
+                      .as(Message.Batch[Initial](Message.Direct(addr, Accept), Message.Broadcast(join)))
+                )
             case Message.Direct(sender, Accept) =>
               nodes.addNode(sender) *>
-              nodes
-                .changeNodeState(sender, NodeState.Healthy) *>
+                nodes
+                  .changeNodeState(sender, NodeState.Healthy) *>
                 Message.noResponse
             case Message.Direct(sender, Reject(msg)) =>
               log(LogLevel.Error)("Rejected from cluster: " + msg) *>
@@ -80,10 +83,10 @@ object Initial {
               env.get.discoverNodes.map(_.iterator)
             )
             .mapM(
-              node => NodeAddress(node).map(
-                nodeAddress =>
-                  Message.Direct(nodeAddress, Join(local))
-              )
+              node =>
+                NodeAddress(node).map(
+                  nodeAddress => Message.Direct(nodeAddress, Join(local))
+                )
             )
         )
     )

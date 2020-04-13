@@ -31,9 +31,8 @@ trait Protocol[M] {
             .flatMap(_.transformM(TaggedCodec.write[M]))
 
       override val produceMessages: ZStream[Any, Error, Message[Chunk[Byte]]] =
-        self.produceMessages.mapM (_.transformM(TaggedCodec.write[M]))
+        self.produceMessages.mapM(_.transformM(TaggedCodec.write[M]))
     }
-
 
   /**
    * Adds logging to each received and sent message.
@@ -43,13 +42,14 @@ trait Protocol[M] {
       new Protocol[M] {
         override def onMessage: Message.Direct[M] => ZIO[Any, Error, Message[M]] =
           msg =>
-            env.get.logger.log(LogLevel.Info)("Receive [" + msg + "]") *>
-              self.onMessage(msg)
-                .tap(msg => env.get.logger.log(LogLevel.Info)("Replied with [" + msg + "]"))
+            env.get.logger.log(LogLevel.Trace)("Receive [" + msg + "]") *>
+              self
+                .onMessage(msg)
+                .tap(msg => env.get.logger.log(LogLevel.Trace)("Replied with [" + msg + "]"))
 
         override val produceMessages: ZStream[Any, Error, Message[M]] =
           self.produceMessages.tap { msg =>
-            env.get.logger.log(LogLevel.Info)("Sending [" + msg + "]")
+            env.get.logger.log(LogLevel.Trace)("Sending [" + msg + "]")
           }
       }
     }
@@ -72,15 +72,14 @@ object Protocol {
     new Protocol[A] {
 
       override val onMessage: Message.Direct[A] => ZIO[Any, Error, Message[A]] =
-        msg =>
-          (second :: rest.toList).foldLeft(first.onMessage(msg))((acc, a) => acc.orElse(a.onMessage(msg)))
-
+        msg => (second :: rest.toList).foldLeft(first.onMessage(msg))((acc, a) => acc.orElse(a.onMessage(msg)))
 
       override val produceMessages: ZStream[Any, Error, Message[A]] =
-        ZStream.mergeAllUnbounded()((first.produceMessages :: second.produceMessages :: rest.map(_.produceMessages).toList):_*)
+        ZStream.mergeAllUnbounded()(
+          (first.produceMessages :: second.produceMessages :: rest.map(_.produceMessages).toList): _*
+        )
 
     }
-
 
   class ProtocolBuilder[M] {
 

@@ -3,13 +3,13 @@ package zio.keeper.membership.swim.protocols
 import upickle.default._
 import zio.duration._
 import zio.keeper.membership.swim.Nodes.NodeState
-import zio.keeper.membership.swim.{Message, Nodes, Protocol}
-import zio.keeper.membership.{ByteCodec, NodeAddress, TaggedCodec}
+import zio.keeper.membership.swim.{ Message, Nodes, Protocol }
+import zio.keeper.membership.{ ByteCodec, NodeAddress, TaggedCodec }
 import zio.logging.Logging.Logging
 import zio.logging._
 import zio.stm.TMap
 import zio.stream.ZStream
-import zio.{Ref, Schedule, UIO, ZIO, keeper}
+import zio.{ Ref, Schedule, UIO, ZIO, keeper }
 
 sealed trait FailureDetection
 
@@ -140,37 +140,37 @@ object FailureDetection {
     } yield protocol
 
   private def onAckTimeout(
-                            nodes: Nodes,
-                            probedNode: NodeAddress,
-                            ackId: Long,
-                            acks: TMap[Long, _Ack],
-                            deleteAck: Long => UIO[Option[_Ack]],
-                            protocolTimeout: Duration
+    nodes: Nodes,
+    probedNode: NodeAddress,
+    ackId: Long,
+    acks: TMap[Long, _Ack],
+    deleteAck: Long => UIO[Option[_Ack]],
+    protocolTimeout: Duration
   ): ZIO[Logging, keeper.Error, Message[FailureDetection]] =
     acks.get(ackId).commit.flatMap {
       case Some(_) =>
         log.warn(s"node: $probedNode missed ack with id $ackId") *>
-        nodes
-          .changeNodeState(probedNode, NodeState.Unreachable) *>
-        nodes.next.flatMap{
-          case Some(next) =>
-            Message.withTimeout(
-              Message.Direct(next, PingReq(probedNode, ackId)),
-              deleteAck(ackId).flatMap{
-                case Some(_) =>
-                  nodes
-                    .changeNodeState(probedNode, NodeState.Suspicion) *>
+          nodes
+            .changeNodeState(probedNode, NodeState.Unreachable) *>
+          nodes.next.flatMap {
+            case Some(next) =>
+              Message.withTimeout(
+                Message.Direct(next, PingReq(probedNode, ackId)),
+                deleteAck(ackId).flatMap {
+                  case Some(_) =>
+                    nodes
+                      .changeNodeState(probedNode, NodeState.Suspicion) *>
+                      Message.noResponse
+                  case None =>
                     Message.noResponse
-                case None =>
-                  Message.noResponse
-              },
-              protocolTimeout
-            )
-          case None =>
-            nodes
-              .changeNodeState(probedNode, NodeState.Suspicion) *>
+                },
+                protocolTimeout
+              )
+            case None =>
+              nodes
+                .changeNodeState(probedNode, NodeState.Suspicion) *>
                 Message.noResponse
-        }
+          }
       case None =>
         Message.noResponse
 

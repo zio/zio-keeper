@@ -8,23 +8,19 @@ import zio.keeper._
 import zio.keeper.discovery.Discovery
 import zio.keeper.membership.Membership.Membership
 import zio.keeper.membership.swim.protocols._
-import zio.keeper.membership.{Membership, MembershipEvent, NodeAddress, TaggedCodec}
+import zio.keeper.membership.{ Membership, MembershipEvent, NodeAddress, TaggedCodec }
 import zio.logging.Logging.Logging
 import zio.logging._
-import zio.stm.TRef
 import zio.stream.ZStream
 
-import scala.collection.mutable
-
 object SWIM {
-
 
   def run[B: TaggedCodec: Tag](
     port: Int
   ): ZLayer[Discovery with Logging with Clock, Error, Membership[B]] =
     ZLayer.fromManaged(for {
       _            <- log.info("starting SWIM on port: " + port).toManaged_
-      udpTransport <- transport.udp.live(1024000).build.map(_.get)
+      udpTransport <- transport.udp.live(64000).build.map(_.get)
 
       userIn <- Queue
                  .bounded[Message.Direct[B]](1000)
@@ -32,7 +28,7 @@ object SWIM {
       userOut <- Queue
                   .bounded[Message.Direct[B]](1000)
                   .toManaged(_.shutdown)
-      localNodeAddress = NodeAddress(Array(0,0,0,0), port)
+      localNodeAddress = NodeAddress(Array(0, 0, 0, 0), port)
 
       nodes0 <- Nodes.make.toManaged_
       _      <- nodes0.prettyPrint.flatMap(log.info(_)).repeat(Schedule.spaced(5.seconds)).toManaged_.fork
@@ -58,29 +54,26 @@ object SWIM {
                .map(_.binary)
                .toManaged_
       deadLetter <- DeadLetter.protocol.toManaged_
-      swim = Protocol.compose(initial.binary, failureDetection, suspicion)
-//        .compose(user)
-//        .compose(deadLetter)
-    tref <- TRef.makeCommit(mutable.PriorityQueue[Broadcast.Item]()).toManaged_
-      sequenceId <- TRef.makeCommit(0).toManaged_
-    messages0 <- Messages.make(localNodeAddress, new Broadcast(tref, sequenceId),  udpTransport)
-    _ <- messages0.process(swim).toManaged_
+      swim       = Protocol.compose(initial.binary, failureDetection, suspicion, user, deadLetter)
+      broadcast  <- Broadcast.make(64000).toManaged_
+      messages0  <- Messages.make(localNodeAddress, broadcast, udpTransport)
+      _          <- messages0.process(swim).toManaged_
     } yield new Membership.Service[B] {
 
-      override def events: ZStream[Any, Error, MembershipEvent] =
+      override val events: ZStream[Any, Error, MembershipEvent] =
         nodes0.events
 
-      override def localMember: NodeAddress = localNodeAddress
+      override val localMember: NodeAddress = localNodeAddress
 
-      override def nodes: ZIO[Any, Nothing, List[NodeAddress]] =
+      override val nodes: UIO[List[NodeAddress]] =
         nodes0.onlyHealthyNodes.map(_.map(_._1))
 
-      override def receive: ZStream[Any, Error, (NodeAddress, B)] =
+      override val receive: ZStream[Any, Error, (NodeAddress, B)] =
         ZStream.fromQueue(userIn).collect {
           case Message.Direct(n, m) => (n, m)
         }
 
-      override def send(data: B, receipt: NodeAddress): ZIO[Any, Error, Unit] =
+      override def send(data: B, receipt: NodeAddress): IO[Error, Unit] =
         userOut.offer(Message.Direct(receipt, data)).unit
 
     })
