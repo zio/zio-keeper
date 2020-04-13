@@ -9,7 +9,7 @@ import zio.keeper.membership.swim.Nodes.NodeState
 import zio.keeper.membership.{ MembershipEvent, NodeAddress }
 import zio.logging._
 import zio.stm.TMap
-import zio.stream.ZStream
+import zio.stream._
 
 /**
  * Nodes maintains state of the cluster.
@@ -89,7 +89,7 @@ final class Nodes(
    */
   final val next: UIO[Option[NodeAddress]] /*(exclude: List[NodeId] = Nil)*/ =
     for {
-      list      <- onlyHealthyNodes
+      list      <- healthyNodes
       nextIndex <- roundRobinOffset.updateAndGet(old => if (old < list.size - 1) old + 1 else 0)
       _         <- nodeStates.removeIf((_, v) => v == NodeState.Death).when(nextIndex == 0).commit
     } yield list.drop(nextIndex).headOption.map(_._1)

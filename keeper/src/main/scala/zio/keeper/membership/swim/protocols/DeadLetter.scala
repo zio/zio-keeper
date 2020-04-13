@@ -8,7 +8,7 @@ import zio.logging._
 object DeadLetter {
 
   def protocol =
-    Protocol[Chunk[Byte]].apply(
+    Protocol[Chunk[Byte]].make(
       { msg =>
         log(LogLevel.Error)("message [" + msg + "] in dead letter") *> Message.noResponse
       },

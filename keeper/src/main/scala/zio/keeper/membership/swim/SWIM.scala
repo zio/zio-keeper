@@ -10,7 +10,7 @@ import zio.keeper.membership.swim.protocols._
 import zio.keeper.membership.{ Membership, MembershipEvent, NodeAddress, TaggedCodec }
 import zio.logging.Logging.Logging
 import zio.logging._
-import zio.stream.ZStream
+import zio.stream._
 
 object SWIM {
 
@@ -71,7 +71,7 @@ object SWIM {
       override val localMember: NodeAddress = localNodeAddress
 
       override val nodes: UIO[List[NodeAddress]] =
-        nodes0.onlyHealthyNodes.map(_.map(_._1))
+        nodes0.healthyNodes.map(_.map(_._1))
 
       override val receive: Stream[Error, (NodeAddress, B)] =
         ZStream.fromQueue(userIn).collect {

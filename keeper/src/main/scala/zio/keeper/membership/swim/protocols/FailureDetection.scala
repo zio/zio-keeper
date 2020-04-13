@@ -93,7 +93,7 @@ object FailureDetection {
             _          <- acks.put(ackId, _Ack(onBehalf)).commit
           } yield nodeAndMsg
 
-        Protocol[FailureDetection](
+        Protocol[FailureDetection].make(
           {
             case Message.Direct(sender, Ack(ackId)) =>
               log.debug(s"received ack[$ackId] from $sender") *>

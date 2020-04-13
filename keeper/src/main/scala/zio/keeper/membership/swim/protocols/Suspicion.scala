@@ -48,7 +48,7 @@ object Suspicion {
   def protocol(nodes: Nodes, local: NodeAddress, timeout: Duration) =
     for {
       suspects <- TMap.empty[NodeAddress, Unit].commit
-      protocol <- Protocol[Suspicion](
+      protocol <- Protocol[Suspicion].make(
                    {
                      case Message.Direct(sender, Suspect(_, `local`)) =>
                        ZIO.succeed(

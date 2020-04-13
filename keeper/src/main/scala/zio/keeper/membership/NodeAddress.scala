@@ -1,7 +1,7 @@
 package zio.keeper.membership
 
 import upickle.default._
-import zio.ZIO
+import zio.{ IO, UIO }
 import zio.keeper.TransportError
 import zio.keeper.TransportError._
 import zio.nio.core.{ InetAddress, InetSocketAddress, SocketAddress }

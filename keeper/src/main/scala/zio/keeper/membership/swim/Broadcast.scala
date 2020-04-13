@@ -1,8 +1,8 @@
 package zio.keeper.membership.swim
 
 import zio.keeper.membership.swim.Broadcast.Item
-import zio.stm.TRef
-import zio.{ Chunk, ZIO }
+import zio.stm.{ STM, TRef }
+import zio.{ Chunk, UIO }
 
 import scala.collection.immutable.TreeSet
 

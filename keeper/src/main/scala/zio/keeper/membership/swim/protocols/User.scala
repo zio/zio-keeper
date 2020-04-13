@@ -4,7 +4,7 @@ import upickle.default.{ readBinary, writeBinary }
 import zio.keeper.SerializationError._
 import zio.keeper.membership.swim.{ Message, Protocol }
 import zio.keeper.membership.{ ByteCodec, TaggedCodec }
-import zio.stream.ZStream
+import zio.stream._
 import zio.{ Chunk, IO, ZIO }
 
 final case class User[A](msg: A) extends AnyVal
@@ -53,7 +53,7 @@ object User {
     userIn: zio.Queue[Message.Direct[B]],
     userOut: zio.Queue[Message.Direct[B]]
   ) =
-    Protocol[User[B]](
+    Protocol[User[B]].make(
       msg => userIn.offer(Message.Direct(msg.node, msg.message.msg)).as(Message.NoResponse),
       ZStream
         .fromQueue(userOut)

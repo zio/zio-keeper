@@ -5,7 +5,8 @@ import zio.keeper.membership.TaggedCodec
 import zio.logging.Logging.Logging
 import zio.logging._
 import zio.stream.ZStream
-import zio.{ Chunk, ZIO }
+import zio.{ Chunk, IO, ZIO }
+import zio.stream._
 
 /**
  * Protocol represents message flow.

@@ -9,7 +9,7 @@ import zio.test.Assertion._
 
 object ProtocolSpec extends DefaultRunnableSpec {
 
-  val protocolDefinition = Protocol[PingPong](
+  val protocolDefinition = Protocol[PingPong].make(
     {
       case Message.Direct(sender, Ping(i)) =>
         ZIO.succeed(Message.Direct(sender, Pong(i)))

@@ -34,7 +34,7 @@ object Message {
   final case class Direct[A](node: NodeAddress, message: A) extends Message[A]
 
   final case class Batch[A](first: Message[A], second: Message[A], rest: Message[A]*) extends Message[A]
-  
+
   final case class Broadcast[A](message: A) extends Message[A]
 
   final case class WithTimeout[A](message: Message[A], action: IO[keeper.Error, Message[A]], timeout: Duration)

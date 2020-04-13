@@ -54,7 +54,7 @@ object Initial {
   def protocol(nodes: Nodes, local: NodeAddress) =
     ZIO.accessM[Discovery with Logging](
       env =>
-        Protocol[Initial](
+        Protocol[Initial].make(
           {
             case Message.Direct(_, Join(addr)) if addr == local =>
               ZIO.succeed(Message.NoResponse)
@@ -84,9 +84,11 @@ object Initial {
             )
             .mapM(
               node =>
-                NodeAddress(node).map(
-                  nodeAddress => Message.Direct(nodeAddress, Join(local))
-                )
+                NodeAddress
+                  .fromSocketAddress(node)
+                  .map(
+                    nodeAddress => Message.Direct(nodeAddress, Join(local))
+                  )
             )
         )
     )

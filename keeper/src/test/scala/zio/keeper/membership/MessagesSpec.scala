@@ -79,7 +79,7 @@ object MessagesSpec extends DefaultRunnableSpec {
     messages  <- Messages.make(local, broadcast, transport)
   } yield (transport, messages)
 
-  val protocol = Protocol[PingPong](
+  val protocol = Protocol[PingPong].make(
     {
       case Message.Direct(sender, Ping(i)) =>
         ZIO.succeed(Message.Direct(sender, Pong(i)))
