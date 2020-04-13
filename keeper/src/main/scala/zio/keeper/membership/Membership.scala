@@ -1,12 +1,12 @@
 package zio.keeper.membership
 
 import zio.stream.Stream
-import zio.{ Has, IO, UIO }
+import zio.{ IO, UIO }
 
 object Membership {
-  type Membership[A] = Has[Membership.Service[A]]
 
   trait Service[A] {
+    def broadcast(data: A): IO[zio.keeper.Error, Unit]
     def events: Stream[zio.keeper.Error, MembershipEvent]
     def localMember: NodeAddress
     def nodes: UIO[List[NodeAddress]]

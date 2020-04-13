@@ -1,4 +1,4 @@
-package zio.membership.hyparview.plumtree
+package zio.membership.plumtree
 
 import zio._
 import zio.stm._

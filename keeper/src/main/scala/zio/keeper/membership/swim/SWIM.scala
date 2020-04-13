@@ -6,7 +6,6 @@ import zio.clock.Clock
 import zio.duration._
 import zio.keeper._
 import zio.keeper.discovery.Discovery
-import zio.keeper.membership.Membership.Membership
 import zio.keeper.membership.swim.protocols._
 import zio.keeper.membership.{ Membership, MembershipEvent, NodeAddress, TaggedCodec }
 import zio.logging.Logging.Logging
@@ -55,10 +54,16 @@ object SWIM {
                .toManaged_
       deadLetter <- DeadLetter.protocol.toManaged_
       swim       = Protocol.compose(initial.binary, failureDetection, suspicion, user, deadLetter)
-      broadcast  <- Broadcast.make(64000).toManaged_
-      messages0  <- Messages.make(localNodeAddress, broadcast, udpTransport)
+      broadcast0 <- Broadcast.make(64000).toManaged_
+      messages0  <- Messages.make(localNodeAddress, broadcast0, udpTransport)
       _          <- messages0.process(swim).toManaged_
     } yield new Membership.Service[B] {
+
+      override def broadcast(data: B): IO[zio.keeper.Error, Unit] =
+        for {
+          bytes <- TaggedCodec.write[B](data)
+          _     <- broadcast0.add(Message.Broadcast(bytes))
+        } yield ()
 
       override val events: ZStream[Any, Error, MembershipEvent] =
         nodes0.events

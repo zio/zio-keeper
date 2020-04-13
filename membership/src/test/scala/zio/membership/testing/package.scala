@@ -1,4 +1,4 @@
-package zio.membership.hyparview
+package zio.membership
 
 import zio.Has
 

@@ -40,7 +40,7 @@ object SwimSpec extends DefaultRunnableSpec {
         start    <- Promise.make[Nothing, Membership.Service[EmptyProtocol]]
         shutdown <- Promise.make[Nothing, Unit]
         _ <- ZIO
-              .accessM[Membership.Membership[EmptyProtocol] with TestDiscovery.TestDiscovery] { env =>
+              .accessM[Membership[EmptyProtocol] with TestDiscovery.TestDiscovery] { env =>
                 TestDiscovery.addMember(env.get.localMember) *>
                   start.succeed(env.get) *>
                   shutdown.await

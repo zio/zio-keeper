@@ -7,7 +7,7 @@ import zio.console._
 import zio.duration._
 import zio.keeper.discovery.Discovery
 import zio.keeper.example.TestNode.PingPong.{ Ping, Pong }
-import zio.keeper.membership.Membership.Membership
+import zio.keeper.membership.Membership
 import zio.keeper.membership._
 import zio.keeper.membership.swim.SWIM
 import zio.logging.Logging

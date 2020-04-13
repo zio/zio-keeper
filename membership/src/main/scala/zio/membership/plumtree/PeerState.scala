@@ -1,10 +1,11 @@
-package zio.membership.hyparview.plumtree
+package zio.membership.plumtree
 
 import zio._
 import zio.logging.log
 import zio.logging.Logging.Logging
+import zio.membership.PeerService
 import zio.stm._
-import zio.membership.hyparview.{ PeerService, TRandom }
+import zio.membership.hyparview.TRandom
 
 object PeerState {
 

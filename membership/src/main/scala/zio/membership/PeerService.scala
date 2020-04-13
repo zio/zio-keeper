@@ -1,7 +1,6 @@
-package zio.membership.hyparview
+package zio.membership
 
 import zio._
-import zio.membership.{ Error, SendError }
 import zio.membership.hyparview.ActiveProtocol.PlumTreeProtocol
 import zio.stream._
 
@@ -17,15 +16,10 @@ object PeerService {
     ZIO.accessM(_.get.send(to, message))
 
   def receive[T: Tagged]: ZStream[PeerService[T], Error, (T, PlumTreeProtocol)] =
-    // TODO: update to ZStream#accessM on next update
-    ZStream.unwrap {
-      ZIO.access(_.get.receive)
-    }
+    ZStream.accessStream(_.get.receive)
 
   def events[T: Tagged]: ZStream[PeerService[T], Nothing, PeerEvent[T]] =
-    ZStream.unwrap {
-      ZIO.access(_.get.events)
-    }
+    ZStream.accessStream(_.get.events)
 
   trait Service[T] {
     val identity: UIO[T]
