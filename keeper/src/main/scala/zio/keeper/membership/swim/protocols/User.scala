@@ -7,7 +7,7 @@ import zio.keeper.membership.{ ByteCodec, TaggedCodec }
 import zio.stream.ZStream
 import zio.{ Chunk, IO, ZIO }
 
-case class User[A](msg: A)
+final case class User[A](msg: A) extends AnyVal
 
 object User {
 

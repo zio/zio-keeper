@@ -6,9 +6,9 @@ import zio.{ Chunk, ZIO }
 
 import scala.collection.immutable.TreeSet
 
-class Broadcast(ref: TRef[TreeSet[Item]], sequenceId: TRef[Int], messageOverhead: Int, messageLimit: Int) {
+final class Broadcast(ref: TRef[TreeSet[Item]], sequenceId: TRef[Int], messageOverhead: Int, messageLimit: Int) {
 
-  def add(message: Message.Broadcast[Chunk[Byte]]): ZIO[Any, Nothing, Unit] =
+  def add(message: Message.Broadcast[Chunk[Byte]]): UIO[Unit] =
     sequenceId
       .getAndUpdate(_ + 1)
       .flatMap[Any, Nothing, Unit](
@@ -37,10 +37,7 @@ class Broadcast(ref: TRef[TreeSet[Item]], sequenceId: TRef[Int], messageOverhead
 object Broadcast {
 
   def make(mtu: Int) =
-    for {
-      tref       <- TRef.makeCommit(TreeSet.empty[Item])
-      sequenceId <- TRef.makeCommit(0)
-    } yield new Broadcast(tref, sequenceId, 100, mtu)
+    STM.mapN(TRef.make(TreeSet.empty[Item]), TRef.make(0))(new Broadcast(_, _, 100, mtu)).commit
 
   final case class Item(seqId: Int, resend: Int, chunk: Chunk[Byte])
 

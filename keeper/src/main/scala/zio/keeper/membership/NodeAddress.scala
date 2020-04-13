@@ -15,7 +15,7 @@ final case class NodeAddress(ip: Array[Byte], port: Int) {
 
   override def hashCode(): Int = port
 
-  def socketAddress: ZIO[Any, TransportError, InetSocketAddress] =
+  def socketAddress: IO[TransportError, InetSocketAddress] =
     (for {
       addr <- InetAddress.byAddress(ip)
       sa   <- SocketAddress.inetSocketAddress(addr, port)
@@ -26,7 +26,7 @@ final case class NodeAddress(ip: Array[Byte], port: Int) {
 
 object NodeAddress {
 
-  def apply(addr: InetSocketAddress): ZIO[Any, Nothing, NodeAddress] =
+  def fromSocketAddress(addr: InetSocketAddress): UIO[NodeAddress] =
     InetAddress
       .byName(addr.hostString)
       .map(inet => NodeAddress(inet.address, addr.port))

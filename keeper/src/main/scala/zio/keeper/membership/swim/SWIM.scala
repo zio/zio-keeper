@@ -65,7 +65,7 @@ object SWIM {
           _     <- broadcast0.add(Message.Broadcast(bytes))
         } yield ()
 
-      override val events: ZStream[Any, Error, MembershipEvent] =
+      override val events: Stream[Error, MembershipEvent] =
         nodes0.events
 
       override val localMember: NodeAddress = localNodeAddress
@@ -73,7 +73,7 @@ object SWIM {
       override val nodes: UIO[List[NodeAddress]] =
         nodes0.onlyHealthyNodes.map(_.map(_._1))
 
-      override val receive: ZStream[Any, Error, (NodeAddress, B)] =
+      override val receive: Stream[Error, (NodeAddress, B)] =
         ZStream.fromQueue(userIn).collect {
           case Message.Direct(n, m) => (n, m)
         }

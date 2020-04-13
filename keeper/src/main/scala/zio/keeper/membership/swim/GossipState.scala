@@ -4,7 +4,7 @@ import upickle.default.{ macroRW, _ }
 import zio.keeper.membership.{ NodeAddress, swim }
 import zio.keeper.membership.swim.GossipState.StateDiff
 
-case class GossipState(members: Vector[NodeAddress]) extends AnyVal {
+final case class GossipState(members: Vector[NodeAddress]) extends AnyVal {
 
   def addMember(member: NodeAddress) =
     copy(members = this.members :+ member)

@@ -30,7 +30,7 @@ trait Protocol[M] {
             .flatMap(decoded => self.onMessage(Message.Direct(msg.node, decoded)))
             .flatMap(_.transformM(TaggedCodec.write[M]))
 
-      override val produceMessages: ZStream[Any, Error, Message[Chunk[Byte]]] =
+      override val produceMessages: Stream[Error, Message[Chunk[Byte]]] =
         self.produceMessages.mapM(_.transformM(TaggedCodec.write[M]))
     }
 
@@ -40,14 +40,14 @@ trait Protocol[M] {
   val debug: ZIO[Logging, Error, Protocol[M]] =
     ZIO.access[Logging] { env =>
       new Protocol[M] {
-        override def onMessage: Message.Direct[M] => ZIO[Any, Error, Message[M]] =
+        override def onMessage: Message.Direct[M] => IO[Error, Message[M]] =
           msg =>
             env.get.logger.log(LogLevel.Trace)("Receive [" + msg + "]") *>
               self
                 .onMessage(msg)
                 .tap(msg => env.get.logger.log(LogLevel.Trace)("Replied with [" + msg + "]"))
 
-        override val produceMessages: ZStream[Any, Error, Message[M]] =
+        override val produceMessages: Stream[Error, Message[M]] =
           self.produceMessages.tap { msg =>
             env.get.logger.log(LogLevel.Trace)("Sending [" + msg + "]")
           }
@@ -57,12 +57,12 @@ trait Protocol[M] {
   /**
    * Handler for incomming messages.
    */
-  def onMessage: Message.Direct[M] => ZIO[Any, Error, Message[M]]
+  def onMessage: Message.Direct[M] => IO[Error, Message[M]]
 
   /**
    * Stream of outgoing messages.
    */
-  val produceMessages: zio.stream.ZStream[Any, Error, Message[M]]
+  val produceMessages: zio.stream.Stream[Error, Message[M]]
 
 }
 
@@ -71,10 +71,10 @@ object Protocol {
   def compose[A](first: Protocol[A], second: Protocol[A], rest: Protocol[A]*): Protocol[A] =
     new Protocol[A] {
 
-      override val onMessage: Message.Direct[A] => ZIO[Any, Error, Message[A]] =
+      override val onMessage: Message.Direct[A] => IO[Error, Message[A]] =
         msg => (second :: rest.toList).foldLeft(first.onMessage(msg))((acc, a) => acc.orElse(a.onMessage(msg)))
 
-      override val produceMessages: ZStream[Any, Error, Message[A]] =
+      override val produceMessages: Stream[Error, Message[A]] =
         ZStream.mergeAllUnbounded()(
           (first.produceMessages :: second.produceMessages :: rest.map(_.produceMessages).toList): _*
         )
@@ -83,7 +83,7 @@ object Protocol {
 
   class ProtocolBuilder[M] {
 
-    def apply[R](
+    def make[R](
       in: Message.Direct[M] => ZIO[R, Error, Message[M]],
       out: zio.stream.ZStream[R, Error, Message[M]]
     ): ZIO[R, Error, Protocol[M]] =
@@ -91,10 +91,10 @@ object Protocol {
         env =>
           new Protocol[M] {
 
-            override val onMessage: Message.Direct[M] => ZIO[Any, Error, Message[M]] =
+            override val onMessage: Message.Direct[M] => IO[Error, Message[M]] =
               msg => in(msg).provide(env)
 
-            override val produceMessages: ZStream[Any, Error, Message[M]] =
+            override val produceMessages: Stream[Error, Message[M]] =
               out.provide(env)
           }
       )

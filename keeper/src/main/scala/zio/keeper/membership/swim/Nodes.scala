@@ -17,7 +17,7 @@ import zio.stream.ZStream
  * @param nodeStates - states
  * @param roundRobinOffset - offset for round-robin
  */
-class Nodes(
+final class Nodes(
   nodeStates: TMap[NodeAddress, NodeState],
   roundRobinOffset: Ref[Int],
   eventsQueue: Queue[MembershipEvent],
@@ -68,20 +68,20 @@ class Nodes(
    * close connection and remove Node from cluster.
    * @param id node id
    */
-  def disconnect(id: NodeAddress): ZIO[Any, Error, Unit] =
+  def disconnect(id: NodeAddress): IO[Error, Unit] =
     nodeStates.delete(id).commit
 
   /**
    *  Stream of Membership Events
    */
-  final def events: ZStream[Any, Nothing, MembershipEvent] =
+  final def events: Stream[Nothing, MembershipEvent] =
     ZStream.fromQueue(eventsQueue)
 
   /**
    *  Stream of Membership Events for internal purpose.
    *  This exists only because I cannot find the way to duplicates events from one queue
    */
-  final val internalEvents: ZStream[Any, Nothing, MembershipEvent] =
+  final val internalEvents: Stream[Nothing, MembershipEvent] =
     ZStream.fromQueue(internalEventsQueue)
 
   /**
@@ -106,7 +106,7 @@ class Nodes(
   /**
    * Lists members that are in healthy state.
    */
-  final def onlyHealthyNodes: UIO[List[(NodeAddress, NodeState)]] =
+  final def healthyNodes: UIO[List[(NodeAddress, NodeState)]] =
     nodeStates.toList.map(_.filter(_._2 == NodeState.Healthy)).commit
 
   /**

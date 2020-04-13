@@ -21,7 +21,7 @@ import zio.keeper.membership.swim.Messages.WithPiggyback
  * @param broadcast - broadcast for messages
  * @param transport - UDP transport
  */
-class Messages(
+final class Messages(
   val local: NodeAddress,
   messages: Queue[Take[Error, Message[Chunk[Byte]]]],
   broadcast: Broadcast,
@@ -72,7 +72,7 @@ class Messages(
           _             <- transport.connect(nodeAddress).use(_.send(chunk))
         } yield ()
       case msg: Message.Batch[Chunk[Byte]] =>
-        ZIO.foreach(msg.first :: msg.second :: msg.rest.toList)(send).unit
+        ZIO.foreach_(msg.first :: msg.second :: msg.rest.toList)(send)
       case msg @ Message.Broadcast(_) =>
         broadcast.add(msg)
       case WithTimeout(message, action, timeout) =>
@@ -116,7 +116,7 @@ class Messages(
 
 object Messages {
 
-  case class WithPiggyback(node: NodeAddress, message: Chunk[Byte], gossip: List[Chunk[Byte]])
+  final case class WithPiggyback(node: NodeAddress, message: Chunk[Byte], gossip: List[Chunk[Byte]])
 
   implicit val codec: ByteCodec[WithPiggyback] =
     ByteCodec.fromReadWriter(macroRW[WithPiggyback])
