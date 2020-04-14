@@ -21,7 +21,8 @@ sealed trait Message[+A] {
           rest <- ZIO.foreach(msg.rest)(_.transformM(fn))
         } yield Message.Batch(m1, m2, rest: _*)
       case msg: WithTimeout[A] =>
-        msg.message.transformM(fn)
+        msg.message
+          .transformM(fn)
           .map(b => msg.copy(message = b, action = msg.action.flatMap(_.transformM(fn))))
       case NoResponse =>
         Message.noResponse

@@ -74,8 +74,8 @@ object FailureDetection {
 
   def protocol(nodes: Nodes, protocolPeriod: Duration, protocolTimeout: Duration) =
     for {
-      pendingAcks  <- TMap.empty[Long, _Ack].commit
-      ackId <- Ref.make(0L)
+      pendingAcks <- TMap.empty[Long, _Ack].commit
+      ackId       <- Ref.make(0L)
       protocol <- {
 
         def ack(id: Long) =
