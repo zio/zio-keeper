@@ -1,6 +1,5 @@
 package zio.keeper
 
-import zio.Chunk
 import zio.duration.Duration
 import zio.keeper.membership.NodeAddress
 import zio.nio.core.SocketAddress
@@ -43,18 +42,7 @@ sealed abstract class ClusterError(msg: String = "") extends Error(msg = msg)
 
 object ClusterError {
 
-  final case class SendError[A](nodeId: NodeAddress, message: A, error: TransportError)
-      extends ClusterError(msg = s"Failed to send message[$message] to $nodeId")
-
-  final case class HandshakeError(addr: SocketAddress, error: Error)
-      extends ClusterError(msg = s"Connection handshake for $addr failed with ${error.msg}")
-
-  final case class UnexpectedMessage(message: Chunk[Byte]) extends ClusterError
-
-  final case class AckMessageFail[A](ackId: Long, message: A, to: NodeAddress)
-      extends ClusterError(msg = s"message [$message] with ack id: $ackId sent to: $to overdue timeout ")
-
-  final case class UnknownNode[A](nodeId: A) extends ClusterError(msg = nodeId.toString + " is not in cluster")
+  final case class UnknownNode(nodeId: NodeAddress) extends ClusterError(msg = nodeId.toString + " is not in cluster")
 
 }
 

@@ -24,10 +24,10 @@ object ByteCodec {
       override def toChunk(a: A): IO[SerializationTypeError, Chunk[Byte]] = g(a)
     }
 
-  def fromChunk[A: ByteCodec](chunk: Chunk[Byte]): IO[DeserializationTypeError, A] =
+  def encode[A: ByteCodec](chunk: Chunk[Byte]): IO[DeserializationTypeError, A] =
     ByteCodec[A].fromChunk(chunk)
 
-  def toChunk[A: ByteCodec](a: A): IO[SerializationTypeError, Chunk[Byte]] =
+  def decode[A: ByteCodec](a: A): IO[SerializationTypeError, Chunk[Byte]] =
     ByteCodec[A].toChunk(a)
 
   def fromReadWriter[A](rw: ReadWriter[A]): ByteCodec[A] =

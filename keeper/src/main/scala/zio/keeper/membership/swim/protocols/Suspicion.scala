@@ -30,17 +30,17 @@ object Suspicion {
       }
     )
 
-  case class Suspect(from: NodeAddress, nodeId: NodeAddress) extends Suspicion
+  final case class Suspect(from: NodeAddress, nodeId: NodeAddress) extends Suspicion
 
   implicit val codecSuspect: ByteCodec[Suspect] =
     ByteCodec.fromReadWriter(macroRW[Suspect])
 
-  case class Alive(nodeId: NodeAddress) extends Suspicion
+  final case class Alive(nodeId: NodeAddress) extends Suspicion
 
   implicit val codecAlive: ByteCodec[Alive] =
     ByteCodec.fromReadWriter(macroRW[Alive])
 
-  case class Dead(nodeId: NodeAddress) extends Suspicion
+  final case class Dead(nodeId: NodeAddress) extends Suspicion
 
   implicit val codecDead: ByteCodec[Dead] =
     ByteCodec.fromReadWriter(macroRW[Dead])

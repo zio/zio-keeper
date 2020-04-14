@@ -8,13 +8,13 @@ package object transport {
 
   type Transport = Has[Transport.Service]
 
-  def bind[R](
+  def bind[R <: Transport](
     localAddr: SocketAddress
   )(
     connectionHandler: Connection => ZIO[R, Nothing, Unit]
-  ): ZManaged[Transport with R, TransportError, Bind] =
+  ): ZManaged[R, TransportError, Bind] =
     ZManaged
-      .environment[Transport with R]
+      .environment[R]
       .flatMap(
         env =>
           env

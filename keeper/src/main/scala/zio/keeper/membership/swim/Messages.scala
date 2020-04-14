@@ -33,7 +33,7 @@ final class Messages(
    *
    * @param connection transport connection
    */
-  final def read(connection: Connection): IO[Error, Unit] =
+   def read(connection: Connection): IO[Error, Unit] =
     Take
       .fromEffect(
         connection.read >>= ByteCodec[WithPiggyback].fromChunk
@@ -60,7 +60,7 @@ final class Messages(
   /**
    * Sends message to target.
    */
-  final def send(msg: Message[Chunk[Byte]]): ZIO[Clock with Logging, Error, Unit] =
+   def send(msg: Message[Chunk[Byte]]): ZIO[Clock with Logging, Error, Unit] =
     msg match {
       case Message.NoResponse => ZIO.unit
       case Message.Direct(nodeAddress, message) =>

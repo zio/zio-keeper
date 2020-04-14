@@ -43,7 +43,7 @@ object Initial {
   implicit val codecAccept: ByteCodec[Accept.type] =
     ByteCodec.fromReadWriter(macroRW[Accept.type])
 
-  case class Reject(msg: String) extends Initial
+  final case class Reject(msg: String) extends Initial
 
   object Reject {
 

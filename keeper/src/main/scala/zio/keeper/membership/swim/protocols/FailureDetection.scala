@@ -74,13 +74,13 @@ object FailureDetection {
 
   def protocol(nodes: Nodes, protocolPeriod: Duration, protocolTimeout: Duration) =
     for {
-      acks  <- TMap.empty[Long, _Ack].commit
+      pendingAcks  <- TMap.empty[Long, _Ack].commit
       ackId <- Ref.make(0L)
       protocol <- {
 
         def ack(id: Long) =
-          (acks.get(id) <*
-            acks
+          (pendingAcks.get(id) <*
+            pendingAcks
               .delete(id)).commit
 
         def withAck[R](
@@ -90,7 +90,7 @@ object FailureDetection {
           for {
             ackId      <- ackId.updateAndGet(_ + 1)
             nodeAndMsg <- fn(ackId)
-            _          <- acks.put(ackId, _Ack(onBehalf)).commit
+            _          <- pendingAcks.put(ackId, _Ack(onBehalf)).commit
           } yield nodeAndMsg
 
         Protocol[FailureDetection].make(
@@ -129,7 +129,7 @@ object FailureDetection {
                   ackId =>
                     Message.withTimeout(
                       Message.Direct(next, Ping(ackId)),
-                      onAckTimeout(nodes, next, ackId, acks, ack, protocolTimeout),
+                      onAckTimeout(nodes, next, ackId, pendingAcks, ack, protocolTimeout),
                       protocolTimeout
                     )
                 )

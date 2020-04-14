@@ -35,7 +35,7 @@ object TestPeerService {
             senderL <- ZIO
                         .effect(new BigInteger(chunk.take(4).toArray).intValue())
                         .mapError(_ => DeserializationTypeError("Failed reading length"))
-            sender <- ByteCodec.fromChunk[T](chunk.drop(4).take(senderL))
+            sender <- ByteCodec.encode[T](chunk.drop(4).take(senderL))
             msgRaw <- TaggedCodec.read[ActiveProtocol[T]](chunk.drop(4 + senderL))
             msg <- msgRaw match {
                     case m: ActiveProtocol.PlumTreeProtocol => ZIO.succeed(m)
@@ -45,7 +45,7 @@ object TestPeerService {
 
         override def toChunk(a: Envelope[T]): IO[SerializationTypeError, Chunk[Byte]] =
           for {
-            sender  <- ByteCodec.toChunk(a.sender)
+            sender  <- ByteCodec.decode(a.sender)
             msg     <- TaggedCodec.write[ActiveProtocol[T]](a.msg)
             senderL = Chunk.fromArray(ByteBuffer.allocate(4).putInt(sender.length).array())
           } yield (senderL ++ sender ++ msg)
@@ -74,7 +74,7 @@ object TestPeerService {
             .bind(identifier)
             .flatMapPar[Transport[T], membership.Error, (T, PlumTreeProtocol)](concurrentConnections) { channel =>
               channel.receive
-                .mapM(ByteCodec.fromChunk[Envelope[T]](_).map(envelope => (envelope.sender, envelope.msg)))
+                .mapM(ByteCodec.encode[Envelope[T]](_).map(envelope => (envelope.sender, envelope.msg)))
                 .orElse(ZStream.empty)
             }
             .into(msgsQueue)
@@ -100,7 +100,7 @@ object TestPeerService {
             case false => ZIO.fail(SendError.NotConnected)
             case true =>
               ByteCodec
-                .toChunk(Envelope(identifier, message))
+                .decode(Envelope(identifier, message))
                 .mapError(SendError.SerializationFailed)
                 .flatMap(Transport.send(to, _).mapError(SendError.TransportFailed))
                 .provide(env)
