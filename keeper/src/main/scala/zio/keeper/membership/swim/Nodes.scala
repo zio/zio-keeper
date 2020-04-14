@@ -39,29 +39,23 @@ final class Nodes(
   def changeNodeState(id: NodeAddress, newState: NodeState): ZIO[Logging.Logging, Error, Unit] =
     nodeState(id)
       .flatMap { prev =>
-        if (prev != newState) {
+        ZIO.when(prev != newState) {
           log.info(s"changing node[$id] status from: [$prev] to: [$newState]") *>
             nodeStates
               .put(id, newState)
               .commit
               .tap(
-                _ =>
-                  if (newState == NodeState.Healthy && prev == NodeState.Init) {
-                    val join = Join(id)
-                    eventsQueue.offer(join) *>
-                      internalEventsQueue.offer(join).unit
-                  } else if (prev != newState) {
-                    val nodeStateChanged = NodeStateChanged(id, prev, newState)
-                    eventsQueue.offer(nodeStateChanged) *>
-                      internalEventsQueue.offer(nodeStateChanged).unit
+                _ => {
+                  val event = if (newState == NodeState.Healthy && prev == NodeState.Init) {
+                    Join(id)
                   } else {
-                    ZIO.unit
+                    NodeStateChanged(id, prev, newState)
                   }
+                  eventsQueue.offer(event) *>
+                    internalEventsQueue.offer(event).unit
+                }
               )
-        } else {
-          ZIO.unit
         }
-
       }
 
   /**
