@@ -1,7 +1,9 @@
 package zio.keeper.discovery
 
 import zio.keeper.membership.NodeAddress
-import zio.{ Has, IO, Layer, Ref, UIO, URIO, ZLayer }
+import zio.logging.Logging.Logging
+import zio.logging._
+import zio._
 
 object TestDiscovery {
 
@@ -13,12 +15,16 @@ object TestDiscovery {
   def removeMember(m: NodeAddress): URIO[TestDiscovery, Unit] =
     URIO.accessM[TestDiscovery](_.get.removeMember(m))
 
-  def live: Layer[Nothing, Discovery with TestDiscovery] =
+  val live: ZLayer[Logging, Nothing, Discovery with TestDiscovery] =
     ZLayer.fromEffectMany {
-      Ref
-        .make(Set.empty[NodeAddress])
-        .map(new Test(_))
-        .map(test => Has.allOf[Discovery.Service, Service](test, test))
+      ZIO.accessM[Logging] { logger =>
+        logger.get.logger.info("creating test discovery") *>
+          Ref
+            .make(Set.empty[NodeAddress])
+            .map(new Test(_, logger.get.logger))
+            .map(test => Has.allOf[Discovery.Service, Service](test, test))
+      }
+
     }
 
   trait Service extends Discovery.Service {
@@ -26,7 +32,7 @@ object TestDiscovery {
     def removeMember(m: NodeAddress): UIO[Unit]
   }
 
-  private class Test(ref: Ref[Set[NodeAddress]]) extends Service {
+  private class Test(ref: Ref[Set[NodeAddress]], logger: Logger) extends Service {
 
     val discoverNodes =
       for {
@@ -34,8 +40,12 @@ object TestDiscovery {
         addrs   <- IO.collectAll(members.map(_.socketAddress))
       } yield addrs.toSet
 
-    def addMember(m: NodeAddress) = ref.update(_ + m).unit
+    def addMember(m: NodeAddress) =
+      logger.info("adding node: " + m) *>
+        ref.update(_ + m).unit
 
-    def removeMember(m: NodeAddress) = ref.update(_ - m).unit
+    def removeMember(m: NodeAddress) =
+      logger.info("removing node: " + m) *>
+        ref.update(_ - m).unit
   }
 }
