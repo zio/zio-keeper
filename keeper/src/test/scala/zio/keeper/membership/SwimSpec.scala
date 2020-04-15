@@ -3,13 +3,14 @@ package zio.keeper.membership
 import upickle.default._
 import zio.clock.Clock
 import zio.console.Console
-import zio.keeper.discovery.{ Discovery, TestDiscovery }
+import zio.keeper.discovery.{Discovery, TestDiscovery}
 import zio.keeper.membership.swim.SWIM
-import zio.logging.{ LogAnnotation, Logging, log }
+import zio.logging.Logging.Logging
+import zio.logging.{LogAnnotation, Logging, log}
 import zio.stream.Sink
 import zio.test.Assertion._
-import zio.test.{ DefaultRunnableSpec, assert, suite, testM }
-import zio.{ IO, Promise, UIO, ZIO }
+import zio.test.{DefaultRunnableSpec, assert, suite, testM}
+import zio.{IO, Promise, UIO, ZIO, ZLayer, keeper}
 
 object SwimSpec extends DefaultRunnableSpec {
 
@@ -30,13 +31,13 @@ object SwimSpec extends DefaultRunnableSpec {
     }
   }
 
-  private def swim(port: Int) =
+  private def swim(port: Int): ZLayer[Discovery with Logging with Clock, keeper.Error, Membership[EmptyProtocol]] =
     SWIM.run[EmptyProtocol](port)
 
   private def member(port: Int) =
     log.locally(LogAnnotation.Name(s"member-$port" :: Nil)) {
       for {
-        start    <- Promise.make[Nothing, Membership.Service[EmptyProtocol]]
+        start    <- Promise.make[zio.keeper.Error, Membership.Service[EmptyProtocol]]
         shutdown <- Promise.make[Nothing, Unit]
         _ <- ZIO
               .accessM[Membership[EmptyProtocol] with TestDiscovery.TestDiscovery] { env =>
@@ -45,6 +46,7 @@ object SwimSpec extends DefaultRunnableSpec {
                   shutdown.await
               }
               .provideSomeLayer[TestDiscovery.TestDiscovery with Logging.Logging with Discovery with Clock](swim(port))
+              .catchAll(err => start.fail(err))
               .fork
         cluster <- start.await
       } yield MemberHolder[EmptyProtocol](cluster, shutdown.succeed(()).ignore)
@@ -57,6 +59,7 @@ object SwimSpec extends DefaultRunnableSpec {
         for {
           member1 <- member(33331)
           member2 <- member(33332)
+          _       <- member(33332)
           //we remove member 2 from discovery list to check if join broadcast works.
           _       <- TestDiscovery.removeMember(member2.instance.localMember)
           member3 <- member(33333)
