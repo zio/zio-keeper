@@ -3,14 +3,14 @@ package zio.keeper.membership
 import upickle.default._
 import zio.clock.Clock
 import zio.console.Console
-import zio.keeper.discovery.{Discovery, TestDiscovery}
+import zio.keeper.discovery.{ Discovery, TestDiscovery }
 import zio.keeper.membership.swim.SWIM
 import zio.logging.Logging.Logging
-import zio.logging.{LogAnnotation, Logging, log}
+import zio.logging.{ LogAnnotation, Logging, log }
 import zio.stream.Sink
 import zio.test.Assertion._
-import zio.test.{DefaultRunnableSpec, assert, suite, testM}
-import zio.{IO, Promise, UIO, ZIO, ZLayer, keeper}
+import zio.test.{ DefaultRunnableSpec, assert, suite, testM }
+import zio.{ IO, Promise, UIO, ZIO, ZLayer, keeper }
 
 object SwimSpec extends DefaultRunnableSpec {
 
@@ -59,7 +59,6 @@ object SwimSpec extends DefaultRunnableSpec {
         for {
           member1 <- member(33331)
           member2 <- member(33332)
-          _       <- member(33332)
           //we remove member 2 from discovery list to check if join broadcast works.
           _       <- TestDiscovery.removeMember(member2.instance.localMember)
           member3 <- member(33333)
