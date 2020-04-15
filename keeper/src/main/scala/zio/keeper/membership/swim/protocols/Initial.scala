@@ -74,13 +74,15 @@ object Initial {
                   .changeNodeState(sender, NodeState.Healthy) *>
                 Message.noResponse
             case Message.Direct(sender, Reject(msg)) =>
-              log(LogLevel.Error)("Rejected from cluster: " + msg) *>
+              log.error("Rejected from cluster: " + msg) *>
                 nodes.disconnect(sender) *>
                 Message.noResponse
           },
           ZStream
             .fromIterator(
-              env.get.discoverNodes.map(_.iterator)
+              env.get.discoverNodes
+                .tap(otherNodes => log.info("Discovered other nodes: " + otherNodes))
+                .map(_.iterator)
             )
             .mapM(
               node =>

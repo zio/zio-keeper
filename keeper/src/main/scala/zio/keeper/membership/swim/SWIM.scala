@@ -27,7 +27,7 @@ object SWIM {
       userOut <- Queue
                   .bounded[Message.Direct[B]](1000)
                   .toManaged(_.shutdown)
-      localNodeAddress = NodeAddress(Array(0, 0, 0, 0), port)
+      localNodeAddress <- NodeAddress.local(port).toManaged_
 
       nodes0 <- Nodes.make.toManaged_
       _      <- nodes0.prettyPrint.flatMap(log.info(_)).repeat(Schedule.spaced(5.seconds)).toManaged_.fork
