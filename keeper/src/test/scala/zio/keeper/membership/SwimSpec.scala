@@ -9,10 +9,10 @@ import zio.keeper.membership.swim.SWIM
 import zio.logging.{ LogAnnotation, Logging, log }
 import zio.stream.Sink
 import zio.test.Assertion._
-import zio.test.{ DefaultRunnableSpec, assert, suite, testM }
+import zio.test.{ assert, suite, testM }
 import zio.{ IO, Promise, UIO, ZIO }
 
-object SwimSpec extends DefaultRunnableSpec {
+object SwimSpec {
 
   private case class MemberHolder[A](instance: Membership.Service[A], stop: UIO[Unit])
 
