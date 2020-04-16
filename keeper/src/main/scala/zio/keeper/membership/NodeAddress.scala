@@ -3,8 +3,8 @@ package zio.keeper.membership
 import upickle.default._
 import zio.keeper.TransportError
 import zio.keeper.TransportError._
-import zio.nio.core.{InetAddress, InetSocketAddress, SocketAddress}
-import zio.{IO, UIO}
+import zio.nio.core.{ InetAddress, InetSocketAddress, SocketAddress }
+import zio.{ IO, UIO }
 
 final case class NodeAddress(ip: Array[Byte], port: Int) {
 

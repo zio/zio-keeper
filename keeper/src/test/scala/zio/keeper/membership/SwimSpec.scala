@@ -3,14 +3,14 @@ package zio.keeper.membership
 import upickle.default._
 import zio.clock.Clock
 import zio.console.Console
-import zio.keeper.discovery.{Discovery, TestDiscovery}
+import zio.keeper.discovery.{ Discovery, TestDiscovery }
 import zio.keeper.membership.swim.SWIM
 import zio.logging.Logging.Logging
-import zio.logging.{LogAnnotation, Logging, log}
+import zio.logging.{ LogAnnotation, Logging, log }
 import zio.stream.Sink
 import zio.test.Assertion._
-import zio.test.{DefaultRunnableSpec, assert, suite, testM}
-import zio.{IO, Promise, Schedule, UIO, ZIO, ZLayer, keeper}
+import zio.test.{ DefaultRunnableSpec, assert, suite, testM }
+import zio.{ IO, Promise, Schedule, UIO, ZIO, ZLayer, keeper }
 import zio.duration._
 import zio.keeper.membership.swim.Nodes.NodeState
 
@@ -37,25 +37,29 @@ object SwimSpec extends DefaultRunnableSpec {
     SWIM.run[EmptyProtocol](port)
 
   private val newMember =
-    TestDiscovery.nextPort.flatMap(port =>
-      log.locally(LogAnnotation.Name(s"member-$port" :: Nil)) {
-        for {
-          start    <- Promise.make[zio.keeper.Error, Membership.Service[EmptyProtocol]]
-          shutdown <- Promise.make[Nothing, Unit]
-          _ <- ZIO
-            .accessM[Membership[EmptyProtocol] with TestDiscovery.TestDiscovery] { env =>
-              TestDiscovery.addMember(env.get.localMember) *>
-                start.succeed(env.get) *>
-                shutdown.await
-            }
-            .provideSomeLayer[TestDiscovery.TestDiscovery with Logging.Logging with Discovery with Clock](swim(port))
-            .catchAll(err => start.fail(err))
-            .fork
-          cluster <- start.await
-        } yield MemberHolder[EmptyProtocol](cluster, shutdown.succeed(()).ignore)
-      }
-    ).retry(Schedule.spaced(2.seconds))
-
+    TestDiscovery.nextPort
+      .flatMap(
+        port =>
+          log.locally(LogAnnotation.Name(s"member-$port" :: Nil)) {
+            for {
+              start    <- Promise.make[zio.keeper.Error, Membership.Service[EmptyProtocol]]
+              shutdown <- Promise.make[Nothing, Unit]
+              _ <- ZIO
+                    .accessM[Membership[EmptyProtocol] with TestDiscovery.TestDiscovery] { env =>
+                      TestDiscovery.addMember(env.get.localMember) *>
+                        start.succeed(env.get) *>
+                        shutdown.await
+                    }
+                    .provideSomeLayer[TestDiscovery.TestDiscovery with Logging.Logging with Discovery with Clock](
+                      swim(port)
+                    )
+                    .catchAll(err => start.fail(err))
+                    .fork
+              cluster <- start.await
+            } yield MemberHolder[EmptyProtocol](cluster, shutdown.succeed(()).ignore)
+          }
+      )
+      .retry(Schedule.spaced(2.seconds))
 
   def spec =
     suite("cluster")(
@@ -80,7 +84,7 @@ object SwimSpec extends DefaultRunnableSpec {
         } yield assert(nodes1)(hasSameElements(List(node2, node3))) &&
           assert(nodes2)(hasSameElements(List(node1, node3))) &&
           assert(nodes3)(hasSameElements(List(node1, node2)))
-      }.provideSomeLayer[Logging.Logging with Clock](TestDiscovery.live) ,
+      }.provideSomeLayer[Logging.Logging with Clock](TestDiscovery.live),
       testM("should receive notification") {
         for {
           member1     <- newMember

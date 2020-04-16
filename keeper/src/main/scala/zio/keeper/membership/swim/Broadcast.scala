@@ -4,7 +4,6 @@ import zio.keeper.membership.swim.Broadcast._
 import zio.stm.{ STM, TRef }
 import zio.{ Chunk, UIO }
 
-
 import scala.collection.immutable.TreeSet
 
 final class Broadcast(ref: TRef[TreeSet[Item]], sequenceId: TRef[Int], messageOverhead: Int, messageLimit: Int) {
@@ -15,7 +14,8 @@ final class Broadcast(ref: TRef[TreeSet[Item]], sequenceId: TRef[Int], messageOv
       .flatMap[Any, Nothing, Unit](
         seqId =>
           ref.update(
-            items => items ++ TreeSet(Item(seqId, 10 /* this should calculated based of num of nodes */, message.message))
+            items =>
+              items ++ TreeSet(Item(seqId, 10 /* this should calculated based of num of nodes */, message.message))
           )
       )
       .commit
@@ -23,7 +23,8 @@ final class Broadcast(ref: TRef[TreeSet[Item]], sequenceId: TRef[Int], messageOv
   def broadcast(currentMessageSize: Int): UIO[List[Chunk[Byte]]] =
     ref.modify { items =>
       val (toSend, toReschedule, _) = items.foldRight((Vector.empty[Item], Vector.empty[Item], currentMessageSize)) {
-        case (item, (toSend, toReschedule, size)) if item.chunk.size + messageOverhead <= messageLimit - currentMessageSize =>
+        case (item, (toSend, toReschedule, size))
+            if item.chunk.size + messageOverhead <= messageLimit - currentMessageSize =>
           (toSend :+ item, toReschedule, size + item.chunk.size + messageOverhead)
         case (item, (toSend, toReschedule, size)) =>
           (toSend, toReschedule :+ item, size)
