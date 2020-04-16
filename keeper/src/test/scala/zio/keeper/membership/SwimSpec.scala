@@ -75,8 +75,9 @@ object SwimSpec extends DefaultRunnableSpec {
       testM("all nodes should have references to each other") {
         for {
           _ <- Fiber.dumpAll
-                .flatMap(ZIO.foreach(_)(_.prettyPrintM.flatMap(putStrLn(_).provideLayer(ZEnv.live))))
+                .flatMap(ZIO.foreach(_)(_.prettyPrintM.flatMap(putStrLn(_))))
                 .delay(30.seconds)
+                .provideLayer(ZEnv.live)
                 .uninterruptible
                 .fork
           member1 <- newMember
@@ -102,8 +103,9 @@ object SwimSpec extends DefaultRunnableSpec {
       testM("should receive notification") {
         for {
           _ <- Fiber.dumpAll
-                .flatMap(ZIO.foreach(_)(_.prettyPrintM.flatMap(putStrLn(_).provideLayer(ZEnv.live))))
+                .flatMap(ZIO.foreach(_)(_.prettyPrintM.flatMap(putStrLn(_))))
                 .delay(30.seconds)
+                .provideLayer(ZEnv.live)
                 .uninterruptible
                 .fork
           member1     <- newMember
