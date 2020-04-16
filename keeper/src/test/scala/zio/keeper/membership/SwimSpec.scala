@@ -3,14 +3,16 @@ package zio.keeper.membership
 import upickle.default._
 import zio.clock.Clock
 import zio.console.Console
-import zio.keeper.discovery.{ Discovery, TestDiscovery }
+import zio.keeper.discovery.{Discovery, TestDiscovery}
 import zio.keeper.membership.swim.SWIM
 import zio.logging.Logging.Logging
-import zio.logging.{ LogAnnotation, Logging, log }
+import zio.logging.{LogAnnotation, Logging, log}
 import zio.stream.Sink
 import zio.test.Assertion._
-import zio.test.{ DefaultRunnableSpec, assert, suite, testM }
-import zio.{ IO, Promise, UIO, ZIO, ZLayer, keeper }
+import zio.test.{DefaultRunnableSpec, assert, suite, testM}
+import zio.{IO, Promise, Schedule, UIO, ZIO, ZLayer, keeper}
+import zio.duration._
+import zio.keeper.membership.swim.Nodes.NodeState
 
 object SwimSpec extends DefaultRunnableSpec {
 
@@ -34,34 +36,36 @@ object SwimSpec extends DefaultRunnableSpec {
   private def swim(port: Int): ZLayer[Discovery with Logging with Clock, keeper.Error, Membership[EmptyProtocol]] =
     SWIM.run[EmptyProtocol](port)
 
-  private def member(port: Int) =
-    log.locally(LogAnnotation.Name(s"member-$port" :: Nil)) {
-      for {
-        start    <- Promise.make[zio.keeper.Error, Membership.Service[EmptyProtocol]]
-        shutdown <- Promise.make[Nothing, Unit]
-        _ <- ZIO
-              .accessM[Membership[EmptyProtocol] with TestDiscovery.TestDiscovery] { env =>
-                TestDiscovery.addMember(env.get.localMember) *>
-                  start.succeed(env.get) *>
-                  shutdown.await
-              }
-              .provideSomeLayer[TestDiscovery.TestDiscovery with Logging.Logging with Discovery with Clock](swim(port))
-              .catchAll(err => start.fail(err))
-              .fork
-        cluster <- start.await
-      } yield MemberHolder[EmptyProtocol](cluster, shutdown.succeed(()).ignore)
+  private val newMember =
+    TestDiscovery.nextPort.flatMap(port =>
+      log.locally(LogAnnotation.Name(s"member-$port" :: Nil)) {
+        for {
+          start    <- Promise.make[zio.keeper.Error, Membership.Service[EmptyProtocol]]
+          shutdown <- Promise.make[Nothing, Unit]
+          _ <- ZIO
+            .accessM[Membership[EmptyProtocol] with TestDiscovery.TestDiscovery] { env =>
+              TestDiscovery.addMember(env.get.localMember) *>
+                start.succeed(env.get) *>
+                shutdown.await
+            }
+            .provideSomeLayer[TestDiscovery.TestDiscovery with Logging.Logging with Discovery with Clock](swim(port))
+            .catchAll(err => start.fail(err))
+            .fork
+          cluster <- start.await
+        } yield MemberHolder[EmptyProtocol](cluster, shutdown.succeed(()).ignore)
+      }
+    ).retry(Schedule.spaced(2.seconds))
 
-    }
 
   def spec =
     suite("cluster")(
       testM("all nodes should have references to each other") {
         for {
-          member1 <- member(33331)
-          member2 <- member(33332)
+          member1 <- newMember
+          member2 <- newMember
           //we remove member 2 from discovery list to check if join broadcast works.
           _       <- TestDiscovery.removeMember(member2.instance.localMember)
-          member3 <- member(33333)
+          member3 <- newMember
           //we are waiting for events propagation to check nodes list
           _      <- member1.instance.events.run(Sink.collectAllN[MembershipEvent](2))
           _      <- member2.instance.events.run(Sink.collectAllN[MembershipEvent](2))
@@ -76,12 +80,12 @@ object SwimSpec extends DefaultRunnableSpec {
         } yield assert(nodes1)(hasSameElements(List(node2, node3))) &&
           assert(nodes2)(hasSameElements(List(node1, node3))) &&
           assert(nodes3)(hasSameElements(List(node1, node2)))
-      }.provideSomeLayer[Logging.Logging with Clock](TestDiscovery.live) /*,
+      }.provideSomeLayer[Logging.Logging with Clock](TestDiscovery.live) ,
       testM("should receive notification") {
         for {
-          member1     <- member(44331)
-          member2     <- member(44332)
-          member3     <- member(44333)
+          member1     <- newMember
+          member2     <- newMember
+          member3     <- newMember
           node2       = member2.instance.localMember
           joinEvent   <- member1.instance.events.run(Sink.collectAllN[MembershipEvent](2))
           _           <- member2.stop
@@ -100,6 +104,6 @@ object SwimSpec extends DefaultRunnableSpec {
               )
             )
           )
-      }.provideSomeLayer[Logging.Logging with Clock](TestDiscovery.live)*/
+      }.provideSomeLayer[Logging.Logging with Clock](TestDiscovery.live)
     ).provideLayer(Clock.live ++ logging)
 }
