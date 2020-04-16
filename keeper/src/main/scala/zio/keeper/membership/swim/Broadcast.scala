@@ -39,7 +39,7 @@ final class Broadcast(ref: TRef[TreeSet[Item]], sequenceId: TRef[Int], messageOv
 
 object Broadcast {
 
-  def make(mtu: Int) =
+  def make(mtu: Int): UIO[Broadcast] =
     STM.mapN(TRef.make(TreeSet.empty[Item]), TRef.make(0))(new Broadcast(_, _, 100, mtu)).commit
 
   final case class Item(seqId: Int, resend: Int, chunk: Chunk[Byte])

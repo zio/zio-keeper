@@ -10,13 +10,20 @@ import zio.logging.{ LogAnnotation, Logging, log }
 import zio.stream.Sink
 import zio.test.Assertion._
 import zio.test.{ DefaultRunnableSpec, assert, suite, testM }
-import zio.{ IO, Promise, Schedule, UIO, ZIO, ZLayer, keeper }
+import zio.{ Cause, IO, Promise, Schedule, UIO, ZIO, ZLayer, keeper }
 import zio.duration._
 import zio.keeper.membership.swim.Nodes.NodeState
 
 object SwimSpec extends DefaultRunnableSpec {
 
-  private case class MemberHolder[A](instance: Membership.Service[A], stop: UIO[Unit])
+  private case class MemberHolder[A](instance: Membership.Service[A], stop: UIO[Unit]) {
+
+    def expectingMembershipEvents(n: Long): ZIO[Clock, keeper.Error, List[MembershipEvent]] =
+      instance.events
+        .run(Sink.collectAllN[MembershipEvent](n))
+        .timeout(30.seconds)
+        .map(_.toList.flatten)
+  }
 
   private val logging = (Console.live ++ Clock.live) >>> Logging.console((_, line) => line)
 
@@ -53,7 +60,7 @@ object SwimSpec extends DefaultRunnableSpec {
                     .provideSomeLayer[TestDiscovery.TestDiscovery with Logging.Logging with Discovery with Clock](
                       swim(port)
                     )
-                    .catchAll(err => start.fail(err))
+                    .catchAll(err => log.error("error starting member on: " + port, Cause.fail(err)) *> start.fail(err))
                     .fork
               cluster <- start.await
             } yield MemberHolder[EmptyProtocol](cluster, shutdown.succeed(()).ignore)
@@ -71,9 +78,9 @@ object SwimSpec extends DefaultRunnableSpec {
           _       <- TestDiscovery.removeMember(member2.instance.localMember)
           member3 <- newMember
           //we are waiting for events propagation to check nodes list
-          _      <- member1.instance.events.run(Sink.collectAllN[MembershipEvent](2))
-          _      <- member2.instance.events.run(Sink.collectAllN[MembershipEvent](2))
-          _      <- member3.instance.events.run(Sink.collectAllN[MembershipEvent](2))
+          _      <- member1.expectingMembershipEvents(2)
+          _      <- member2.expectingMembershipEvents(2)
+          _      <- member3.expectingMembershipEvents(2)
           nodes1 <- member1.instance.nodes
           nodes2 <- member2.instance.nodes
           nodes3 <- member3.instance.nodes
@@ -91,9 +98,9 @@ object SwimSpec extends DefaultRunnableSpec {
           member2     <- newMember
           member3     <- newMember
           node2       = member2.instance.localMember
-          joinEvent   <- member1.instance.events.run(Sink.collectAllN[MembershipEvent](2))
+          joinEvent   <- member1.expectingMembershipEvents(2)
           _           <- member2.stop
-          leaveEvents <- member1.instance.events.run(Sink.collectAllN[MembershipEvent](3))
+          leaveEvents <- member1.expectingMembershipEvents(3)
           _           <- member1.stop
           _           <- member3.stop
         } yield assert(joinEvent)(
@@ -110,4 +117,5 @@ object SwimSpec extends DefaultRunnableSpec {
           )
       }.provideSomeLayer[Logging.Logging with Clock](TestDiscovery.live)
     ).provideLayer(Clock.live ++ logging)
+
 }
