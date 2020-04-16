@@ -10,9 +10,11 @@ import zio.logging.{ LogAnnotation, Logging, log }
 import zio.stream.Sink
 import zio.test.Assertion._
 import zio.test.{ DefaultRunnableSpec, assert, suite, testM }
-import zio.{ Cause, IO, Promise, Schedule, UIO, ZIO, ZLayer, keeper }
+import zio.{ Cause, Fiber, IO, Promise, Schedule, UIO, ZIO, ZLayer, keeper }
 import zio.duration._
 import zio.keeper.membership.swim.Nodes.NodeState
+import zio.console._
+import zio._
 
 object SwimSpec extends DefaultRunnableSpec {
 
@@ -72,6 +74,11 @@ object SwimSpec extends DefaultRunnableSpec {
     suite("cluster")(
       testM("all nodes should have references to each other") {
         for {
+          _ <- Fiber.dumpAll
+                .flatMap(ZIO.foreach(_)(_.prettyPrintM.flatMap(putStrLn(_).provideLayer(ZEnv.live))))
+                .delay(30.seconds)
+                .uninterruptible
+                .fork
           member1 <- newMember
           member2 <- newMember
           //we remove member 2 from discovery list to check if join broadcast works.
@@ -91,9 +98,14 @@ object SwimSpec extends DefaultRunnableSpec {
         } yield assert(nodes1)(hasSameElements(List(node2, node3))) &&
           assert(nodes2)(hasSameElements(List(node1, node3))) &&
           assert(nodes3)(hasSameElements(List(node1, node2)))
-      }.provideSomeLayer[Logging.Logging with Clock](TestDiscovery.live),
+      }.provideLayer(Clock.live ++ logging ++ (logging >>> TestDiscovery.live)),
       testM("should receive notification") {
         for {
+          _ <- Fiber.dumpAll
+                .flatMap(ZIO.foreach(_)(_.prettyPrintM.flatMap(putStrLn(_).provideLayer(ZEnv.live))))
+                .delay(30.seconds)
+                .uninterruptible
+                .fork
           member1     <- newMember
           member2     <- newMember
           member3     <- newMember
@@ -115,7 +127,7 @@ object SwimSpec extends DefaultRunnableSpec {
               )
             )
           )
-      }.provideSomeLayer[Logging.Logging with Clock](TestDiscovery.live)
-    ).provideLayer(Clock.live ++ logging)
+      }.provideLayer(Clock.live ++ logging ++ (logging >>> TestDiscovery.live))
+    )
 
 }
