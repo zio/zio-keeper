@@ -10,7 +10,7 @@ import zio.logging.{ LogAnnotation, Logging, log }
 import zio.stream.Sink
 import zio.test.Assertion._
 import zio.test.{ DefaultRunnableSpec, assert, suite, testM }
-import zio.{ Cause, Fiber, IO, Promise, Schedule, UIO, ZIO, ZLayer, keeper }
+import zio.{ Cause, IO, Promise, Schedule, UIO, ZIO, ZLayer, keeper }
 import zio.duration._
 import zio.keeper.membership.swim.Nodes.NodeState
 import zio.console._
