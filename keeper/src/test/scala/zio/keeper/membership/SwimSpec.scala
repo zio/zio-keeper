@@ -9,7 +9,7 @@ import zio.logging.Logging.Logging
 import zio.logging.{ LogAnnotation, Logging, log }
 import zio.stream.Sink
 import zio.test.Assertion._
-import zio.test.TestAspect.debug
+import zio.test.TestAspect.{ timeout, diagnose }
 import zio.test.{ DefaultRunnableSpec, assert, suite, testM }
 import zio.{ Cause, Fiber, IO, Promise, Schedule, UIO, ZIO, ZLayer, keeper }
 import zio.duration._
@@ -131,6 +131,6 @@ object SwimSpec extends DefaultRunnableSpec {
             )
           )
       }.provideLayer(Clock.live ++ logging ++ (logging >>> TestDiscovery.live))
-    ) @@ debug
+    ) @@ timeout(30.seconds) @@ diagnose(20.seconds)
 
 }
