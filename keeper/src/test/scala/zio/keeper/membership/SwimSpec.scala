@@ -9,7 +9,6 @@ import zio.logging.Logging.Logging
 import zio.logging.{ LogAnnotation, Logging, log }
 import zio.stream.Sink
 import zio.test.Assertion._
-import zio.test.TestAspect.{ diagnose, timeout }
 import zio.test.{ DefaultRunnableSpec, assert, suite, testM }
 import zio.{ Cause, Fiber, IO, Promise, Schedule, UIO, ZIO, ZLayer, keeper }
 import zio.duration._
@@ -73,42 +72,30 @@ object SwimSpec extends DefaultRunnableSpec {
 
   def spec =
     suite("cluster")(
-      // testM("all nodes should have references to each other") {
-      //   for {
-      //     _ <- Fiber.dumpAll
-      //           .flatMap(ZIO.foreach(_)(_.prettyPrintM.flatMap(putStrLn(_))))
-      //           .delay(30.seconds)
-      //           .provideLayer(ZEnv.live)
-      //           .uninterruptible
-      //           .fork
-      //     member1 <- newMember
-      //     member2 <- newMember
-      //     //we remove member 2 from discovery list to check if join broadcast works.
-      //     _       <- TestDiscovery.removeMember(member2.instance.localMember)
-      //     member3 <- newMember
-      //     //we are waiting for events propagation to check nodes list
-      //     _      <- member1.expectingMembershipEvents(2)
-      //     _      <- member2.expectingMembershipEvents(2)
-      //     _      <- member3.expectingMembershipEvents(2)
-      //     nodes1 <- member1.instance.nodes
-      //     nodes2 <- member2.instance.nodes
-      //     nodes3 <- member3.instance.nodes
-      //     node1  = member1.instance.localMember
-      //     node2  = member2.instance.localMember
-      //     node3  = member3.instance.localMember
-      //     _      <- member1.stop *> member2.stop *> member3.stop
-      //   } yield assert(nodes1)(hasSameElements(List(node2, node3))) &&
-      //     assert(nodes2)(hasSameElements(List(node1, node3))) &&
-      //     assert(nodes3)(hasSameElements(List(node1, node2)))
-      // }.provideLayer(Clock.live ++ logging ++ (logging >>> TestDiscovery.live)),
+      testM("all nodes should have references to each other") {
+        for {
+          member1 <- newMember
+          member2 <- newMember
+          //we remove member 2 from discovery list to check if join broadcast works.
+          _       <- TestDiscovery.removeMember(member2.instance.localMember)
+          member3 <- newMember
+          //we are waiting for events propagation to check nodes list
+          _      <- member1.expectingMembershipEvents(2)
+          _      <- member2.expectingMembershipEvents(2)
+          _      <- member3.expectingMembershipEvents(2)
+          nodes1 <- member1.instance.nodes
+          nodes2 <- member2.instance.nodes
+          nodes3 <- member3.instance.nodes
+          node1  = member1.instance.localMember
+          node2  = member2.instance.localMember
+          node3  = member3.instance.localMember
+          _      <- member1.stop *> member2.stop *> member3.stop
+        } yield assert(nodes1)(hasSameElements(List(node2, node3))) &&
+          assert(nodes2)(hasSameElements(List(node1, node3))) &&
+          assert(nodes3)(hasSameElements(List(node1, node2)))
+      }.provideLayer(Clock.live ++ logging ++ (logging >>> TestDiscovery.live)),
       testM("should receive notification") {
         for {
-          _ <- Fiber.dumpAll
-                .flatMap(ZIO.foreach(_)(_.prettyPrintM.flatMap(putStrLn(_))))
-                .delay(30.seconds)
-                .provideLayer(ZEnv.live)
-                .uninterruptible
-                .fork
           member1     <- newMember
           member2     <- newMember
           member3     <- newMember
@@ -131,6 +118,6 @@ object SwimSpec extends DefaultRunnableSpec {
             )
           )
       }.provideLayer(Clock.live ++ logging ++ (logging >>> TestDiscovery.live))
-    ) @@ timeout(30.seconds) @@ diagnose(20.seconds)
+    )
 
 }
