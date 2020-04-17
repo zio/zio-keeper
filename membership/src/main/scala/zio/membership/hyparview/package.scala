@@ -280,7 +280,7 @@ package object hyparview {
                         (for {
                           chunk <- TaggedCodec.write[ActiveProtocol[T]](msg).mapError(SendError.SerializationFailed)
                           _     <- reply(chunk).mapError(SendError.TransportFailed)
-                          _     <- log.error(s"sendActiveProtocol: $remote -> $msg")
+                          _     <- log.debug(s"sendActiveProtocol: $remote -> $msg")
                         } yield ())
                           .tapCause(log.error(s"Failed sending message $msg to $remote", _))
                           .provide(env),
