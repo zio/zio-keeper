@@ -6,14 +6,16 @@ import zio.console.{ Console, putStrLn }
 import zio.keeper.transport.Channel.Connection
 import zio.logging.Logging
 import zio.nio.core.{ InetAddress, SocketAddress }
+import zio.duration._
 
-object UdpServer extends zio.App {
+object TcpServer extends zio.App {
   import zio._
+  import zio.duration._
   import zio.keeper.transport._
 
   val logging = Logging.console((_, msg) => msg)
 
-  val transport = (Clock.live ++ logging) >>> udp.live(128)
+  val transport = (Clock.live ++ logging) >>> tcp.live(10.seconds, 10.seconds)
 
   val localEnvironment = Console.live ++ transport
 
@@ -30,22 +32,22 @@ object UdpServer extends zio.App {
           _    <- putStrLn(new String(data.toArray))
           _    <- channel.send(data)
         } yield ()
-      }.catchAll(ex => putStrLn("error: " + ex.msg))
+      }.forever
+        .catchAll(ex => putStrLn("error: " + ex.msg))
         .provide(console)
 
       _ <- putStrLn("public address: " + publicAddress.toString())
       _ <- bind(publicAddress)(handler)
-            .use(ch => ZIO.never.ensuring(ch.close.ignore))
-
-    } yield ()).ignore.as(0).provideLayer(localEnvironment)
+            .use(ch => ZIO.never.ensuring(ch.close.ignore).unit)
+    } yield ()).foldM(e => putStrLn(s"Error: ${e.msg}"), _ => ZIO.unit).as(0).provideLayer(localEnvironment)
 }
 
-object UdpClient extends zio.App {
+object TcpClient extends zio.App {
   import zio.keeper.transport._
 
   val logging = Logging.console((_, msg) => msg)
 
-  val transport = (Clock.live ++ logging) >>> udp.live(128)
+  val transport = (Clock.live ++ logging) >>> tcp.live(10.seconds, 10.seconds)
 
   val localEnvironment = Console.live ++ transport
 
@@ -53,7 +55,7 @@ object UdpClient extends zio.App {
     (for {
       localHost <- InetAddress.localHost.orDie
       publicAddress <- SocketAddress
-                        .inetSocketAddress(localHost, 5557)
+                        .inetSocketAddress(localHost, 8010)
                         .orDie
       _ <- putStrLn("connect to address: " + publicAddress.toString())
       _ <- connect(publicAddress)

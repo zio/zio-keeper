@@ -1,9 +1,10 @@
 package zio.keeper.membership
 
+import zio.keeper.membership.swim.Nodes.NodeState
+
 sealed trait MembershipEvent
 
 object MembershipEvent {
-  final case class Join(member: Member)        extends MembershipEvent
-  final case class Leave(member: Member)       extends MembershipEvent
-  final case class Unreachable(member: Member) extends MembershipEvent
+  final case class Join(id: NodeAddress)                                                  extends MembershipEvent
+  final case class NodeStateChanged(id: NodeAddress, old: NodeState, newState: NodeState) extends MembershipEvent
 }

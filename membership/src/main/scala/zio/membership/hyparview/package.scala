@@ -179,7 +179,7 @@ package object hyparview {
                                           )
                                     )
                               reply <- ByteCodec
-                                        .toChunk(JoinReply(localAddr))
+                                        .decode(JoinReply(localAddr))
                                         .mapError(e => zio.membership.SerializationError(e.msg))
                               _ <- con.send(reply)
                             } yield Some(msg.sender)

@@ -1,28 +1,10 @@
 package zio.keeper.membership
 
-import java.util.UUID
-
-import zio.IO
+import upickle.default._
 import zio.keeper.TransportError
 import zio.keeper.TransportError._
 import zio.nio.core.{ InetAddress, InetSocketAddress, SocketAddress }
-
-final case class NodeId(value: UUID) extends AnyVal
-
-object NodeId {
-  implicit val ordering: Ordering[NodeId] = Ordering.by(_.value)
-
-  def generateNew: NodeId =
-    NodeId(UUID.randomUUID())
-}
-
-final case class Member(nodeId: NodeId, addr: NodeAddress) {
-  override def toString: String = s"nodeId: ${nodeId.value}, ip: ${addr.ip.mkString(".")}, port: ${addr.port}"
-}
-
-object Member {
-  implicit val ordering: Ordering[Member] = Ordering.by(_.nodeId)
-}
+import zio.{ IO, UIO }
 
 final case class NodeAddress(ip: Array[Byte], port: Int) {
 
@@ -31,9 +13,30 @@ final case class NodeAddress(ip: Array[Byte], port: Int) {
     case _                     => false
   }
 
+  override def hashCode(): Int = port
+
   def socketAddress: IO[TransportError, InetSocketAddress] =
     (for {
       addr <- InetAddress.byAddress(ip)
       sa   <- SocketAddress.inetSocketAddress(addr, port)
     } yield sa).mapError(ExceptionWrapper)
+
+  override def toString: String = ip.mkString(".") + ": " + port
+}
+
+object NodeAddress {
+
+  def fromSocketAddress(addr: InetSocketAddress): UIO[NodeAddress] =
+    InetAddress
+      .byName(addr.hostString)
+      .map(inet => NodeAddress(inet.address, addr.port))
+      .orDie
+
+  def local(port: Int): UIO[NodeAddress] =
+    InetAddress.localHost
+      .map(addr => NodeAddress(addr.address, port))
+      .orDie
+
+  implicit val nodeAddressRw = macroRW[NodeAddress]
+
 }

@@ -4,8 +4,8 @@ import java.math.BigInteger
 
 import zio.keeper.TransportError
 import zio.keeper.TransportError.ExceptionWrapper
-import zio.{ Chunk, IO, _ }
 import zio.nio.core.SocketAddress
+import zio.{ Chunk, IO, _ }
 
 /**
  * Channel represents connection

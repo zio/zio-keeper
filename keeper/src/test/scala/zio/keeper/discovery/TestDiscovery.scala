@@ -1,41 +1,57 @@
 package zio.keeper.discovery
 
-import zio.keeper.membership.Member
-import zio.{ Has, IO, Layer, Ref, UIO, URIO, ZLayer }
+import zio._
+import zio.keeper.membership.NodeAddress
+import zio.logging.Logging.Logging
+import zio.logging._
 
 object TestDiscovery {
 
   type TestDiscovery = Has[Service]
 
-  def addMember(m: Member): URIO[TestDiscovery, Unit] =
+  def addMember(m: NodeAddress): URIO[TestDiscovery, Unit] =
     URIO.accessM[TestDiscovery](_.get.addMember(m))
 
-  def removeMember(m: Member): URIO[TestDiscovery, Unit] =
+  def removeMember(m: NodeAddress): URIO[TestDiscovery, Unit] =
     URIO.accessM[TestDiscovery](_.get.removeMember(m))
 
-  def live: Layer[Nothing, Discovery with TestDiscovery] =
+  val nextPort: URIO[TestDiscovery, Int] =
+    URIO.accessM[TestDiscovery](_.get.nextPortNumber)
+
+  val live: ZLayer[Logging, Nothing, Discovery with TestDiscovery] =
     ZLayer.fromEffectMany {
-      Ref
-        .make(Set.empty[Member])
-        .map(new Test(_))
-        .map(test => Has.allOf[Discovery.Service, Service](test, test))
+      for {
+        logger <- ZIO.environment[Logging]
+        _      <- logger.get.logger.info("creating test discovery")
+        nodes  <- Ref.make(Set.empty[NodeAddress])
+        ports  <- Ref.make(10000)
+        test   = new Test(nodes, ports, logger.get.logger)
+      } yield Has.allOf[Discovery.Service, Service](test, test)
     }
 
   trait Service extends Discovery.Service {
-    def addMember(m: Member): UIO[Unit]
-    def removeMember(m: Member): UIO[Unit]
+    def addMember(m: NodeAddress): UIO[Unit]
+    def removeMember(m: NodeAddress): UIO[Unit]
+    def nextPortNumber: UIO[Int]
   }
 
-  private class Test(ref: Ref[Set[Member]]) extends Service {
+  private class Test(ref: Ref[Set[NodeAddress]], port: Ref[Int], logger: Logger) extends Service {
 
     val discoverNodes =
       for {
         members <- ref.get
-        addrs   <- IO.collectAll(members.map(_.addr.socketAddress))
+        addrs   <- IO.collectAll(members.map(_.socketAddress))
       } yield addrs.toSet
 
-    def addMember(m: Member) = ref.update(_ + m).unit
+    def addMember(m: NodeAddress) =
+      logger.info("adding node: " + m) *>
+        ref.update(_ + m).unit
 
-    def removeMember(m: Member) = ref.update(_ - m).unit
+    def removeMember(m: NodeAddress) =
+      logger.info("removing node: " + m) *>
+        ref.update(_ - m).unit
+
+    def nextPortNumber: UIO[Int] =
+      port.updateAndGet(_ + 1)
   }
 }

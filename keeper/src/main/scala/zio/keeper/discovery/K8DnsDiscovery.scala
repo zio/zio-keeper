@@ -5,12 +5,11 @@ import java.util
 
 import javax.naming.directory.InitialDirContext
 import javax.naming.{ Context, NamingException }
-
 import zio.{ IO, UIO, ZIO }
 import zio.duration.Duration
 import zio.keeper.{ Error, ServiceDiscoveryError }
 import zio.logging.Logging
-import zio.nio.core.{ InetAddress, SocketAddress }
+import zio.nio.core.{ InetAddress, InetSocketAddress, SocketAddress }
 
 private trait K8DnsDiscovery extends Discovery.Service {
 
@@ -22,11 +21,11 @@ private trait K8DnsDiscovery extends Discovery.Service {
 
   val servicePort: Int
 
-  final override val discoverNodes: IO[Error, Set[SocketAddress]] = {
+  final override val discoverNodes: IO[Error, Set[InetSocketAddress]] = {
     for {
       addresses <- lookup(serviceDns, serviceDnsTimeout)
       nodes     <- IO.foreach(addresses)(addr => SocketAddress.inetSocketAddress(addr, servicePort))
-    } yield nodes.toSet[SocketAddress]
+    } yield nodes.toSet[InetSocketAddress]
   }.catchAllCause { ex =>
     log.logger.error(s"discovery strategy ${this.getClass.getSimpleName} failed.", ex) *>
       IO.halt(ex.map(e => ServiceDiscoveryError(e.getMessage)))

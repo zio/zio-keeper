@@ -1,21 +1,21 @@
 package zio.keeper.discovery
 
-import zio.{ IO, Layer, UIO, ZLayer }
 import zio.duration.Duration
 import zio.keeper.Error
 import zio.logging.Logging
-import zio.nio.core.{ InetAddress, SocketAddress }
+import zio.nio.core.{ InetAddress, InetSocketAddress }
+import zio.{ IO, Layer, UIO, ZLayer }
 
 object Discovery {
 
   trait Service {
-    def discoverNodes: IO[Error, Set[SocketAddress]]
+    def discoverNodes: IO[Error, Set[InetSocketAddress]]
   }
 
-  def staticList(addresses: Set[SocketAddress]): Layer[Nothing, Discovery] =
+  def staticList(addresses: Set[InetSocketAddress]): Layer[Nothing, Discovery] =
     ZLayer.succeed {
       new Service {
-        final override val discoverNodes: UIO[Set[SocketAddress]] =
+        final override val discoverNodes: UIO[Set[InetSocketAddress]] =
           UIO.succeed(addresses)
       }
     }

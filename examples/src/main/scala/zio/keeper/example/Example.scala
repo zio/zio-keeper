@@ -1,12 +1,15 @@
 package zio.keeper.example
 
+import upickle.default._
 import zio._
 import zio.clock._
 import zio.console._
 import zio.duration._
 import zio.keeper.discovery.Discovery
+import zio.keeper.example.TestNode.PingPong.{ Ping, Pong }
+import zio.keeper.membership.Membership
 import zio.keeper.membership._
-import zio.keeper.transport.Channel.Connection
+import zio.keeper.membership.swim.SWIM
 import zio.logging.Logging
 import zio.nio.core.{ InetAddress, SocketAddress }
 import zio.random.Random
@@ -14,50 +17,72 @@ import zio.random.Random
 object Node1 extends zio.ManagedApp {
 
   def run(args: List[String]) =
-    TestNode.start(5557, "Node1", Set.empty)
+    TestNode.start(5557, Set.empty)
 }
 
 object Node2 extends zio.ManagedApp {
 
   def run(args: List[String]) =
-    TestNode.start(5558, "Node2", Set(5557))
+    TestNode.start(5558, Set(5557))
 }
 
 object Node3 extends zio.ManagedApp {
 
   def run(args: List[String]) =
-    TestNode.start(5559, "Node3", Set(5558))
+    TestNode.start(5559, Set(5557))
 }
 
 object TestNode {
-  import zio.keeper.transport._
 
   val logging = Logging.console((_, msg) => msg)
 
-  val transport = (Clock.live ++ logging) >>> tcp.live(10.seconds, 10.seconds)
+  sealed trait PingPong
 
-  def start(port: Int, nodeName: String, otherPorts: Set[Int]) =
-    environment(port, otherPorts).orDie
-      .flatMap { env =>
+  object PingPong {
+    case class Ping(i: Int) extends PingPong
+    case class Pong(i: Int) extends PingPong
+
+    implicit val pingCodec: ByteCodec[Ping] =
+      ByteCodec.fromReadWriter(macroRW[Ping])
+
+    implicit val pongCodec: ByteCodec[Pong] =
+      ByteCodec.fromReadWriter(macroRW[Pong])
+
+    implicit def tagged(implicit p1: ByteCodec[Ping], p2: ByteCodec[Pong]) =
+      TaggedCodec.instance[PingPong]({
+        case Ping(_) => 1
+        case Pong(_) => 2
+      }, {
+        case 1 => p1.asInstanceOf[ByteCodec[PingPong]]
+        case 2 => p2.asInstanceOf[ByteCodec[PingPong]]
+      })
+  }
+
+  def start(port: Int, otherPorts: Set[Int]) =
+//   Fiber.dumpAll.flatMap(ZIO.foreach(_)(_.prettyPrintM.flatMap(putStrLn(_).provideLayer(ZEnv.live)))).delay(10.seconds).uninterruptible.fork.toManaged_ *>
+    environment(port, otherPorts).orDie.flatMap(
+      env =>
         (for {
-          _ <- sleep(5.seconds).toManaged_
-          _ <- broadcast(Chunk.fromArray(nodeName.getBytes)).ignore.toManaged_
-          _ <- receive
-                .foreach(
-                  message =>
-                    putStrLn(s"id: ${message.id}, payload: ${new String(message.payload.toArray)}")
-                      *> send(message.payload, message.sender).ignore
-                      *> sleep(5.seconds)
-                )
-                .toManaged_
-        } yield ()).provideCustomLayer(env)
-      }
-      .foldM(ex => putStrLn(s"exit with error: $ex").toManaged_.as(1), _ => Managed.succeed(0))
+          membership0 <- ZManaged.access[Membership[PingPong]](_.get)
+          _           <- membership0.events.mapM(event => putStrLn(s"EVENT: $event")).runDrain.toManaged_.fork
+          _           <- sleep(5.seconds).toManaged_
+          nodes       <- membership0.nodes.toManaged_
+          _           <- ZIO.foreach(nodes)(n => membership0.send(Ping(1), n)).toManaged_
+          _ <- membership0.receive.foreach {
+                case (sender, message) =>
+                  putStrLn("receive message: " + message) *> membership0.send(Pong(1), sender).ignore *> sleep(
+                    5.seconds
+                  )
+              }.toManaged_
+        } yield 0)
+          .provideCustomLayer(env)
+          .catchAll(ex => putStrLn("error: " + ex).toManaged_.as(1))
+    )
 
   private def environment(port: Int, others: Set[Int]) =
     discovery(others).map { dsc =>
-      val mem = (dsc ++ transport ++ logging ++ Clock.live ++ Random.live) >>> membership(port)
-      dsc ++ transport ++ logging ++ mem
+      val mem = (dsc ++ logging ++ Clock.live ++ Random.live) >>> membership(port)
+      dsc ++ logging ++ mem
     }
 
   def discovery(others: Set[Int]): Managed[Exception, Layer[Nothing, Discovery]] =
@@ -69,60 +94,5 @@ object TestNode {
       .map(addrs => Discovery.staticList(addrs.toSet))
 
   def membership(port: Int) =
-    SWIM.join(port)
-}
-
-object TcpServer extends zio.App {
-  import zio._
-  import zio.duration._
-  import zio.keeper.transport._
-
-  val logging = Logging.console((_, msg) => msg)
-
-  val transport = (Clock.live ++ logging) >>> tcp.live(10.seconds, 10.seconds)
-
-  val localEnvironment = Console.live ++ transport
-
-  override def run(args: List[String]) =
-    (for {
-      localHost <- InetAddress.localHost.orDie
-      publicAddress <- SocketAddress
-                        .inetSocketAddress(localHost, 8010)
-                        .orDie
-      console <- ZIO.environment[Console]
-      handler = (channel: Connection) => {
-        for {
-          data <- channel.read
-          _    <- putStrLn(new String(data.toArray))
-          _    <- channel.send(data)
-        } yield ()
-      }.forever
-        .catchAll(ex => putStrLn("error: " + ex.msg))
-        .provide(console)
-
-      _ <- putStrLn("public address: " + publicAddress.toString())
-      _ <- bind(publicAddress)(handler)
-            .use(ch => ZIO.never.ensuring(ch.close.ignore).unit)
-    } yield ()).foldM(e => putStrLn(s"Error: ${e.msg}"), _ => ZIO.unit).as(0).provideLayer(localEnvironment)
-}
-
-object TcpClient extends zio.App {
-  import zio.keeper.transport._
-
-  val logging = Logging.console((_, msg) => msg)
-
-  val transport = (Clock.live ++ logging) >>> tcp.live(10.seconds, 10.seconds)
-
-  val localEnvironment = Console.live ++ transport
-
-  override def run(args: List[String]) =
-    (for {
-      localHost <- InetAddress.localHost.orDie
-      publicAddress <- SocketAddress
-                        .inetSocketAddress(localHost, 8010)
-                        .orDie
-      _ <- putStrLn("connect to address: " + publicAddress.toString())
-      _ <- connect(publicAddress)
-            .use(_.send(Chunk.fromArray("message from client".getBytes)).repeat(Schedule.recurs(100)))
-    } yield ()).ignore.as(0).provideLayer(localEnvironment)
+    SWIM.run[PingPong](port)
 }
