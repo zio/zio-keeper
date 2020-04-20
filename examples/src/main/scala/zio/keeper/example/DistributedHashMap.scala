@@ -127,7 +127,7 @@ object DistributedHashMap {
 
   //====== THE REST OF BUILDING BLOCKS ===========
 
-  val consensus: ZLayer[Membership with Clock with Logging, keeper.Error, Consensus] = Coordinator.create()
+  val consensus: ZLayer[Membership with Clock with Logging, keeper.Error, Consensus] = Coordinator.live
 
   val jgroups: ZLayer[Membership with Clock with Logging, keeper.Error, JGroups] = consensus >>> JGroups.live
 
@@ -151,7 +151,7 @@ object DistributedHashMap {
   val hashMap
     : ZLayer[Membership with Clock with Logging, keeper.Error, Has[SimpleStringMap]] = (transformedComponents ++ consensus ++ Clock.any ++ ZLayer
     .requires[Logging]) >>> JGroups
-    .create[SimpleStringMap]()
+    .create[SimpleStringMap]
 
   def hashMapManaged(
     port: Int,
