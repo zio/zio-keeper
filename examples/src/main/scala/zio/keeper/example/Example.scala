@@ -3,16 +3,16 @@ package zio.keeper.example
 import upickle.default._
 import zio._
 import zio.clock._
+import zio.config.Config
 import zio.console._
 import zio.duration._
 import zio.keeper.ByteCodec
 import zio.keeper.discovery.Discovery
 import zio.keeper.example.TestNode.PingPong.{ Ping, Pong }
 import zio.keeper.TaggedCodec
-import zio.keeper.membership.swim.SWIM
+import zio.keeper.membership.swim.{ SWIM, SwimConfig }
 import zio.logging.Logging
 import zio.nio.core.{ InetAddress, SocketAddress }
-import zio.random.Random
 
 object Node1 extends zio.ManagedApp {
 
@@ -80,7 +80,8 @@ object TestNode {
 
   private def environment(port: Int, others: Set[Int]) =
     discovery(others).map { dsc =>
-      val mem = (dsc ++ logging ++ Clock.live ++ Random.live) >>> membership(port)
+      val config = Config.fromMap(Map("PORT" -> port.toString), SwimConfig.description)
+      val mem    = (dsc ++ logging ++ Clock.live ++ config) >>> SWIM.live[PingPong]
       dsc ++ logging ++ mem
     }
 
@@ -92,6 +93,4 @@ object TestNode {
       .orDie
       .map(addrs => Discovery.staticList(addrs.toSet))
 
-  def membership(port: Int) =
-    SWIM.run[PingPong](port)
 }

@@ -1,8 +1,9 @@
 package zio.keeper.membership.swim
 
 import izumi.reflect.Tags.Tag
-import zio._
+import zio.{ IO, Queue, Schedule, UIO, ZIO, ZLayer }
 import zio.clock.Clock
+import zio.config._
 import zio.duration._
 import zio.keeper._
 import zio.keeper.discovery.Discovery
@@ -18,12 +19,11 @@ object SWIM {
     def events: Stream[Error, MembershipEvent]
   }
 
-  def run[B: TaggedCodec: Tag](
-    port: Int
-  ): ZLayer[Discovery with Logging with Clock, Error, SWIM[B]] =
+  def live[B: TaggedCodec: Tag]: ZLayer[Config[SwimConfig] with Discovery with Logging with Clock, Error, SWIM[B]] =
     ZLayer.fromManaged(for {
-      _            <- log.info("starting SWIM on port: " + port).toManaged_
-      udpTransport <- transport.udp.live(64000).build.map(_.get)
+      swimConfig   <- config[SwimConfig].toManaged_
+      _            <- log.info("starting SWIM on port: " + swimConfig.port).toManaged_
+      udpTransport <- transport.udp.live(swimConfig.messageSizeLimit).build.map(_.get)
 
       userIn <- Queue
                  .bounded[Message.Direct[B]](1000)
@@ -31,7 +31,7 @@ object SWIM {
       userOut <- Queue
                   .bounded[Message.Direct[B]](1000)
                   .toManaged(_.shutdown)
-      localNodeAddress <- NodeAddress.local(port).toManaged_
+      localNodeAddress <- NodeAddress.local(swimConfig.port).toManaged_
 
       nodes0 <- Nodes.make.toManaged_
       _      <- nodes0.prettyPrint.flatMap(log.info(_)).repeat(Schedule.spaced(5.seconds)).toManaged_.fork
@@ -42,12 +42,12 @@ object SWIM {
                   .toManaged_
 
       failureDetection <- FailureDetection
-                           .protocol(nodes0, 3.seconds, 1.second)
+                           .protocol(nodes0, swimConfig.protocolInterval, swimConfig.protocolTimeout)
                            .flatMap(_.debug)
                            .map(_.binary)
                            .toManaged_
       suspicion <- Suspicion
-                    .protocol(nodes0, localNodeAddress, 3.seconds)
+                    .protocol(nodes0, localNodeAddress, swimConfig.suspicionTimeout)
                     .flatMap(_.debug)
                     .map(_.binary)
                     .toManaged_
@@ -58,7 +58,7 @@ object SWIM {
                .toManaged_
       deadLetter <- DeadLetter.protocol.toManaged_
       swim       = Protocol.compose(initial.binary, failureDetection, suspicion, user, deadLetter)
-      broadcast0 <- Broadcast.make(64000).toManaged_
+      broadcast0 <- Broadcast.make(swimConfig.messageSizeLimit).toManaged_
       messages0  <- Messages.make(localNodeAddress, broadcast0, udpTransport)
       _          <- messages0.process(swim).toManaged_
     } yield new Service[B] {
@@ -69,7 +69,8 @@ object SWIM {
           _     <- broadcast0.add(Message.Broadcast(bytes))
         } yield ()
 
-      override val localMember: UIO[NodeAddress] = ZIO.succeed(localNodeAddress)
+      override val localMember: UIO[NodeAddress] =
+        ZIO.succeed(localNodeAddress)
 
       override val nodes: UIO[Set[NodeAddress]] =
         nodes0.healthyNodes.map(_.map(_._1).toSet)

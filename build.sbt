@@ -51,6 +51,7 @@ lazy val keeper = project
       "dev.zio"                %% "zio-streams"             % ZioVersion,
       "dev.zio"                %% "zio-nio"                 % NioVersion,
       "dev.zio"                %% "zio-logging"             % ZioLoggingVersion,
+      "dev.zio"                %% "zio-config"              % ZioConfigVersion,
       "com.lihaoyi"            %% "upickle"                 % "1.1.0",
       "org.scala-lang.modules" %% "scala-collection-compat" % "2.1.6",
       "dev.zio"                %% "zio-test"                % ZioVersion % Test,
