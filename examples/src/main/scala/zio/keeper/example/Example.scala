@@ -1,5 +1,6 @@
 package zio.keeper.example
 
+import izumi.reflect.Tags.Tag
 import upickle.default._
 import zio._
 import zio.clock._
@@ -60,7 +61,7 @@ object TestNode {
 
   def start(port: Int, otherPorts: Set[Int]) =
 //   Fiber.dumpAll.flatMap(ZIO.foreach(_)(_.prettyPrintM.flatMap(putStrLn(_).provideLayer(ZEnv.live)))).delay(10.seconds).uninterruptible.fork.toManaged_ *>
-    environment(port, otherPorts).orDie.flatMap(
+    environment[PingPong](port, otherPorts).orDie.flatMap(
       env =>
         (for {
           membership0 <- ZManaged.access[Membership[PingPong]](_.get)
@@ -79,9 +80,9 @@ object TestNode {
           .catchAll(ex => putStrLn("error: " + ex).toManaged_.as(1))
     )
 
-  def environment(port: Int, others: Set[Int]) =
+  def environment[A: TaggedCodec: Tag](port: Int, others: Set[Int]) =
     discovery(others).map { dsc =>
-      val mem = (dsc ++ logging ++ Clock.live ++ Random.live) >>> membership(port)
+      val mem = (dsc ++ logging ++ Clock.live ++ Random.live) >>> membership[A](port)
       dsc ++ logging ++ mem
     }
 
@@ -93,6 +94,6 @@ object TestNode {
       .orDie
       .map(addrs => Discovery.staticList(addrs.toSet))
 
-  def membership(port: Int) =
-    SWIM.run[PingPong](port)
+  def membership[A: TaggedCodec: Tag](port: Int) =
+    SWIM.run[A](port)
 }

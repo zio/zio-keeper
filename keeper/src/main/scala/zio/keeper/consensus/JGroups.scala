@@ -7,7 +7,7 @@ import zio.keeper.Error
 import zio.keeper.membership.{ ByteCodec, TaggedCodec }
 import zio.stream.ZSink
 import upickle.default._
-import zio.logging.Logging
+import zio.logging.Logging.Logging
 
 /**
  *  Implemented by user
@@ -27,6 +27,7 @@ object ReceiverAdapter {
 object JGroups {
 
   sealed trait JGroupsMsg
+
   object JGroupsMsg {
     final case object StateRequest                       extends JGroupsMsg
     final case class StateResponse(payload: Chunk[Byte]) extends JGroupsMsg
@@ -79,29 +80,30 @@ object JGroups {
       c      = env.get[Consensus.Service]
       ra     = env.get[ReceiverAdapter.Service]
       selfId <- c.selfNode
-      _ <- c.receive.tap { rawMsg =>
-            TaggedCodec.read[JGroupsMsg](rawMsg.payload).flatMap {
-              case StateRequest =>
-                for {
-                  _ <- logging.logInfo(s"[JGROUPS] Received state request")
-                  _ <- ZIO.whenM[Logging, Error](c.getLeader.map(_ == selfId)) {
-                        for {
-                          state   <- ra.getState
-                          payload <- TaggedCodec.write[JGroupsMsg](StateResponse(state))
-                          _       <- c.send(payload, rawMsg.sender)
-                          _       <- logging.logInfo(s"[JGROUPS] Answering state request")
-                        } yield ()
-                      }
-                } yield ()
-              case StateResponse(payload) =>
-                for {
-                  _      <- logging.logInfo(s"[JGROUPS] Received state response")
-                  leader <- c.getLeader
-                  _      <- IO.when(leader == rawMsg.sender)(ra.setState(payload))
-                } yield ()
-              case UserMessage(payload) =>
-                logging.logInfo(s"[JGROUPS] Received user message") *> ra.receive(payload)
-            }
+      _ <- c.receive.tap {
+            case (sender, msg) =>
+              TaggedCodec.read[JGroupsMsg](msg).flatMap {
+                case StateRequest =>
+                  for {
+                    _ <- logging.log.info(s"[JGROUPS] Received state request")
+                    _ <- ZIO.whenM[Logging, Error](c.getLeader.map(_ == selfId)) {
+                          for {
+                            state   <- ra.getState
+                            payload <- TaggedCodec.write[JGroupsMsg](StateResponse(state))
+                            _       <- c.send(payload, sender)
+                            _       <- logging.log.info(s"[JGROUPS] Answering state request")
+                          } yield ()
+                        }
+                  } yield ()
+                case StateResponse(payload) =>
+                  for {
+                    _      <- logging.log.info(s"[JGROUPS] Received state response")
+                    leader <- c.getLeader
+                    _      <- IO.when(leader == sender)(ra.setState(payload))
+                  } yield ()
+                case UserMessage(payload) =>
+                  logging.log.info(s"[JGROUPS] Received user message") *> ra.receive(payload)
+              }
           }.runDrain
     } yield ()
 
@@ -110,12 +112,13 @@ object JGroups {
       c       <- ZIO.access[Consensus](_.get[Consensus.Service])
       ra      <- ZIO.access[ReceiverAdapter](_.get[ReceiverAdapter.Service])
       leader  <- c.getLeader
+      _ <- logging.log.info(s"[[[]]] LEADER IS $leader")
       payload <- TaggedCodec.write[JGroupsMsg](StateRequest)
-      _       <- logging.logInfo(s"[JGROUPS] Asking for a state")
+      _       <- logging.log.info(s"[JGROUPS] Asking for a state")
       _       <- c.send(payload, leader)
       response = c.receive
-        .filter(_.sender == leader)
-        .mapM(msg => TaggedCodec.read[JGroupsMsg](msg.payload))
+        .filter { case (sender, _) => sender == leader }
+        .mapM { case (_, msg) => TaggedCodec.read[JGroupsMsg](msg) }
         .collect { case s: StateResponse => s }
         .run(ZSink.head[StateResponse])
         .flatMap {
@@ -136,7 +139,7 @@ object JGroups {
         v   <- c.getView
         _   <- ZIO.when(v.size > 1)(initializeState.doUntilEquals(true))
         _   <- msgLoop.provide(env).fork
-        _   <- logging.logInfo(s"[JGROUPS] JGroups is running")
+        _   <- logging.log.info(s"[JGROUPS] JGroups is running")
       } yield t
     }
 

@@ -1,27 +1,26 @@
 package zio.keeper.consensus
 
-import java.util.UUID
 import upickle.default._
 
 import zio._
 import zio.clock.Clock
 import zio.duration._
-import zio.keeper.membership.{ ByteCodec, Membership, MembershipEvent, NodeId, TaggedCodec }
-import zio.keeper.protocol.InternalProtocol._
-import zio.keeper.{ Error, Message, membership }
+import zio.keeper.membership.swim.Nodes.NodeState
+import zio.keeper.membership.{ ByteCodec, Membership, MembershipEvent, NodeAddress, TaggedCodec }
+import zio.keeper.{ Error, membership }
 import zio.stream.{ Stream, ZSink }
-import zio.logging.Logging
+import zio.logging.Logging.Logging
 
 object Consensus {
 
   trait Service {
-    def getLeader: UIO[NodeId]
-    def onLeaderChange: Stream[Error, NodeId]
-    def getView: UIO[Vector[NodeId]]
-    def selfNode: UIO[NodeId]
-    def receive: Stream[Error, Message]
+    def getLeader: UIO[NodeAddress]
+    def onLeaderChange: Stream[Error, NodeAddress]
+    def getView: UIO[Vector[NodeAddress]]
+    def selfNode: UIO[NodeAddress]
+    def receive: Stream[Error, (NodeAddress, Chunk[Byte])]
     def broadcast(data: Chunk[Byte]): IO[Error, Unit]
-    def send(data: Chunk[Byte], to: NodeId): IO[Error, Unit]
+    def send(data: Chunk[Byte], to: NodeAddress): IO[Error, Unit]
   }
 
 }
@@ -32,13 +31,16 @@ object Consensus {
 object Coordinator {
 
   sealed trait ConsensusMsg
+
   object ConsensusMsg {
-    final case object ConsensusViewRequest                       extends ConsensusMsg
-    final case class ConsensusViewResponse(view: Vector[NodeId]) extends ConsensusMsg
-    final case class ConsensusUserMsg(payload: Chunk[Byte])      extends ConsensusMsg
+    final case object ConsensusViewRequest                            extends ConsensusMsg
+    final case class ConsensusViewResponse(view: Vector[NodeAddress]) extends ConsensusMsg
+    final case class ConsensusUserMsg(payload: Chunk[Byte])           extends ConsensusMsg
   }
 
   import ConsensusMsg._
+
+  type Message = (NodeAddress, Chunk[Byte])
 
   private val viewRequestCodec  = ByteCodec.fromReadWriter(macroRW[ConsensusViewRequest.type])
   private val viewResponseCodec = ByteCodec.fromReadWriter(macroRW[ConsensusViewResponse])
@@ -48,7 +50,7 @@ object Coordinator {
       .bimap[ConsensusUserMsg](_.payload.toArray, bA => ConsensusUserMsg(Chunk.fromArray(bA)))
   )
 
-  implicit private val consensusCodec: TaggedCodec[ConsensusMsg] =
+  implicit val consensusCodec: TaggedCodec[ConsensusMsg] =
     TaggedCodec.instance[ConsensusMsg](
       {
         case _: ConsensusViewRequest.type => 50
@@ -61,115 +63,110 @@ object Coordinator {
       }
     )
 
-  private def runEventLoop(ref: Ref[Vector[NodeId]], self: NodeId) =
-    membership.events.foreach {
+  private def runEventLoop(ref: Ref[Vector[NodeAddress]], self: NodeAddress) =
+    membership.events[ConsensusMsg].foreach {
       case MembershipEvent.Join(member) =>
-        ref.update(view => view :+ member.nodeId)
+        ref.update(view => view :+ member)
 
-      case MembershipEvent.Leave(member) =>
+      case MembershipEvent.NodeStateChanged(member, _, NodeState.Left) =>
         for {
           successor <- ref.modify { view =>
-                        val idx       = view.indexOf(member.nodeId)
+                        val idx       = view.indexOf(member)
                         val successor = if (idx == 0) view.tail.headOption else None
-                        (successor, view.filterNot(_ == member.nodeId))
+                        (successor, view.filterNot(_ == member))
                       }
           _ <- successor match {
                 case Some(id) if id == self =>
                   for {
-                    view    <- ref.get
-                    payload <- TaggedCodec.write[ConsensusMsg](ConsensusViewResponse(view))
-                    _       <- membership.broadcast(payload)
+                    view <- ref.get
+                    _    <- ZIO.foreach(view)(n => membership.send[ConsensusMsg](ConsensusViewResponse(view), n))
                   } yield ()
                 case _ =>
                   UIO.unit
               }
         } yield ()
 
-      case MembershipEvent.Unreachable(_) =>
+      case _: MembershipEvent =>
         UIO.unit
     }
 
-  private def runMsgLoop(self: NodeId, ref: Ref[Vector[NodeId]], queue: Queue[Message]) =
-    membership.receive.tap { msg =>
-      for {
-        read <- TaggedCodec.read[ConsensusMsg](msg.payload)
-        _ <- read match {
-              case ConsensusViewRequest =>
-                for {
-                  _      <- logging.logInfo(s"[CONSENSUS] Received view request")
-                  view   <- ref.get
-                  leader = view.headOption
-                  _ <- leader match {
-                        case Some(value) if value == self =>
-                          for {
-                            payload <- TaggedCodec.write[ConsensusMsg](ConsensusViewResponse(view))
-                            _       <- membership.send(payload, msg.sender)
-                            _       <- logging.logInfo(s"[CONSENSUS] View request answered")
-                          } yield ()
-                        case _ => UIO.unit
-                      }
-                } yield ()
-              case ConsensusViewResponse(view) =>
-                logging.logInfo(s"[CONSENSUS] Received view response") *> ref.set(view)
-              case ConsensusUserMsg(payload) =>
-                logging.logInfo("[CONSENSUS] Received user msg") *> queue.offer(
-                  Message(UUID.randomUUID(), msg.sender, payload)
-                )
-            }
-      } yield ()
-    }.runDrain
+  private def runMsgLoop(self: NodeAddress, ref: Ref[Vector[NodeAddress]], queue: Queue[Message]) =
+    membership
+      .receive[ConsensusMsg]
+    .mapM(s => logging.log.info(s"[CONSENSUS] received: $s") *> UIO(s))
+      .tap {
+        case (sender, msg) =>
+          msg match {
+            case ConsensusViewRequest =>
+              for {
+                _      <- logging.log.info(s"[CONSENSUS] Received view request")
+                view   <- ref.get
+                leader = view.headOption
+                _ <- leader match {
+                      case Some(value) if value == self =>
+                        for {
+                          _ <- membership.send[ConsensusMsg](ConsensusViewResponse(view), sender)
+                          _ <- logging.log.info(s"[CONSENSUS] View request answered")
+                        } yield ()
+                      case _ => UIO.unit
+                    }
+              } yield ()
+            case ConsensusViewResponse(view) =>
+              logging.log.info(s"[CONSENSUS] Received view response") *> ref.set(view)
+            case ConsensusUserMsg(payload) =>
+              logging.log.info("[CONSENSUS] Received user msg") *> queue.offer((sender, payload))
+          }
+      }
+      .runDrain
 
-  private def setCurrentView(ref: Ref[Vector[NodeId]]) =
+  private def setCurrentView(ref: Ref[Vector[NodeAddress]]) =
     for {
-      mem     <- ZIO.access[Membership](_.get[Membership.Service])
-      clock   <- ZIO.access[Clock](_.get[Clock.Service])
-      payload <- TaggedCodec.write[ConsensusMsg](ConsensusViewRequest)
-      _       <- logging.logInfo(s"[CONSENSUS] Asking for a view")
-      _       <- mem.broadcast(payload)
+      mem   <- ZIO.access[Membership[ConsensusMsg]](_.get[Membership.Service[ConsensusMsg]])
+      clock <- ZIO.access[Clock](_.get[Clock.Service])
+      _     <- logging.log.info(s"[CONSENSUS] Asking for a view")
+      nodes <- mem.nodes
+      _     <- ZIO.foreach(nodes)(n => mem.send(ConsensusViewRequest, n))
       response = mem.receive
-        .mapM(msg => TaggedCodec.read[ConsensusMsg](msg.payload))
-        .collect { case s: ConsensusViewResponse => s }
+        .collect { case (_, s: ConsensusViewResponse) => s }
         .run(ZSink.head[ConsensusViewResponse])
         .flatMap {
           case None => UIO(false)
           case Some(s) =>
-            logging.logInfo(s"[CONSENSUS] Received view: ${s.view}") *> ref.set(s.view).as(true)
+            logging.log.info(s"[CONSENSUS] Received view: ${s.view}") *> ref.set(s.view).as(true)
         }
       timeout = clock.sleep(3.seconds) *> UIO(false)
       result  <- response.race(timeout)
     } yield result
 
-  val live: ZLayer[Membership with Clock with Logging, Error, Consensus] =
+  val live: ZLayer[Membership[ConsensusMsg] with Clock with Logging, Error, Consensus] =
     ZLayer.fromEffect {
       for {
+        _           <- clock.sleep(7.seconds)
         queue       <- Queue.unbounded[Message]
-        selfId      <- membership.localMember
-        _           <- logging.logInfo(s"[CONSENSUS] Starting consensus layer for node: ${selfId.nodeId}")
-        members     <- membership.nodes
-        _           <- logging.logInfo(s"[CONSENSUS] Present nodes: $members")
-        consMembers <- Ref.make(Vector(selfId.nodeId))
+        selfId      <- membership.localMember[ConsensusMsg]
+        _           <- logging.log.info(s"[CONSENSUS] Starting consensus layer for node: selfId")
+        members     <- membership.nodes[ConsensusMsg]
+        _           <- logging.log.info(s"[CONSENSUS] Present nodes: $members")
+        consMembers <- Ref.make(Vector(selfId))
         _           <- ZIO.when(members.nonEmpty)(setCurrentView(consMembers).doUntilEquals(true))
-        memHas      <- ZIO.environment[Membership]
-        _           <- runEventLoop(consMembers, selfId.nodeId).fork
-        _           <- runMsgLoop(selfId.nodeId, consMembers, queue).fork
-        _           <- logging.logInfo("[CONSENSUS] Consensus is running")
+        memHas      <- ZIO.environment[Membership[ConsensusMsg]]
+        _           <- runEventLoop(consMembers, selfId).fork
+        _           <- runMsgLoop(selfId, consMembers, queue).fork
+        _           <- logging.log.info("[CONSENSUS] Consensus is running")
       } yield new Consensus.Service {
-        def getLeader: UIO[NodeId] =
-          consMembers.get.map(_.headOption.getOrElse(selfId.nodeId))
-        def getView: UIO[Vector[NodeId]]    = consMembers.get
-        def receive: Stream[Error, Message] = Stream.fromQueue(queue)
+        def getLeader: UIO[NodeAddress] =
+          consMembers.get.map(_.headOption.getOrElse(selfId))
+        def getView: UIO[Vector[NodeAddress]] = consMembers.get
+        def receive: Stream[Error, Message]   = Stream.fromQueue(queue)
         def broadcast(data: Chunk[Byte]): IO[Error, Unit] =
-          for {
-            payload <- TaggedCodec.write[ConsensusMsg](ConsensusUserMsg(data))
-            _       <- membership.broadcast(payload).provide(memHas)
-          } yield ()
-        def send(data: Chunk[Byte], to: NodeId): IO[Error, Unit] =
-          for {
-            payload <- TaggedCodec.write[ConsensusMsg](ConsensusUserMsg(data))
-            _       <- membership.send(payload, to).provide(memHas)
-          } yield ()
-        def onLeaderChange: Stream[Error, NodeId] = ???
-        def selfNode: UIO[NodeId]                 = UIO(selfId.nodeId)
+          (for {
+            nodes <- membership.nodes[ConsensusMsg]
+            _ <- ZIO.foreach(nodes)(n => membership.send[ConsensusMsg](ConsensusUserMsg(data), n))
+          } yield ()).provide(memHas)
+        def send(data: Chunk[Byte], to: NodeAddress): IO[Error, Unit] =
+          membership.send[ConsensusMsg](ConsensusUserMsg(data), to).provide(memHas)
+        def onLeaderChange: Stream[Error, NodeAddress] = ???
+        def selfNode: UIO[NodeAddress]                 = UIO(selfId)
       }
 
     }
