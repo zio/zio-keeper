@@ -93,7 +93,7 @@ object Coordinator {
   private def runMsgLoop(self: NodeAddress, ref: Ref[Vector[NodeAddress]], queue: Queue[Message]) =
     membership
       .receive[ConsensusMsg]
-    .mapM(s => logging.log.info(s"[CONSENSUS] received: $s") *> UIO(s))
+      .mapM(s => logging.log.info(s"[CONSENSUS] received: $s") *> UIO(s))
       .tap {
         case (sender, msg) =>
           msg match {
@@ -161,7 +161,7 @@ object Coordinator {
         def broadcast(data: Chunk[Byte]): IO[Error, Unit] =
           (for {
             nodes <- membership.nodes[ConsensusMsg]
-            _ <- ZIO.foreach(nodes)(n => membership.send[ConsensusMsg](ConsensusUserMsg(data), n))
+            _     <- ZIO.foreach(nodes)(n => membership.send[ConsensusMsg](ConsensusUserMsg(data), n))
           } yield ()).provide(memHas)
         def send(data: Chunk[Byte], to: NodeAddress): IO[Error, Unit] =
           membership.send[ConsensusMsg](ConsensusUserMsg(data), to).provide(memHas)
