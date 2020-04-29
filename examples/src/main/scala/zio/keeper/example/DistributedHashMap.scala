@@ -1,6 +1,6 @@
 package zio.keeper.example
 
-import upickle.default.macroRW
+import upickle.default._
 import zio.clock.Clock
 import zio.console.Console
 import zio.{ App, Chunk, Has, IO, Ref, UIO, ZIO, ZLayer, ZManaged, console, keeper }
@@ -9,7 +9,7 @@ import zio.keeper.membership.{ ByteCodec, Membership, TaggedCodec }
 
 import scala.collection.immutable.HashMap
 import DistributedHashMap._
-import zio.keeper.consensus.Coordinator.ConsensusMsg
+import zio.keeper.consensus.Coordinator.CoordinatorMsg
 import zio.logging.Logging.Logging
 import zio.logging
 
@@ -64,7 +64,7 @@ object DistributedHashMap {
         case 32 => remMapCodec.asInstanceOf[ByteCodec[HashMapOperation]]
       }
     )
-  implicit val hashMapByteCodec = ByteCodec.fromReadWriter(upickle.default.readwriter[Map[String, String]])
+  implicit val hashMapByteCodec = ByteCodec.fromReadWriter(readwriter[Map[String, String]])
   implicit val hashMapTagCodec  = TaggedCodec.instance[Map[String, String]](_ => 100, { case _ => hashMapByteCodec })
 
   //========== HERE ARE BUILDING BLOCKS ==========
@@ -87,7 +87,7 @@ object DistributedHashMap {
             logging.log.info(s"@@HASHMAP@@ PUT ${(key, value).toString}").provide(logger) *>
               hashMapRef.update(_ + (key -> value))
           case HashMapRemove(key) =>
-            logging.log.info(s"@@HASHMAP@@ REMOVE ${key}").provide(logger) *>
+            logging.log.info(s"@@HASHMAP@@ REMOVE $key").provide(logger) *>
               hashMapRef.update(_ - key)
         }
 
@@ -128,12 +128,12 @@ object DistributedHashMap {
 
   //====== THE REST OF BUILDING BLOCKS ===========
 
-  val consensus: ZLayer[Membership[ConsensusMsg] with Clock with Logging, keeper.Error, Consensus] = Coordinator.live
+  val consensus: ZLayer[Membership[CoordinatorMsg] with Clock with Logging, keeper.Error, Consensus] = Coordinator.live
 
   val jgroups
-    : ZLayer[Membership[ConsensusMsg] with Clock with Logging, keeper.Error, JGroups] = consensus >>> JGroups.live
+    : ZLayer[Membership[CoordinatorMsg] with Clock with Logging, keeper.Error, JGroups] = consensus >>> JGroups.live
 
-  val hashMapComponents: ZLayer[Membership[ConsensusMsg] with Clock with Logging, keeper.Error, Has[
+  val hashMapComponents: ZLayer[Membership[CoordinatorMsg] with Clock with Logging, keeper.Error, Has[
     ReceiverAdapter.Service with SimpleStringMap
   ]] = (jgroups ++ ZLayer.requires[Logging]) >>> hashmapBuildBlocks
 
@@ -151,7 +151,7 @@ object DistributedHashMap {
   val transformedComponents = hashMapComponents >>> layerTransformer
 
   val hashMap
-    : ZLayer[Membership[ConsensusMsg] with Clock with Logging, keeper.Error, Has[SimpleStringMap]] = (transformedComponents ++ consensus ++ Clock.any ++ ZLayer
+    : ZLayer[Membership[CoordinatorMsg] with Clock with Logging, keeper.Error, Has[SimpleStringMap]] = (transformedComponents ++ consensus ++ Clock.any ++ ZLayer
     .requires[Logging]) >>> JGroups
     .create[SimpleStringMap]
 
@@ -160,7 +160,7 @@ object DistributedHashMap {
     ports: Set[Int]
   ): ZManaged[Any, Exception, ZLayer[Any, keeper.Error, Has[SimpleStringMap]]] =
     for {
-      env     <- TestNode.environment[ConsensusMsg](port, ports)
+      env     <- TestNode.environment[CoordinatorMsg](port, ports)
       fullEnv = (Console.live ++ Clock.live) >>> env
     } yield (Clock.live ++ fullEnv) >>> hashMap
 

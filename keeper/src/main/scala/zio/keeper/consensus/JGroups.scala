@@ -112,7 +112,7 @@ object JGroups {
       c       <- ZIO.access[Consensus](_.get[Consensus.Service])
       ra      <- ZIO.access[ReceiverAdapter](_.get[ReceiverAdapter.Service])
       leader  <- c.getLeader
-      _       <- logging.log.info(s"[[[]]] LEADER IS $leader")
+      _       <- logging.log.info(s"[JGROUPS] LEADER IS $leader")
       payload <- TaggedCodec.write[JGroupsMsg](StateRequest)
       _       <- logging.log.info(s"[JGROUPS] Asking for a state")
       _       <- c.send(payload, leader)
