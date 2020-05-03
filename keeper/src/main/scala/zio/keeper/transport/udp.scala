@@ -6,7 +6,7 @@ import zio.keeper.TransportError
 import zio.keeper.TransportError._
 import zio.logging.Logging.Logging
 import zio.logging.log
-import zio.nio.channels._
+import zio.nio.channels.{ Channel => _, _ }
 import zio.nio.core.{ Buffer, SocketAddress }
 
 object udp {

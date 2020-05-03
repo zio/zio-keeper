@@ -15,10 +15,10 @@ import zio.{ Chunk, IO, _ }
  * @param finalizer - finalizer to underlying transport.
  */
 final class Channel(
-  read0: Int => IO[TransportError, Chunk[Byte]],
-  write0: Chunk[Byte] => IO[TransportError, Unit],
+  val read0: Int => IO[TransportError, Chunk[Byte]],
+  val write0: Chunk[Byte] => IO[TransportError, Unit],
   val isOpen: IO[TransportError, Boolean],
-  finalizer: IO[TransportError, Unit]
+  val finalizer: IO[TransportError, Unit]
 ) {
 
   final val read: IO[TransportError, Chunk[Byte]] =
