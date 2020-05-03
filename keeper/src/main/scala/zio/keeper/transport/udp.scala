@@ -4,7 +4,6 @@ import zio._
 import zio.clock.Clock
 import zio.keeper.TransportError
 import zio.keeper.TransportError._
-import zio.keeper.transport.Channel._
 import zio.logging.Logging.Logging
 import zio.logging.log
 import zio.nio.channels._
@@ -17,10 +16,10 @@ object udp {
    * @param mtu - maximum message size
    * @return layer with Udp transport
    */
-  def live(mtu: Int): ZLayer[Clock with Logging, Nothing, Transport] =
+  def live(mtu: Int): ZLayer[Clock with Logging, Nothing, ConnectionLessTransport] =
     ZLayer.fromFunction { env =>
-      new Transport.Service {
-        def bind(addr: SocketAddress)(connectionHandler: Connection => UIO[Unit]): Managed[TransportError, Bind] =
+      new ConnectionLessTransport.Service {
+        def bind(addr: SocketAddress)(connectionHandler: Channel => UIO[Unit]): Managed[TransportError, Bind] =
           DatagramChannel
             .bind(Some(addr))
             .mapError(BindFailed(addr, _))
@@ -40,14 +39,14 @@ object udp {
                         .tap(_ => buffer.flip)
                         .map {
                           case Some(addr) =>
-                            new Connection(
+                            new Channel(
                               bytes => buffer.getChunk(bytes).mapError(ExceptionWrapper),
                               chunk => Buffer.byte(chunk).flatMap(server.send(_, addr)).mapError(ExceptionWrapper).unit,
                               ZIO.succeed(true),
                               ZIO.unit
                             )
                           case None =>
-                            new Connection(
+                            new Channel(
                               bytes => buffer.flip.flatMap(_ => buffer.getChunk(bytes)).mapError(ExceptionWrapper),
                               _ => ZIO.fail(new RuntimeException("Cannot reply")).mapError(ExceptionWrapper).unit,
                               ZIO.succeed(true),
@@ -69,12 +68,12 @@ object udp {
             }
             .provide(env)
 
-        def connect(to: SocketAddress): Managed[TransportError, Connection] =
+        def connect(to: SocketAddress): Managed[TransportError, Channel] =
           DatagramChannel
             .connect(to)
             .mapM(
               channel =>
-                Connection.withLock(
+                Channel.withLock(
                   channel.read(_).mapError(ExceptionWrapper),
                   channel.write(_).mapError(ExceptionWrapper).unit,
                   ZIO.succeed(true),

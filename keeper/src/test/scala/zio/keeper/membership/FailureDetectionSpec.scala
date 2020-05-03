@@ -1,6 +1,7 @@
 package zio.keeper.membership
 
 import zio.duration._
+import zio.keeper.NodeAddress
 import zio.keeper.membership.swim.Nodes.NodeState
 import zio.keeper.membership.swim.protocols.FailureDetection
 import zio.keeper.membership.swim.protocols.FailureDetection.Ping

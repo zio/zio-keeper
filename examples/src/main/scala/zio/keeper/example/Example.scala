@@ -5,10 +5,10 @@ import zio._
 import zio.clock._
 import zio.console._
 import zio.duration._
+import zio.keeper.ByteCodec
 import zio.keeper.discovery.Discovery
 import zio.keeper.example.TestNode.PingPong.{ Ping, Pong }
-import zio.keeper.membership.Membership
-import zio.keeper.membership._
+import zio.keeper.TaggedCodec
 import zio.keeper.membership.swim.SWIM
 import zio.logging.Logging
 import zio.nio.core.{ InetAddress, SocketAddress }
@@ -63,8 +63,7 @@ object TestNode {
     environment(port, otherPorts).orDie.flatMap(
       env =>
         (for {
-          membership0 <- ZManaged.access[Membership[PingPong]](_.get)
-          _           <- membership0.events.mapM(event => putStrLn(s"EVENT: $event")).runDrain.toManaged_.fork
+          membership0 <- ZManaged.access[SWIM[PingPong]](_.get)
           _           <- sleep(5.seconds).toManaged_
           nodes       <- membership0.nodes.toManaged_
           _           <- ZIO.foreach(nodes)(n => membership0.send(Ping(1), n)).toManaged_

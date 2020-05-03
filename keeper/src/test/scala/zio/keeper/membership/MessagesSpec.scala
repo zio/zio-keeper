@@ -1,12 +1,11 @@
 package zio.keeper.membership
 
 import zio._
-import zio.keeper.TransportError
+import zio.keeper.{ ByteCodec, NodeAddress, TaggedCodec, TransportError }
 import zio.keeper.membership.PingPong.{ Ping, Pong }
 import zio.keeper.membership.swim.Messages.WithPiggyback
 import zio.keeper.membership.swim.{ Broadcast, Message, Messages, Protocol }
-import zio.keeper.transport.Channel.Connection
-import zio.keeper.transport.{ Channel, Transport }
+import zio.keeper.transport.{ Bind, Channel, ConnectionLessTransport }
 import zio.logging.Logging
 import zio.nio.core.SocketAddress
 import zio.stream.ZStream
@@ -17,21 +16,22 @@ object MessagesSpec extends DefaultRunnableSpec {
 
   val logger = Logging.console((_, line) => line)
 
-  class TestTransport(in: Queue[Connection], out: Queue[(SocketAddress, Chunk[Byte])]) extends Transport.Service {
+  class TestTransport(in: Queue[Channel], out: Queue[(SocketAddress, Chunk[Byte])])
+      extends ConnectionLessTransport.Service {
 
     override def bind(
       localAddr: SocketAddress
-    )(connectionHandler: Channel.Connection => UIO[Unit]): Managed[TransportError, Channel.Bind] =
+    )(connectionHandler: Channel => UIO[Unit]): Managed[TransportError, Bind] =
       ZStream
         .fromQueue(in)
         .foreach(conn => connectionHandler(conn) *> conn.close)
         .fork
-        .as(new Channel.Bind(in.isShutdown, in.shutdown, ZIO.succeed(localAddr)))
+        .as(new Bind(in.isShutdown, in.shutdown, ZIO.succeed(localAddr)))
         .toManaged(_.close.ignore)
 
-    override def connect(to: SocketAddress): Managed[TransportError, Channel.Connection] =
+    override def connect(to: SocketAddress): Managed[TransportError, Channel] =
       ZManaged.succeed(
-        new Connection(
+        new Channel(
           _ => ZIO.succeed(Chunk.empty),
           chunk => out.offer((to, chunk)).unit,
           ZIO.succeed(true),
@@ -54,7 +54,7 @@ object MessagesSpec extends DefaultRunnableSpec {
 
         read = (size: Int) => queue.takeUpTo(size).map(Chunk.fromIterable)
 
-        connection = new Connection(read, _ => ZIO.unit, ZIO.succeed(true), queue.shutdown)
+        connection = new Channel(read, _ => ZIO.unit, ZIO.succeed(true), queue.shutdown)
 
         _ <- in.offer(connection)
       } yield ()
@@ -66,7 +66,7 @@ object MessagesSpec extends DefaultRunnableSpec {
 
     def make =
       for {
-        in  <- Queue.bounded[Connection](100).toManaged(_.shutdown)
+        in  <- Queue.bounded[Channel](100).toManaged(_.shutdown)
         out <- Queue.bounded[(SocketAddress, Chunk[Byte])](100).toManaged(_.shutdown)
       } yield new TestTransport(in, out)
 

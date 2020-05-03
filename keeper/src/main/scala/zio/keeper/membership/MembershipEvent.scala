@@ -1,5 +1,6 @@
 package zio.keeper.membership
 
+import zio.keeper.NodeAddress
 import zio.keeper.membership.swim.Nodes.NodeState
 
 sealed trait MembershipEvent

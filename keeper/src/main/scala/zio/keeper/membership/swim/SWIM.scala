@@ -7,16 +7,20 @@ import zio.duration._
 import zio.keeper._
 import zio.keeper.discovery.Discovery
 import zio.keeper.membership.swim.protocols._
-import zio.keeper.membership.{ Membership, MembershipEvent, NodeAddress, TaggedCodec }
+import zio.keeper.membership.{ Membership, MembershipEvent }
 import zio.logging.Logging.Logging
 import zio.logging._
 import zio.stream._
 
 object SWIM {
 
+  trait Service[B] extends Membership.Service[B] {
+    def events: Stream[Error, MembershipEvent]
+  }
+
   def run[B: TaggedCodec: Tag](
     port: Int
-  ): ZLayer[Discovery with Logging with Clock, Error, Membership[B]] =
+  ): ZLayer[Discovery with Logging with Clock, Error, SWIM[B]] =
     ZLayer.fromManaged(for {
       _            <- log.info("starting SWIM on port: " + port).toManaged_
       udpTransport <- transport.udp.live(64000).build.map(_.get)
@@ -57,7 +61,7 @@ object SWIM {
       broadcast0 <- Broadcast.make(64000).toManaged_
       messages0  <- Messages.make(localNodeAddress, broadcast0, udpTransport)
       _          <- messages0.process(swim).toManaged_
-    } yield new Membership.Service[B] {
+    } yield new Service[B] {
 
       override def broadcast(data: B): IO[zio.keeper.Error, Unit] =
         for {
@@ -65,21 +69,21 @@ object SWIM {
           _     <- broadcast0.add(Message.Broadcast(bytes))
         } yield ()
 
-      override val events: Stream[Error, MembershipEvent] =
-        nodes0.events
+      override val localMember: UIO[NodeAddress] = ZIO.succeed(localNodeAddress)
 
-      override val localMember: NodeAddress = localNodeAddress
+      override val nodes: UIO[Set[NodeAddress]] =
+        nodes0.healthyNodes.map(_.map(_._1).toSet)
 
-      override val nodes: UIO[List[NodeAddress]] =
-        nodes0.healthyNodes.map(_.map(_._1))
-
-      override val receive: Stream[Error, (NodeAddress, B)] =
+      override val receive: Stream[Nothing, (NodeAddress, B)] =
         ZStream.fromQueue(userIn).collect {
           case Message.Direct(n, m) => (n, m)
         }
 
-      override def send(data: B, receipt: NodeAddress): IO[Error, Unit] =
+      override def send(data: B, receipt: NodeAddress): IO[Nothing, Unit] =
         userOut.offer(Message.Direct(receipt, data)).unit
+
+      val events: Stream[Nothing, MembershipEvent] =
+        nodes0.events
 
     })
 }

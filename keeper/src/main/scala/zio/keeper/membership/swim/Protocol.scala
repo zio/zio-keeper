@@ -1,7 +1,6 @@
 package zio.keeper.membership.swim
 
-import zio.keeper.Error
-import zio.keeper.membership.TaggedCodec
+import zio.keeper.{ Error, TaggedCodec }
 import zio.logging.Logging.Logging
 import zio.logging._
 import zio.stream.ZStream

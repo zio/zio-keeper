@@ -1,7 +1,8 @@
 package zio.keeper.membership.swim
 
 import upickle.default.{ macroRW, _ }
-import zio.keeper.membership.{ NodeAddress, swim }
+import zio.keeper.NodeAddress
+import zio.keeper.membership.swim
 import zio.keeper.membership.swim.GossipState.StateDiff
 
 final case class GossipState(members: Vector[NodeAddress]) extends AnyVal {

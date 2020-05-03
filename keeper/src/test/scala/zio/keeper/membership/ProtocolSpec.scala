@@ -1,6 +1,7 @@
 package zio.keeper.membership
 
 import zio.ZIO
+import zio.keeper.{ NodeAddress, TaggedCodec }
 import zio.keeper.membership.PingPong.{ Ping, Pong }
 import zio.keeper.membership.swim.{ Message, Protocol }
 import zio.stream.ZStream

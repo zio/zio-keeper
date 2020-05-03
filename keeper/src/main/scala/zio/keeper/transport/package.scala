@@ -1,29 +1,30 @@
 package zio.keeper
 
-import zio.keeper.transport.Channel._
 import zio.nio.core.SocketAddress
-import zio.{ Has, ZIO, ZManaged }
+import zio.{ Chunk, Has, ZIO, ZManaged }
 
 package object transport {
 
-  type Transport = Has[Transport.Service]
+  type ConnectionLessTransport = Has[ConnectionLessTransport.Service]
+  type Transport               = Has[Transport.Service]
+  type ChunkConnection         = Connection[Any, TransportError, Chunk[Byte]]
 
-  def bind[R <: Transport](
+  def bind[R <: ConnectionLessTransport](
     localAddr: SocketAddress
   )(
-    connectionHandler: Connection => ZIO[R, Nothing, Unit]
+    connectionHandler: Channel => ZIO[R, Nothing, Unit]
   ): ZManaged[R, TransportError, Bind] =
     ZManaged
       .environment[R]
       .flatMap(
         env =>
           env
-            .get[Transport.Service]
+            .get[ConnectionLessTransport.Service]
             .bind(localAddr)(
               conn => connectionHandler(conn).provide(env)
             )
       )
 
-  def connect(to: SocketAddress): ZManaged[Transport, TransportError, Connection] =
-    ZManaged.environment[Transport].flatMap(_.get.connect(to))
+  def connect(to: SocketAddress): ZManaged[ConnectionLessTransport, TransportError, Channel] =
+    ZManaged.environment[ConnectionLessTransport].flatMap(_.get.connect(to))
 }

@@ -1,5 +1,6 @@
 package zio.keeper.membership
 
+import zio.keeper.NodeAddress
 import zio.keeper.membership.swim.Nodes
 import zio.keeper.membership.swim.Nodes.NodeState
 import zio.keeper.membership.swim.Nodes.NodeState.{ Death, Healthy, Suspicion }

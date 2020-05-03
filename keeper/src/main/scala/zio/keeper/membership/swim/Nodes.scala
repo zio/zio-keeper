@@ -3,10 +3,10 @@ package zio.keeper.membership.swim
 import zio._
 import zio.clock.Clock
 import zio.keeper.ClusterError.UnknownNode
-import zio.keeper.Error
+import zio.keeper.{ Error, NodeAddress }
 import zio.keeper.membership.MembershipEvent.{ Join, NodeStateChanged }
 import zio.keeper.membership.swim.Nodes.NodeState
-import zio.keeper.membership.{ MembershipEvent, NodeAddress }
+import zio.keeper.membership.MembershipEvent
 import zio.logging._
 import zio.stm.TMap
 import zio.stream._
