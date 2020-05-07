@@ -90,7 +90,7 @@ final class Messages(
             }
     } yield ()
 
-  final def process(protocol: Protocol[Chunk[Byte]]) =
+  def process(protocol: Protocol[Chunk[Byte]]) =
     ZStream
       .mergeAll(2)(
         ZStream

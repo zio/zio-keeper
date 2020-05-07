@@ -65,7 +65,7 @@ object SWIM {
 
       override def broadcast(data: B): IO[zio.keeper.Error, Unit] =
         for {
-          bytes <- TaggedCodec.write[B](data)
+          bytes <- TaggedCodec.write[User[B]](User(data))
           _     <- broadcast0.add(Message.Broadcast(bytes))
         } yield ()
 

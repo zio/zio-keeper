@@ -3,7 +3,7 @@ package zio.keeper.membership
 import upickle.default._
 import zio.clock.Clock
 import zio.config.Config
-import zio.console.{ Console, _ }
+import zio.console.Console
 import zio.duration._
 import zio.keeper.discovery.{ Discovery, TestDiscovery }
 import zio.keeper.membership.swim.Nodes.NodeState
@@ -12,11 +12,11 @@ import zio.keeper.{ ByteCodec, TaggedCodec }
 import zio.logging.{ LogAnnotation, Logging, log }
 import zio.stream.Sink
 import zio.test.Assertion._
-import zio.test.{ assert, suite, testM }
-import zio.{ Cause, Fiber, IO, Promise, Schedule, UIO, ZIO, keeper, _ }
+import zio.test.{ DefaultRunnableSpec, assert, suite, testM }
+import zio._
 
 //TODO disable since it hangs on CI
-object SwimSpec {
+object SwimSpec extends DefaultRunnableSpec {
 
   private case class MemberHolder[A](instance: SWIM.Service[A], stop: UIO[Unit]) {
 
@@ -78,12 +78,6 @@ object SwimSpec {
     suite("cluster")(
       testM("all nodes should have references to each other") {
         for {
-          _ <- Fiber.dumpAll
-                .flatMap(ZIO.foreach(_)(_.prettyPrintM.flatMap(putStrLn(_))))
-                .delay(30.seconds)
-                .provideLayer(ZEnv.live)
-                .uninterruptible
-                .fork
           member1 <- newMember
           member2 <- newMember
           //we remove member 2 from discovery list to check if join broadcast works.
@@ -96,9 +90,9 @@ object SwimSpec {
           nodes1 <- member1.instance.nodes
           nodes2 <- member2.instance.nodes
           nodes3 <- member3.instance.nodes
-          node1  = member1.instance.localMember
-          node2  = member2.instance.localMember
-          node3  = member3.instance.localMember
+          node1  <- member1.instance.localMember
+          node2  <- member2.instance.localMember
+          node3  <- member3.instance.localMember
           _      <- member1.stop *> member2.stop *> member3.stop
         } yield assert(nodes1)(hasSameElements(List(node2, node3))) &&
           assert(nodes2)(hasSameElements(List(node1, node3))) &&
@@ -106,12 +100,6 @@ object SwimSpec {
       }.provideLayer(Clock.live ++ logging ++ (logging >>> TestDiscovery.live)),
       testM("should receive notification") {
         for {
-          _ <- Fiber.dumpAll
-                .flatMap(ZIO.foreach(_)(_.prettyPrintM.flatMap(putStrLn(_))))
-                .delay(30.seconds)
-                .provideLayer(ZEnv.live)
-                .uninterruptible
-                .fork
           member1     <- newMember
           member2     <- newMember
           member3     <- newMember

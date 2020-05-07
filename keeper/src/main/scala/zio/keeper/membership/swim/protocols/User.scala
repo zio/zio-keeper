@@ -11,7 +11,7 @@ final case class User[A](msg: A) extends AnyVal
 
 object User {
 
-  implicit def taggedRequests[A, B](
+  implicit def taggedRequests[A](
     implicit
     u: ByteCodec[User[A]]
   ): TaggedCodec[User[A]] =
