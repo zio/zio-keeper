@@ -7,7 +7,7 @@ import zio.keeper.{ ByteCodec, Error, NodeAddress }
 import zio.keeper.membership.swim.Message.WithTimeout
 import zio.keeper.transport.Channel
 import zio.keeper.transport.ConnectionLessTransport
-import zio.logging.Logging.Logging
+import zio.logging.Logging
 import zio.logging.log
 import zio.stream.{ Take, ZStream }
 import upickle.default._

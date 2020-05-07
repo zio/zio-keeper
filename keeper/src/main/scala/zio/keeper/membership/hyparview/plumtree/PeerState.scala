@@ -4,7 +4,7 @@ import zio._
 import zio.keeper.NodeAddress
 import zio.keeper.membership.hyparview.{ PeerService, TRandom }
 import zio.logging.log
-import zio.logging.Logging.Logging
+import zio.logging.Logging
 import zio.stm._
 
 object PeerState {

@@ -18,9 +18,9 @@ object PeerStateSpec extends KeeperSpec {
 
     val environment =
       (InMemoryTransport.make() ++ Logging.ignore ++ TRandom.live) >>>
-        (ZLayer.identity[Logging.Logging with TRandom with Transport] ++ TestPeerService.make(address(0))) >>>
+        (ZLayer.identity[Logging with TRandom with Transport] ++ TestPeerService.make(address(0))) >>>
         (ZLayer
-          .identity[Transport with Logging.Logging with TRandom with TestPeerService with PeerService] ++ PeerState
+          .identity[Transport with Logging with TRandom with TestPeerService with PeerService] ++ PeerState
           .live(2))
 
     suite("PeerState")(

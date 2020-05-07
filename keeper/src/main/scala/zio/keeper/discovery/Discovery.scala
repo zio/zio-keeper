@@ -2,7 +2,7 @@ package zio.keeper.discovery
 
 import zio.duration.Duration
 import zio.keeper.Error
-import zio.logging.Logging
+import zio.logging.{ Logger, Logging }
 import zio.nio.core.{ InetAddress, InetSocketAddress }
 import zio.{ IO, Layer, UIO, ZLayer }
 
@@ -26,10 +26,10 @@ object Discovery {
    * Headless service is a service of type ClusterIP with the clusterIP property set to None.
    *
    */
-  def k8Dns(address: InetAddress, timeout: Duration, port: Int): ZLayer[Logging.Logging, Nothing, Discovery] =
+  def k8Dns(address: InetAddress, timeout: Duration, port: Int): ZLayer[Logging, Nothing, Discovery] =
     ZLayer.fromFunction { logging =>
       new K8DnsDiscovery {
-        val log               = logging.get[Logging.Service]
+        val log               = logging.get[Logger[String]]
         val serviceDns        = address
         val serviceDnsTimeout = timeout
         val servicePort       = port

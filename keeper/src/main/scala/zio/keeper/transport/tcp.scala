@@ -7,7 +7,7 @@ import zio._
 import zio.clock.Clock
 import zio.duration._
 import zio.keeper.{ NodeAddress, TransportError, uuid }
-import zio.logging.Logging.Logging
+import zio.logging.Logging
 import zio.logging.log
 import zio.nio.channels._
 import zio.stream._

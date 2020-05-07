@@ -9,7 +9,7 @@ import zio.keeper.membership.Membership
 import zio.keeper.membership.hyparview.PeerService
 import zio.keeper.{ ByteCodec, Error, NodeAddress, SendError }
 import zio.logging._
-import zio.logging.Logging.Logging
+import zio.logging.Logging
 import zio.keeper.membership.hyparview.ActiveProtocol._
 import zio.keeper.membership.hyparview.PeerEvent._
 import zio.keeper.uuid.makeRandomUUID

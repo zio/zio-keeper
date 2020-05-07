@@ -9,7 +9,7 @@ import zio.keeper._
 import zio.keeper.discovery.Discovery
 import zio.keeper.membership.swim.protocols._
 import zio.keeper.membership.{ Membership, MembershipEvent }
-import zio.logging.Logging.Logging
+import zio.logging.Logging
 import zio.logging._
 import zio.stream._
 

@@ -59,11 +59,11 @@ object SwimSpec {
                       }
                     }
                     .provideSomeLayer[
-                      Config[SwimConfig] with TestDiscovery.TestDiscovery with Logging.Logging with Discovery with Clock
+                      Config[SwimConfig] with TestDiscovery.TestDiscovery with Logging with Discovery with Clock
                     ](
                       SWIM.live[EmptyProtocol]
                     )
-                    .provideSomeLayer[TestDiscovery.TestDiscovery with Logging.Logging with Discovery with Clock](
+                    .provideSomeLayer[TestDiscovery.TestDiscovery with Logging with Discovery with Clock](
                       Config.fromMap(Map("PORT" -> port.toString), SwimConfig.description).orDie
                     )
                     .catchAll(err => log.error("error starting member on: " + port, Cause.fail(err)) *> start.fail(err))

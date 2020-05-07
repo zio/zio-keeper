@@ -3,7 +3,7 @@ package zio.keeper.membership.hyparview
 import zio.clock.Clock
 import zio.keeper.transport.Transport
 import zio.keeper.{ Error, NodeAddress, SendError, TransportError }
-import zio.logging.Logging.Logging
+import zio.logging.Logging
 import zio.logging.log
 import zio.stream.{ Stream, Take, ZStream }
 import zio._
