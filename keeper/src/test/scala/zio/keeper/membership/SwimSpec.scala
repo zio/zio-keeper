@@ -15,11 +15,12 @@ import zio.duration._
 import zio.keeper.membership.swim.Nodes.NodeState
 import zio.console._
 import zio._
+import zio.keeper.{ ByteCodec, TaggedCodec }
 
 //TODO disable since it hangs on CI
 object SwimSpec {
 
-  private case class MemberHolder[A](instance: Membership.Service[A], stop: UIO[Unit]) {
+  private case class MemberHolder[A](instance: SWIM.Service[A], stop: UIO[Unit]) {
 
     def expectingMembershipEvents(n: Long): ZIO[Clock, keeper.Error, List[MembershipEvent]] =
       instance.events
@@ -43,7 +44,7 @@ object SwimSpec {
     }
   }
 
-  private def swim(port: Int): ZLayer[Discovery with Logging with Clock, keeper.Error, Membership[EmptyProtocol]] =
+  private def swim(port: Int): ZLayer[Discovery with Logging with Clock, keeper.Error, SWIM[EmptyProtocol]] =
     SWIM.run[EmptyProtocol](port)
 
   private val newMember =
@@ -52,13 +53,15 @@ object SwimSpec {
         port =>
           log.locally(LogAnnotation.Name(s"member-$port" :: Nil)) {
             for {
-              start    <- Promise.make[zio.keeper.Error, Membership.Service[EmptyProtocol]]
+              start    <- Promise.make[zio.keeper.Error, SWIM.Service[EmptyProtocol]]
               shutdown <- Promise.make[Nothing, Unit]
               _ <- ZIO
-                    .accessM[Membership[EmptyProtocol] with TestDiscovery.TestDiscovery] { env =>
-                      TestDiscovery.addMember(env.get.localMember) *>
-                        start.succeed(env.get) *>
-                        shutdown.await
+                    .accessM[SWIM[EmptyProtocol] with TestDiscovery.TestDiscovery] { env =>
+                      env.get.localMember.flatMap { localMember =>
+                        TestDiscovery.addMember(localMember) *>
+                          start.succeed(env.get) *>
+                          shutdown.await
+                      }
                     }
                     .provideSomeLayer[TestDiscovery.TestDiscovery with Logging.Logging with Discovery with Clock](
                       swim(port)
@@ -84,7 +87,7 @@ object SwimSpec {
           member1 <- newMember
           member2 <- newMember
           //we remove member 2 from discovery list to check if join broadcast works.
-          _       <- TestDiscovery.removeMember(member2.instance.localMember)
+          _       <- member2.instance.localMember.flatMap(TestDiscovery.removeMember)
           member3 <- newMember
           //we are waiting for events propagation to check nodes list
           _      <- member1.expectingMembershipEvents(2)
@@ -112,14 +115,15 @@ object SwimSpec {
           member1     <- newMember
           member2     <- newMember
           member3     <- newMember
-          node2       = member2.instance.localMember
+          node2       <- member2.instance.localMember
+          node3       <- member3.instance.localMember
           joinEvent   <- member1.expectingMembershipEvents(2)
           _           <- member2.stop
           leaveEvents <- member1.expectingMembershipEvents(3)
           _           <- member1.stop
           _           <- member3.stop
         } yield assert(joinEvent)(
-          hasSameElements(List(MembershipEvent.Join(node2), MembershipEvent.Join(member3.instance.localMember)))
+          hasSameElements(List(MembershipEvent.Join(node2), MembershipEvent.Join(node3)))
         ) &&
           assert(leaveEvents)(
             hasSameElements(

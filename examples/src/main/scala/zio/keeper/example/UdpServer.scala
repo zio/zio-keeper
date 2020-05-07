@@ -3,7 +3,7 @@ package zio.keeper.example
 import zio.{ Chunk, Schedule }
 import zio.clock.Clock
 import zio.console.{ Console, putStrLn }
-import zio.keeper.transport.Channel.Connection
+import zio.keeper.transport.Channel
 import zio.logging.Logging
 import zio.nio.core.{ InetAddress, SocketAddress }
 
@@ -24,7 +24,7 @@ object UdpServer extends zio.App {
                         .inetSocketAddress(localHost, 8010)
                         .orDie
       console <- ZIO.environment[Console]
-      handler = (channel: Connection) => {
+      handler = (channel: Channel) => {
         for {
           data <- channel.read
           _    <- putStrLn(new String(data.toArray))

@@ -1,7 +1,7 @@
 package zio.keeper.membership.swim
 
 import zio.duration.Duration
-import zio.keeper.membership.NodeAddress
+import zio.keeper.NodeAddress
 import zio.keeper.membership.swim.Message.{ NoResponse, WithTimeout }
 import zio.{ IO, ZIO, keeper }
 

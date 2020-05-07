@@ -3,11 +3,10 @@ package zio.keeper.membership.swim
 import upickle.default.macroRW
 import zio._
 import zio.clock.Clock
-import zio.keeper.Error
+import zio.keeper.{ ByteCodec, Error, NodeAddress }
 import zio.keeper.membership.swim.Message.WithTimeout
-import zio.keeper.membership.{ ByteCodec, NodeAddress }
-import zio.keeper.transport.Channel.Connection
-import zio.keeper.transport.Transport
+import zio.keeper.transport.Channel
+import zio.keeper.transport.ConnectionLessTransport
 import zio.logging.Logging.Logging
 import zio.logging.log
 import zio.stream.{ Take, ZStream }
@@ -25,7 +24,7 @@ final class Messages(
   val local: NodeAddress,
   messages: Queue[Take[Error, Message[Chunk[Byte]]]],
   broadcast: Broadcast,
-  transport: Transport.Service
+  transport: ConnectionLessTransport.Service
 ) {
 
   /**
@@ -33,7 +32,7 @@ final class Messages(
    *
    * @param connection transport connection
    */
-  def read(connection: Connection): IO[Error, Unit] =
+  def read(connection: Channel): IO[Error, Unit] =
     Take
       .fromEffect(
         connection.read >>= ByteCodec[WithPiggyback].fromChunk
@@ -131,7 +130,7 @@ object Messages {
   def make(
     local: NodeAddress,
     broadcast: Broadcast,
-    udpTransport: Transport.Service
+    udpTransport: ConnectionLessTransport.Service
   ) =
     for {
       messageQueue <- Queue

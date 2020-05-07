@@ -9,13 +9,13 @@ package object membership {
   def broadcast(data: Chunk[Byte]): ZIO[Membership[Chunk[Byte]], Error, Unit] =
     ZIO.accessM(_.get.broadcast(data))
 
-  def events: ZStream[Membership[Chunk[Byte]], Error, MembershipEvent] =
-    ZStream.accessStream(_.get.events)
+  //  def events: ZStream[Membership[Chunk[Byte]], Error, MembershipEvent] =
+  //    ZStream.accessStream(_.get.events)
 
   def localMember: ZIO[Membership[Chunk[Byte]], Nothing, NodeAddress] =
-    ZIO.access(_.get.localMember)
+    ZIO.accessM(_.get.localMember)
 
-  def nodes: ZIO[Membership[Chunk[Byte]], Nothing, List[NodeAddress]] =
+  def nodes: ZIO[Membership[Chunk[Byte]], Nothing, Set[NodeAddress]] =
     ZIO.accessM(_.get.nodes)
 
   def receive: ZStream[Membership[Chunk[Byte]], Error, (NodeAddress, Chunk[Byte])] =
@@ -23,4 +23,5 @@ package object membership {
 
   def send(data: Chunk[Byte], receipt: NodeAddress): ZIO[Membership[Chunk[Byte]], Error, Unit] =
     ZIO.accessM(_.get.send(data, receipt))
+
 }

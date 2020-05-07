@@ -1,7 +1,7 @@
 package zio.keeper
 
 import zio.duration.Duration
-import zio.keeper.membership.NodeAddress
+import zio.keeper.transport.Address
 import zio.nio.core.SocketAddress
 
 sealed abstract class Error(val msg: String = "") {
@@ -46,6 +46,15 @@ object ClusterError {
 
 }
 
+sealed abstract class SendError(msg: String = "") extends Error(msg = msg)
+
+object SendError {
+  case object NotConnected extends SendError
+
+  final case class SerializationFailed(err: SerializationError) extends SendError(msg = err.msg)
+  final case class TransportFailed(err: TransportError)         extends SendError(msg = err.msg)
+}
+
 sealed abstract class TransportError(msg: String = "") extends Error(msg = msg)
 
 object TransportError {
@@ -53,16 +62,19 @@ object TransportError {
   final case class ExceptionWrapper(throwable: Throwable)
       extends TransportError(msg = if (throwable.getMessage == null) throwable.toString else throwable.getMessage)
 
-  final case class RequestTimeout(addr: SocketAddress, timeout: Duration)
-      extends TransportError(msg = s"Request timeout $timeout for connection [$addr].")
+  final case class MaxConnectionsReached(n: Int) extends TransportError(msg = s"Reached max connections: $n")
 
-  final case class ConnectionTimeout(addr: SocketAddress, timeout: Duration)
-      extends TransportError(msg = s"Connection timeout $timeout to [$addr].")
+  final case class RequestTimeout(timeout: Duration) extends TransportError(msg = s"Request timeout after $timeout.")
+
+  final case class ConnectionTimeout(timeout: Duration)
+      extends TransportError(msg = s"Connection timeout after $timeout.")
 
   final case class BindFailed(addr: SocketAddress, exc: Throwable)
       extends TransportError(msg = s"Failed binding to address $addr.")
 
   final case class ChannelClosed(socketAddress: SocketAddress)
       extends TransportError(msg = s"Channel to $socketAddress is closed")
+
+  final case class ResolutionFailed(address: Address) extends TransportError(s"Resolution failed for $address")
 
 }

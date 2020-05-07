@@ -1,7 +1,7 @@
 package zio.keeper.discovery
 
 import zio._
-import zio.keeper.membership.NodeAddress
+import zio.keeper.NodeAddress
 import zio.logging.Logging.Logging
 import zio.logging._
 
