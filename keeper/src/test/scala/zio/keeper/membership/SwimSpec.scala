@@ -2,20 +2,18 @@ package zio.keeper.membership
 
 import upickle.default._
 import zio.clock.Clock
-import zio.console.Console
+import zio.config.Config
+import zio.console.{ Console, _ }
+import zio.duration._
 import zio.keeper.discovery.{ Discovery, TestDiscovery }
-import zio.keeper.membership.swim.SWIM
-import zio.logging.Logging.Logging
+import zio.keeper.membership.swim.Nodes.NodeState
+import zio.keeper.membership.swim.{ SWIM, SwimConfig }
+import zio.keeper.{ ByteCodec, TaggedCodec }
 import zio.logging.{ LogAnnotation, Logging, log }
 import zio.stream.Sink
 import zio.test.Assertion._
 import zio.test.{ assert, suite, testM }
-import zio.{ Cause, Fiber, IO, Promise, Schedule, UIO, ZIO, ZLayer, keeper }
-import zio.duration._
-import zio.keeper.membership.swim.Nodes.NodeState
-import zio.console._
-import zio._
-import zio.keeper.{ ByteCodec, TaggedCodec }
+import zio.{ Cause, Fiber, IO, Promise, Schedule, UIO, ZIO, keeper, _ }
 
 //TODO disable since it hangs on CI
 object SwimSpec {
@@ -44,9 +42,6 @@ object SwimSpec {
     }
   }
 
-  private def swim(port: Int): ZLayer[Discovery with Logging with Clock, keeper.Error, SWIM[EmptyProtocol]] =
-    SWIM.run[EmptyProtocol](port)
-
   private val newMember =
     TestDiscovery.nextPort
       .flatMap(
@@ -63,8 +58,13 @@ object SwimSpec {
                           shutdown.await
                       }
                     }
-                    .provideSomeLayer[TestDiscovery.TestDiscovery with Logging.Logging with Discovery with Clock](
-                      swim(port)
+                    .provideSomeLayer[
+                      Config[SwimConfig] with TestDiscovery.TestDiscovery with Logging with Discovery with Clock
+                    ](
+                      SWIM.live[EmptyProtocol]
+                    )
+                    .provideSomeLayer[TestDiscovery.TestDiscovery with Logging with Discovery with Clock](
+                      Config.fromMap(Map("PORT" -> port.toString), SwimConfig.description).orDie
                     )
                     .catchAll(err => log.error("error starting member on: " + port, Cause.fail(err)) *> start.fail(err))
                     .fork

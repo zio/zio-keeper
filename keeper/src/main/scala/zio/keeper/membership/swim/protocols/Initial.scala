@@ -6,7 +6,7 @@ import zio.keeper.{ ByteCodec, NodeAddress, TaggedCodec }
 import zio.keeper.discovery.Discovery
 import zio.keeper.membership.swim.Nodes.NodeState
 import zio.keeper.membership.swim.{ Message, Nodes, Protocol }
-import zio.logging.Logging.Logging
+import zio.logging.Logging
 import zio.logging._
 import zio.stream.ZStream
 

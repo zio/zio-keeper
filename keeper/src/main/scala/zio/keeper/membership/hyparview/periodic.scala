@@ -1,7 +1,7 @@
 package zio.keeper.membership.hyparview
 
 import zio.ZIO
-import zio.logging.Logging.Logging
+import zio.logging.Logging
 import zio.logging.log
 import zio.stm.{ STM, ZSTM }
 

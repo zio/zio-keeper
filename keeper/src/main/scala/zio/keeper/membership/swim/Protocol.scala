@@ -1,7 +1,7 @@
 package zio.keeper.membership.swim
 
 import zio.keeper.{ Error, TaggedCodec }
-import zio.logging.Logging.Logging
+import zio.logging.Logging
 import zio.logging._
 import zio.stream.ZStream
 import zio.{ Chunk, IO, ZIO }
@@ -42,14 +42,14 @@ trait Protocol[M] {
       new Protocol[M] {
         override def onMessage: Message.Direct[M] => IO[Error, Message[M]] =
           msg =>
-            env.get.logger.log(LogLevel.Trace)("Receive [" + msg + "]") *>
+            env.get.log(LogLevel.Trace)("Receive [" + msg + "]") *>
               self
                 .onMessage(msg)
-                .tap(msg => env.get.logger.log(LogLevel.Trace)("Replied with [" + msg + "]"))
+                .tap(msg => env.get.log(LogLevel.Trace)("Replied with [" + msg + "]"))
 
         override val produceMessages: Stream[Error, Message[M]] =
           self.produceMessages.tap { msg =>
-            env.get.logger.log(LogLevel.Trace)("Sending [" + msg + "]")
+            env.get.log(LogLevel.Trace)("Sending [" + msg + "]")
           }
       }
     }

@@ -36,7 +36,7 @@ final class Nodes(
    * @param id - member id
    * @param newState - new state
    */
-  def changeNodeState(id: NodeAddress, newState: NodeState): ZIO[Logging.Logging, Error, Unit] =
+  def changeNodeState(id: NodeAddress, newState: NodeState): ZIO[Logging, Error, Unit] =
     nodeState(id)
       .flatMap { prev =>
         ZIO.when(prev != newState) {
@@ -135,7 +135,7 @@ object Nodes {
     case object Left        extends NodeState
   }
 
-  def make: ZIO[Logging.Logging with Clock, Nothing, Nodes] =
+  def make: ZIO[Logging with Clock, Nothing, Nodes] =
     for {
       nodeStates       <- TMap.empty[NodeAddress, NodeState].commit
       events           <- Queue.sliding[MembershipEvent](100)

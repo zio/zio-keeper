@@ -6,7 +6,7 @@ import zio.keeper.{ ByteCodec, Error, NodeAddress, SendError, SerializationError
 import zio.keeper.SerializationError.{ DeserializationTypeError, SerializationTypeError }
 import zio.keeper.membership.hyparview.InitialProtocol._
 import zio.keeper.transport.{ ChunkConnection, Transport }
-import zio.logging.Logging.Logging
+import zio.logging.Logging
 import zio.logging.log
 import zio.stm.{ STM, ZSTM }
 import zio.stream.{ Stream, ZStream }

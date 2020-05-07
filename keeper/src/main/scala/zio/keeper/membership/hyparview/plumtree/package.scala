@@ -6,7 +6,7 @@ import zio._
 import zio.clock.Clock
 import zio.duration._
 import zio.logging.log
-import zio.logging.Logging.Logging
+import zio.logging.Logging
 import zio.stream._
 import zio.keeper.{ NodeAddress, SendError }
 

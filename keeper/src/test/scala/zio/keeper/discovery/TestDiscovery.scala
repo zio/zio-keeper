@@ -2,7 +2,7 @@ package zio.keeper.discovery
 
 import zio._
 import zio.keeper.NodeAddress
-import zio.logging.Logging.Logging
+import zio.logging.Logging
 import zio.logging._
 
 object TestDiscovery {
@@ -22,10 +22,10 @@ object TestDiscovery {
     ZLayer.fromEffectMany {
       for {
         logger <- ZIO.environment[Logging]
-        _      <- logger.get.logger.info("creating test discovery")
+        _      <- logger.get.info("creating test discovery")
         nodes  <- Ref.make(Set.empty[NodeAddress])
         ports  <- Ref.make(10000)
-        test   = new Test(nodes, ports, logger.get.logger)
+        test   = new Test(nodes, ports, logger.get)
       } yield Has.allOf[Discovery.Service, Service](test, test)
     }
 
@@ -35,7 +35,7 @@ object TestDiscovery {
     def nextPortNumber: UIO[Int]
   }
 
-  private class Test(ref: Ref[Set[NodeAddress]], port: Ref[Int], logger: Logger) extends Service {
+  private class Test(ref: Ref[Set[NodeAddress]], port: Ref[Int], logger: Logger[String]) extends Service {
 
     val discoverNodes =
       for {
