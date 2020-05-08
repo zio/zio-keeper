@@ -1,24 +1,23 @@
 package zio.keeper.membership
 
 import upickle.default._
+import zio._
 import zio.clock.Clock
 import zio.config.Config
 import zio.console.Console
 import zio.duration._
 import zio.keeper.discovery.{ Discovery, TestDiscovery }
-import zio.keeper.membership.swim.Nodes.NodeState
 import zio.keeper.membership.swim.{ SWIM, SwimConfig }
 import zio.keeper.{ ByteCodec, TaggedCodec }
 import zio.logging.{ LogAnnotation, Logging, log }
 import zio.stream.Sink
 import zio.test.Assertion._
-import zio.test.{ DefaultRunnableSpec, assert, suite, testM }
-import zio._
+import zio.test.{ assert, suite, testM }
 
 //TODO disable since it hangs on CI
-object SwimSpec extends DefaultRunnableSpec {
+object SwimSpec {
 
-  private case class MemberHolder[A](instance: SWIM.Service[A], stop: UIO[Unit]) {
+  private case class MemberHolder[A](instance: Membership.Service[A], stop: UIO[Unit]) {
 
     def expectingMembershipEvents(n: Long): ZIO[Clock, keeper.Error, List[MembershipEvent]] =
       instance.events
@@ -48,10 +47,10 @@ object SwimSpec extends DefaultRunnableSpec {
         port =>
           log.locally(LogAnnotation.Name(s"member-$port" :: Nil)) {
             for {
-              start    <- Promise.make[zio.keeper.Error, SWIM.Service[EmptyProtocol]]
+              start    <- Promise.make[zio.keeper.Error, Membership.Service[EmptyProtocol]]
               shutdown <- Promise.make[Nothing, Unit]
               _ <- ZIO
-                    .accessM[SWIM[EmptyProtocol] with TestDiscovery.TestDiscovery] { env =>
+                    .accessM[Membership[EmptyProtocol] with TestDiscovery.TestDiscovery] { env =>
                       env.get.localMember.flatMap { localMember =>
                         TestDiscovery.addMember(localMember) *>
                           start.succeed(env.get) *>
@@ -107,7 +106,7 @@ object SwimSpec extends DefaultRunnableSpec {
           node3       <- member3.instance.localMember
           joinEvent   <- member1.expectingMembershipEvents(2)
           _           <- member2.stop
-          leaveEvents <- member1.expectingMembershipEvents(3)
+          leaveEvents <- member1.expectingMembershipEvents(1)
           _           <- member1.stop
           _           <- member3.stop
         } yield assert(joinEvent)(
@@ -116,9 +115,7 @@ object SwimSpec extends DefaultRunnableSpec {
           assert(leaveEvents)(
             hasSameElements(
               List(
-                MembershipEvent.NodeStateChanged(node2, NodeState.Healthy, NodeState.Unreachable),
-                MembershipEvent.NodeStateChanged(node2, NodeState.Unreachable, NodeState.Suspicion),
-                MembershipEvent.NodeStateChanged(node2, NodeState.Suspicion, NodeState.Death)
+                MembershipEvent.Leave(node2)
               )
             )
           )

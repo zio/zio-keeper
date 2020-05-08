@@ -8,7 +8,8 @@ case class SwimConfig(
   protocolInterval: Duration,
   protocolTimeout: Duration,
   suspicionTimeout: Duration,
-  messageSizeLimit: Int
+  messageSizeLimit: Int,
+  broadcastResent: Int
 )
 
 object SwimConfig {
@@ -18,5 +19,6 @@ object SwimConfig {
       zioDuration("PROTOCOL_INTERVAL").default(3.seconds) |@|
       zioDuration("PROTOCOL_TIMEOUT").default(1.seconds) |@|
       zioDuration("SUSPICION_TIMEOUT").default(3.seconds) |@|
-      int("MESSAGE_SIZE_LIMIT").default(64000))(SwimConfig.apply, SwimConfig.unapply)
+      int("MESSAGE_SIZE_LIMIT").default(64000) |@|
+      int("BROADCAST_RESENT").default(10))(SwimConfig.apply, SwimConfig.unapply)
 }

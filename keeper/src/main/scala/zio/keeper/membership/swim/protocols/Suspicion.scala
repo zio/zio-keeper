@@ -3,10 +3,9 @@ package zio.keeper.membership.swim.protocols
 import upickle.default.macroRW
 import zio.ZIO
 import zio.duration.Duration
-import zio.keeper.{ ByteCodec, NodeAddress, TaggedCodec }
-import zio.keeper.membership.swim.Nodes.NodeState
+import zio.keeper.membership.swim.Nodes.{ NodeState, NodeStateChanged }
 import zio.keeper.membership.swim.{ Message, Nodes, Protocol }
-import zio.keeper.membership.MembershipEvent
+import zio.keeper.{ ByteCodec, NodeAddress, TaggedCodec }
 import zio.stm.TMap
 
 sealed trait Suspicion
@@ -98,7 +97,7 @@ object Suspicion {
                            .as(Message.Broadcast(msg))
                    },
                    nodes.internalEvents.collectM {
-                     case MembershipEvent.NodeStateChanged(node, _, NodeState.Suspicion) =>
+                     case NodeStateChanged(node, _, NodeState.Suspicion) =>
                        suspects
                          .put(
                            node,

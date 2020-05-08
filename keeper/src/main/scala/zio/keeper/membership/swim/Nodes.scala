@@ -3,10 +3,10 @@ package zio.keeper.membership.swim
 import zio._
 import zio.clock.Clock
 import zio.keeper.ClusterError.UnknownNode
-import zio.keeper.{ Error, NodeAddress }
-import zio.keeper.membership.MembershipEvent.{ Join, NodeStateChanged }
-import zio.keeper.membership.swim.Nodes.NodeState
 import zio.keeper.membership.MembershipEvent
+import zio.keeper.membership.MembershipEvent.{ Join, Leave }
+import zio.keeper.membership.swim.Nodes.{ NodeState, NodeStateChanged }
+import zio.keeper.{ Error, NodeAddress }
 import zio.logging._
 import zio.stm.TMap
 import zio.stream._
@@ -21,7 +21,7 @@ final class Nodes(
   nodeStates: TMap[NodeAddress, NodeState],
   roundRobinOffset: Ref[Int],
   eventsQueue: Queue[MembershipEvent],
-  internalEventsQueue: Queue[MembershipEvent]
+  internalEventsQueue: Queue[NodeStateChanged]
 ) {
 
   def addNode(node: NodeAddress) =
@@ -46,13 +46,13 @@ final class Nodes(
               .commit
               .tap(
                 _ => {
-                  val event = if (newState == NodeState.Healthy && prev == NodeState.Init) {
-                    Join(id)
+                  if (newState == NodeState.Healthy && prev == NodeState.Init) {
+                    eventsQueue.offer(Join(id))
+                  } else if (newState == NodeState.Death || newState == NodeState.Left) {
+                    eventsQueue.offer(Leave(id))
                   } else {
-                    NodeStateChanged(id, prev, newState)
-                  }
-                  eventsQueue.offer(event) *>
-                    internalEventsQueue.offer(event).unit
+                    ZIO.unit
+                  } *> internalEventsQueue.offer(NodeStateChanged(id, prev, newState)).unit
                 }
               )
         }
@@ -68,20 +68,20 @@ final class Nodes(
   /**
    *  Stream of Membership Events
    */
-  final def events: Stream[Nothing, MembershipEvent] =
+  def events: Stream[Nothing, MembershipEvent] =
     ZStream.fromQueue(eventsQueue)
 
   /**
    *  Stream of Membership Events for internal purpose.
    *  This exists only because I cannot find the way to duplicates events from one queue
    */
-  final val internalEvents: Stream[Nothing, MembershipEvent] =
+  val internalEvents: Stream[Nothing, NodeStateChanged] =
     ZStream.fromQueue(internalEventsQueue)
 
   /**
    * Returns next Healthy node.
    */
-  final val next: UIO[Option[NodeAddress]] /*(exclude: List[NodeId] = Nil)*/ =
+  val next: UIO[Option[NodeAddress]] /*(exclude: List[NodeId] = Nil)*/ =
     for {
       list      <- healthyNodes
       nextIndex <- roundRobinOffset.updateAndGet(old => if (old < list.size - 1) old + 1 else 0)
@@ -100,13 +100,13 @@ final class Nodes(
   /**
    * Lists members that are in healthy state.
    */
-  final def healthyNodes: UIO[List[(NodeAddress, NodeState)]] =
+  def healthyNodes: UIO[List[(NodeAddress, NodeState)]] =
     nodeStates.toList.map(_.filter(_._2 == NodeState.Healthy)).commit
 
   /**
    * Returns string with cluster state.
    */
-  final val prettyPrint: UIO[String] =
+  val prettyPrint: UIO[String] =
     nodeStates.toList.commit.map(
       nodes =>
         "[ size: " + nodes.size +
@@ -135,11 +135,13 @@ object Nodes {
     case object Left        extends NodeState
   }
 
+  final case class NodeStateChanged(node: NodeAddress, oldState: NodeState, newState: NodeState)
+
   def make: ZIO[Logging with Clock, Nothing, Nodes] =
     for {
       nodeStates       <- TMap.empty[NodeAddress, NodeState].commit
       events           <- Queue.sliding[MembershipEvent](100)
-      internalEvents   <- Queue.sliding[MembershipEvent](100)
+      internalEvents   <- Queue.sliding[NodeStateChanged](100)
       roundRobinOffset <- Ref.make(0)
     } yield new Nodes(
       nodeStates,

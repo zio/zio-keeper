@@ -75,7 +75,7 @@ object MessagesSpec extends DefaultRunnableSpec {
   val messages = for {
     local     <- NodeAddress.local(1111).toManaged_
     transport <- TestTransport.make
-    broadcast <- Broadcast.make(64000).toManaged_
+    broadcast <- Broadcast.make(64000, 2).toManaged_
     messages  <- Messages.make(local, broadcast, transport)
   } yield (transport, messages)
 

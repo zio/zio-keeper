@@ -10,8 +10,8 @@ package object membership {
   def broadcast[A: Tag](data: A): ZIO[Membership[A], Error, Unit] =
     ZIO.accessM(_.get.broadcast(data))
 
-  //  def events: ZStream[Membership[Chunk[Byte]], Error, MembershipEvent] =
-  //    ZStream.accessStream(_.get.events)
+  def events[A: Tag]: ZStream[Membership[A], Error, MembershipEvent] =
+    ZStream.accessStream(_.get.events)
 
   def localMember[A: Tag]: ZIO[Membership[A], Nothing, NodeAddress] =
     ZIO.accessM(_.get.localMember)

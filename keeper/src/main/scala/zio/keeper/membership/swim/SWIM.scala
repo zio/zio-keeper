@@ -15,11 +15,8 @@ import zio.stream._
 
 object SWIM {
 
-  trait Service[B] extends Membership.Service[B] {
-    def events: Stream[Error, MembershipEvent]
-  }
-
-  def live[B: TaggedCodec: Tag]: ZLayer[Config[SwimConfig] with Discovery with Logging with Clock, Error, SWIM[B]] =
+  def live[B: TaggedCodec: Tag]
+    : ZLayer[Config[SwimConfig] with Discovery with Logging with Clock, Error, Membership[B]] =
     ZLayer.fromManaged(for {
       swimConfig   <- config[SwimConfig].toManaged_
       _            <- log.info("starting SWIM on port: " + swimConfig.port).toManaged_
@@ -58,10 +55,10 @@ object SWIM {
                .toManaged_
       deadLetter <- DeadLetter.protocol.toManaged_
       swim       = Protocol.compose(initial.binary, failureDetection, suspicion, user, deadLetter)
-      broadcast0 <- Broadcast.make(swimConfig.messageSizeLimit).toManaged_
+      broadcast0 <- Broadcast.make(swimConfig.messageSizeLimit, swimConfig.broadcastResent).toManaged_
       messages0  <- Messages.make(localNodeAddress, broadcast0, udpTransport)
       _          <- messages0.process(swim).toManaged_
-    } yield new Service[B] {
+    } yield new Membership.Service[B] {
 
       override def broadcast(data: B): IO[zio.keeper.Error, Unit] =
         for {
@@ -83,7 +80,7 @@ object SWIM {
       override def send(data: B, receipt: NodeAddress): IO[Nothing, Unit] =
         userOut.offer(Message.Direct(receipt, data)).unit
 
-      val events: Stream[Nothing, MembershipEvent] =
+      override val events: Stream[Nothing, MembershipEvent] =
         nodes0.events
 
     })

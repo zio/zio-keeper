@@ -1,17 +1,14 @@
 package zio.keeper.membership.swim
 
-import upickle.default.macroRW
+import upickle.default.{ macroRW, _ }
 import zio._
 import zio.clock.Clock
-import zio.keeper.{ ByteCodec, Error, NodeAddress }
 import zio.keeper.membership.swim.Message.WithTimeout
-import zio.keeper.transport.Channel
-import zio.keeper.transport.ConnectionLessTransport
-import zio.logging.Logging
-import zio.logging.log
-import zio.stream.{ Take, ZStream }
-import upickle.default._
 import zio.keeper.membership.swim.Messages.WithPiggyback
+import zio.keeper.transport.{ Channel, ConnectionLessTransport }
+import zio.keeper.{ ByteCodec, Error, NodeAddress }
+import zio.logging.{ Logging, log }
+import zio.stream.{ Take, ZStream }
 
 /**
  * Represents main messages loop. responsible for receiving and sending messages.
@@ -92,15 +89,11 @@ final class Messages(
 
   def process(protocol: Protocol[Chunk[Byte]]) =
     ZStream
-      .mergeAll(2)(
-        ZStream
-          .fromQueue(messages)
-          .collectM {
-            case Take.Value(msg: Message.Direct[Chunk[Byte]]) =>
-              Take.fromEffect(protocol.onMessage(msg))
-          },
-        recoverErrors(protocol.produceMessages)
-      )
+      .fromQueue(messages)
+      .collectM {
+        case Take.Value(msg: Message.Direct[Chunk[Byte]]) =>
+          Take.fromEffect(protocol.onMessage(msg))
+      }
       .mapMPar(10) {
         case Take.Value(msg) =>
           send(msg)
@@ -110,7 +103,18 @@ final class Messages(
         case Take.End => ZIO.unit
       }
       .runDrain
-      .fork
+      .fork *>
+      recoverErrors(protocol.produceMessages)
+        .mapMPar(10) {
+          case Take.Value(msg) =>
+            send(msg)
+              .catchAll(e => log.error("error during send: " + e))
+          case Take.Fail(cause) =>
+            log.error("error: ", cause)
+          case Take.End => ZIO.unit
+        }
+        .runDrain
+        .fork
 }
 
 object Messages {

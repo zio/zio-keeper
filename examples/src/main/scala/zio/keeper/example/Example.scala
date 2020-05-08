@@ -63,12 +63,16 @@ object TestNode {
 //   Fiber.dumpAll.flatMap(ZIO.foreach(_)(_.prettyPrintM.flatMap(putStrLn(_).provideLayer(ZEnv.live)))).delay(10.seconds).uninterruptible.fork.toManaged_ *>
     (for {
       _ <- sleep(5.seconds)
+      _ <- events[PingPong].foreach(event => putStrLn("membership event: " + event)).fork
       _ <- broadcast[PingPong](Ping(1))
       _ <- receive[PingPong].foreach {
-            case (sender, message) =>
-              putStrLn("receive message: " + message) *> send[PingPong](Pong(1), sender).ignore *> sleep(
-                5.seconds
-              )
+            case (sender, message @ Pong(i)) =>
+              putStrLn("receive message: " + message + " from: " + sender) *>
+                send[PingPong](Ping(i + 1), sender).ignore
+
+            case (sender, message @ Ping(i)) =>
+              putStrLn("receive message: " + message + " from: " + sender) *>
+                send[PingPong](Pong(i + 1), sender).ignore
           }
     } yield 0)
       .provideCustomLayer(environment(port, otherPorts))
@@ -78,7 +82,7 @@ object TestNode {
     val config     = Config.fromMap(Map("PORT" -> port.toString), SwimConfig.description).orDie
     val seeds      = discovery(others)
     val membership = (seeds ++ logging ++ Clock.live ++ config) >>> SWIM.live[PingPong]
-    logging ++ membership.map(swim => Has(swim.get[Membership.Service[PingPong]]))
+    logging ++ membership
   }
 
   def discovery(others: Set[Int]): ULayer[Discovery] =
