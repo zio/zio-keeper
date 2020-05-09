@@ -46,12 +46,9 @@ final class Nodes(
               .commit
               .tap(
                 _ => {
-                  if (newState == NodeState.Healthy && prev == NodeState.Init) {
-                    eventsQueue.offer(Join(id))
-                  } else if (newState == NodeState.Death || newState == NodeState.Left) {
-                    eventsQueue.offer(Leave(id))
-                  } else {
-                    ZIO.unit
+                  ZIO.whenCase(newState) {
+                    case NodeState.Healthy if prev == NodeState.Init => eventsQueue.offer(Join(id))
+                    case NodeState.Dead | NodeState.Left             => eventsQueue.offer(Leave(id))
                   } *> internalEventsQueue.offer(NodeStateChanged(id, prev, newState)).unit
                 }
               )
@@ -85,7 +82,7 @@ final class Nodes(
     for {
       list      <- healthyNodes
       nextIndex <- roundRobinOffset.updateAndGet(old => if (old < list.size - 1) old + 1 else 0)
-      _         <- nodeStates.removeIf((_, v) => v == NodeState.Death).when(nextIndex == 0).commit
+      _         <- nodeStates.removeIf((_, v) => v == NodeState.Dead).when(nextIndex == 0).commit
     } yield list.drop(nextIndex).headOption.map(_._1)
 
   /**
@@ -131,7 +128,7 @@ object Nodes {
     case object Healthy     extends NodeState
     case object Unreachable extends NodeState
     case object Suspicion   extends NodeState
-    case object Death       extends NodeState
+    case object Dead        extends NodeState
     case object Left        extends NodeState
   }
 

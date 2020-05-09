@@ -47,12 +47,12 @@ object NodesSpec extends DefaultRunnableSpec {
             _       <- nodes.addNode(testNodeAddress1)
             _       <- nodes.changeNodeState(testNodeAddress1, NodeState.Healthy)
             _       <- nodes.changeNodeState(testNodeAddress1, NodeState.Suspicion)
-            _       <- nodes.changeNodeState(testNodeAddress1, NodeState.Death)
+            _       <- nodes.changeNodeState(testNodeAddress1, NodeState.Dead)
             events1 <- nodes.events.run(Sink.collectAllN[MembershipEvent](2))
             _       <- nodes.addNode(testNodeAddress2)
             _       <- nodes.changeNodeState(testNodeAddress2, NodeState.Healthy)
             _       <- nodes.changeNodeState(testNodeAddress2, NodeState.Suspicion)
-            _       <- nodes.changeNodeState(testNodeAddress2, NodeState.Death)
+            _       <- nodes.changeNodeState(testNodeAddress2, NodeState.Dead)
             events2 <- nodes.events.run(Sink.collectAllN[MembershipEvent](2))
           } yield assert(events1)(
             hasSameElements(

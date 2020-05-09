@@ -36,12 +36,13 @@ final class Broadcast(
           (toSend, toReschedule :+ item, size)
       }
 
-      val newValue = TreeSet.empty[Item] ++
-        toSend.map(item => item.copy(resend = item.resend - 1)).filter(_.resend > 0) ++
+      val newValue = toSend
+        .map(item => item.copy(resend = item.resend - 1))
+        .filter(_.resend > 0) ++
         toReschedule
 
       val broadcast = toSend.map(item => item.chunk).toList
-      (broadcast, newValue)
+      (broadcast, newValue.to[TreeSet])
     }.commit
 
 }

@@ -62,11 +62,11 @@ object Suspicion {
                        suspects
                          .get(node)
                          .commit
-                         .zip(nodes.nodeState(node).orElseSucceed(NodeState.Death))
+                         .zip(nodes.nodeState(node).orElseSucceed(NodeState.Dead))
                          .flatMap {
                            case (Some(_), _) =>
                              Message.noResponse
-                           case (_, NodeState.Death | NodeState.Suspicion) =>
+                           case (_, NodeState.Dead | NodeState.Suspicion) =>
                              Message.noResponse
                            case (None, _) =>
                              nodes.changeNodeState(node, NodeState.Suspicion).ignore *>
@@ -80,11 +80,11 @@ object Suspicion {
                          .as(Message.Broadcast(msg))
 
                      case Message.Direct(_, msg @ Dead(nodeAddress)) =>
-                       nodes.nodeState(nodeAddress).orElseSucceed(NodeState.Death).flatMap {
-                         case NodeState.Death => Message.noResponse
+                       nodes.nodeState(nodeAddress).orElseSucceed(NodeState.Dead).flatMap {
+                         case NodeState.Dead => Message.noResponse
                          case _ =>
                            nodes
-                             .changeNodeState(nodeAddress, NodeState.Death)
+                             .changeNodeState(nodeAddress, NodeState.Dead)
                              .ignore
                              .as(Message.Broadcast(msg))
                        }
@@ -110,7 +110,7 @@ object Suspicion {
                                Message.Broadcast(Suspect(local, node)),
                                ZIO.ifM(suspects.contains(node).commit)(
                                  nodes
-                                   .changeNodeState(node, NodeState.Death)
+                                   .changeNodeState(node, NodeState.Dead)
                                    .as(Message.Broadcast(Dead(node))),
                                  Message.noResponse
                                ),

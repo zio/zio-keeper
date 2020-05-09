@@ -14,6 +14,7 @@ import zio.keeper.membership.swim.{ SWIM, SwimConfig }
 import zio.logging.Logging
 import zio.nio.core.{ InetAddress, SocketAddress }
 import zio.keeper.membership._
+import zio.logging._
 
 object Node1 extends zio.App {
 
@@ -63,16 +64,15 @@ object TestNode {
 //   Fiber.dumpAll.flatMap(ZIO.foreach(_)(_.prettyPrintM.flatMap(putStrLn(_).provideLayer(ZEnv.live)))).delay(10.seconds).uninterruptible.fork.toManaged_ *>
     (for {
       _ <- sleep(5.seconds)
-      _ <- events[PingPong].foreach(event => putStrLn("membership event: " + event)).fork
+      _ <- events[PingPong].foreach(event => log.info("membership event: " + event)).fork
       _ <- broadcast[PingPong](Ping(1))
       _ <- receive[PingPong].foreach {
-            case (sender, message @ Pong(i)) =>
-              putStrLn("receive message: " + message + " from: " + sender) *>
-                send[PingPong](Ping(i + 1), sender).ignore
-
-            case (sender, message @ Ping(i)) =>
-              putStrLn("receive message: " + message + " from: " + sender) *>
-                send[PingPong](Pong(i + 1), sender).ignore
+            case (sender, message) =>
+              log.info(s"receive message: $message from: $sender") *>
+                ZIO.whenCase(message) {
+                  case Ping(i) => send[PingPong](Pong(i + 1), sender).ignore
+                  case Pong(i) => send[PingPong](Pong(i + 1), sender).ignore
+                }
           }
     } yield 0)
       .provideCustomLayer(environment(port, otherPorts))
