@@ -54,11 +54,12 @@ object User {
     userOut: zio.Queue[Message.Direct[B]]
   ) =
     Protocol[User[B]].make(
-      msg => userIn.offer(Message.Direct(msg.node, msg.message.msg)).as(Message.NoResponse),
+      msg => Message.direct(msg.node, msg.message.msg).flatMap(userIn.offer(_)).as(Message.NoResponse),
       ZStream
         .fromQueue(userOut)
         .collect {
-          case Message.Direct(node, msg) => Message.Direct(node, User(msg))
+          case Message.Direct(node, conversationId, msg) =>
+            Message.Direct(node, conversationId, User(msg))
         }
     )
 

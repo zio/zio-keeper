@@ -72,7 +72,7 @@ object TestNode {
                 ZIO.whenCase(message) {
                   case Ping(i) => send[PingPong](Pong(i + 1), sender).ignore
                   case Pong(i) => send[PingPong](Pong(i + 1), sender).ignore
-                }
+                } *> sleep(5.seconds)
           }
     } yield 0)
       .provideCustomLayer(environment(port, otherPorts))

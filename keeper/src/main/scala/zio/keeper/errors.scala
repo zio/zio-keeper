@@ -4,7 +4,7 @@ import zio.duration.Duration
 import zio.keeper.transport.Address
 import zio.nio.core.SocketAddress
 
-sealed abstract class Error(val msg: String = "") {
+sealed abstract class Error(val msg: String = "") extends Throwable {
   override def toString: String = msg
 }
 

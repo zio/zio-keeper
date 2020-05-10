@@ -27,7 +27,7 @@ trait Protocol[M] {
         msg =>
           TaggedCodec
             .read[M](msg.message)
-            .flatMap(decoded => self.onMessage(Message.Direct(msg.node, decoded)))
+            .flatMap(decoded => self.onMessage(msg.copy(message = decoded)))
             .flatMap(_.transformM(TaggedCodec.write[M]))
 
       override val produceMessages: Stream[Error, Message[Chunk[Byte]]] =
@@ -83,11 +83,11 @@ object Protocol {
 
   class ProtocolBuilder[M] {
 
-    def make[R](
+    def make[R, R1](
       in: Message.Direct[M] => ZIO[R, Error, Message[M]],
-      out: zio.stream.ZStream[R, Error, Message[M]]
-    ): ZIO[R, Error, Protocol[M]] =
-      ZIO.access[R](
+      out: zio.stream.ZStream[R1, Error, Message[M]]
+    ): ZIO[R with R1, Error, Protocol[M]] =
+      ZIO.access[R with R1](
         env =>
           new Protocol[M] {
 

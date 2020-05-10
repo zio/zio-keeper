@@ -31,7 +31,7 @@ sealed trait Message[+A] {
 
 object Message {
 
-  final case class Direct[A](node: NodeAddress, message: A) extends Message[A]
+  final case class Direct[A](node: NodeAddress, conversationId: Long, message: A) extends Message[A]
 
   final case class Batch[A](first: Message[A], second: Message[A], rest: Message[A]*) extends Message[A]
 
@@ -41,13 +41,23 @@ object Message {
       extends Message[A]
   case object NoResponse extends Message[Nothing]
 
-  def direct[A](node: NodeAddress, message: A) =
-    ZIO.succeedNow(Direct(node, message))
+  def direct[A](node: NodeAddress, message: A): ZIO[ConversationId, Nothing, Direct[A]] =
+    ConversationId.next.map(Direct(node, _, message))
 
   def withTimeout[R, A](message: Message[A], action: ZIO[R, keeper.Error, Message[A]], timeout: Duration) =
     for {
       env <- ZIO.environment[R]
     } yield WithTimeout(message, action.provide(env), timeout)
+
+  def withTimeoutM[R, R1, A](
+    message: ZIO[R1, keeper.Error, Message[A]],
+    action: ZIO[R, keeper.Error, Message[A]],
+    timeout: Duration
+  ) =
+    for {
+      env <- ZIO.environment[R]
+      msg <- message
+    } yield WithTimeout(msg, action.provide(env), timeout)
 
   val noResponse = ZIO.succeedNow(NoResponse)
 

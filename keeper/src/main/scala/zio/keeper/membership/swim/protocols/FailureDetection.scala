@@ -2,14 +2,13 @@ package zio.keeper.membership.swim.protocols
 
 import upickle.default._
 import zio.duration._
+import zio.keeper.membership.swim.Nodes._
+import zio.keeper.membership.swim.{ Message, Protocol }
 import zio.keeper.{ ByteCodec, NodeAddress, TaggedCodec }
-import zio.keeper.membership.swim.Nodes.NodeState
-import zio.keeper.membership.swim.{ Message, Nodes, Protocol }
-import zio.logging.Logging
 import zio.logging._
 import zio.stm.TMap
 import zio.stream.ZStream
-import zio.{ Ref, Schedule, UIO, ZIO, keeper }
+import zio.{ Schedule, ZIO }
 
 sealed trait FailureDetection
 
@@ -17,17 +16,17 @@ object FailureDetection {
 
   implicit def tagged(
     implicit
-    c1: ByteCodec[Ack],
-    c2: ByteCodec[Ping],
+    c1: ByteCodec[Ack.type],
+    c2: ByteCodec[Ping.type],
     c3: ByteCodec[PingReq],
-    c4: ByteCodec[Nack]
+    c4: ByteCodec[Nack.type]
   ): TaggedCodec[FailureDetection] =
     TaggedCodec.instance(
       {
-        case _: Ack     => 10
-        case _: Ping    => 11
+        case Ack        => 10
+        case Ping       => 11
         case _: PingReq => 12
-        case _: Nack    => 13
+        case Nack       => 13
       }, {
         case 10 => c1.asInstanceOf[ByteCodec[FailureDetection]]
         case 11 => c2.asInstanceOf[ByteCodec[FailureDetection]]
@@ -36,33 +35,22 @@ object FailureDetection {
       }
     )
 
-  final case class Ack(conversation: Long) extends FailureDetection
+  final case object Ack extends FailureDetection
 
-  object Ack {
+  implicit val ackCodec: ByteCodec[Ack.type] =
+    ByteCodec.fromReadWriter(macroRW[Ack.type])
 
-    implicit val codec: ByteCodec[Ack] =
-      ByteCodec.fromReadWriter(macroRW[Ack])
+  final case object Nack extends FailureDetection
 
-  }
+  implicit val nackCodec: ByteCodec[Nack.type] =
+    ByteCodec.fromReadWriter(macroRW[Nack.type])
 
-  final case class Nack(conversation: Long) extends FailureDetection
+  final case object Ping extends FailureDetection
 
-  object Nack {
+  implicit val pingCodec: ByteCodec[Ping.type] =
+    ByteCodec.fromReadWriter(macroRW[Ping.type])
 
-    implicit val codec: ByteCodec[Nack] =
-      ByteCodec.fromReadWriter(macroRW[Nack])
-
-  }
-
-  final case class Ping(ackConversation: Long) extends FailureDetection
-
-  object Ping {
-
-    implicit val codec: ByteCodec[Ping] =
-      ByteCodec.fromReadWriter(macroRW[Ping])
-  }
-
-  final case class PingReq(target: NodeAddress, ackConversation: Long) extends FailureDetection
+  final case class PingReq(target: NodeAddress) extends FailureDetection
 
   object PingReq {
 
@@ -70,110 +58,78 @@ object FailureDetection {
       ByteCodec.fromReadWriter(macroRW[PingReq])
   }
 
-  private case class _Ack(onBehalf: Option[(NodeAddress, Long)])
-
-  def protocol(nodes: Nodes, protocolPeriod: Duration, protocolTimeout: Duration) =
+  def protocol(protocolPeriod: Duration, protocolTimeout: Duration) =
     for {
-      pendingAcks <- TMap.empty[Long, _Ack].commit
-      ackId       <- Ref.make(0L)
+      pendingAcks <- TMap.empty[Long, Option[(NodeAddress, Long)]].commit
       protocol <- {
-
-        def ack(id: Long) =
-          (pendingAcks.get(id) <*
-            pendingAcks
-              .delete(id)).commit
-
-        def withAck[R](
-          onBehalf: Option[(NodeAddress, Long)],
-          fn: Long => ZIO[R, zio.keeper.Error, Message.WithTimeout[FailureDetection]]
-        ) =
-          for {
-            ackId      <- ackId.updateAndGet(_ + 1)
-            nodeAndMsg <- fn(ackId)
-            _          <- pendingAcks.put(ackId, _Ack(onBehalf)).commit
-          } yield nodeAndMsg
-
         Protocol[FailureDetection].make(
           {
-            case Message.Direct(sender, Ack(ackId)) =>
-              log.debug(s"received ack[$ackId] from $sender") *>
-                ack(ackId).flatMap {
-                  case Some(_Ack(Some((node, originalAckId)))) =>
-                    Message.direct(node, Ack(originalAckId))
+            case Message.Direct(sender, conversationId, Ack) =>
+              log.debug(s"received ack[$conversationId] from $sender") *>
+                pendingAcks.get(conversationId).tap(_ => pendingAcks.delete(conversationId)).commit.flatMap {
+                  case Some(Some((node, originalAckId))) =>
+                    ZIO.succeedNow(Message.Direct(node, originalAckId, Ack))
                   case _ =>
                     Message.noResponse
                 }
-            case Message.Direct(sender, Ping(ackId)) =>
-              ZIO.succeed(Message.Direct(sender, Ack(ackId)))
+            case Message.Direct(sender, conversationId, Ping) =>
+              ZIO.succeedNow(Message.Direct(sender, conversationId, Ack))
 
-            case Message.Direct(sender, PingReq(to, originalAck)) =>
-              withAck(
-                Some((sender, originalAck)),
-                ackId =>
-                  Message.withTimeout(
-                    Message.Direct(to, Ping(ackId)),
-                    ack(ackId).as(Message.NoResponse),
-                    protocolTimeout
-                  )
-              )
-
-            case Message.Direct(_, Nack(_)) =>
+            case Message.Direct(sender, originalAck, PingReq(to)) =>
+              for {
+                ping <- Message.direct(to, Ping)
+                _    <- pendingAcks.put(ping.conversationId, Some((sender, originalAck))).commit
+                withTimeout <- Message.withTimeout(
+                                message = ping,
+                                action = pendingAcks.delete(ping.conversationId).commit.as(Message.NoResponse),
+                                timeout = protocolTimeout
+                              )
+              } yield withTimeout
+            case Message.Direct(_, _, Nack) =>
               Message.noResponse
           },
           ZStream
-            .repeatEffectWith(nodes.next, Schedule.spaced(protocolPeriod))
+            .repeatEffectWith(nextNode, Schedule.spaced(protocolPeriod))
             .collectM {
-              case Some(next) =>
-                withAck(
-                  None,
-                  ackId =>
-                    Message.withTimeout(
-                      Message.Direct(next, Ping(ackId)),
-                      onAckTimeout(nodes, next, ackId, pendingAcks, ack, protocolTimeout),
-                      protocolTimeout
-                    )
-                )
+              case Some(probedNode) =>
+                Message
+                  .direct(probedNode, Ping)
+                  .tap(msg => pendingAcks.put(msg.conversationId, None).commit)
+                  .flatMap(
+                    msg =>
+                      Message.withTimeout(
+                        msg,
+                        pendingAcks.get(msg.conversationId).commit.flatMap {
+                          case Some(_) =>
+                            log.warn(s"node: $probedNode missed ack with id ${msg.conversationId}") *>
+                              changeNodeState(probedNode, NodeState.Unreachable) *>
+                              nextNode.flatMap {
+                                case Some(next) =>
+                                  Message.withTimeout(
+                                    Message.Direct(next, msg.conversationId, PingReq(probedNode)),
+                                    pendingAcks.get(msg.conversationId).commit.flatMap {
+                                      case Some(_) =>
+                                        pendingAcks.delete(msg.conversationId).commit *>
+                                          changeNodeState(probedNode, NodeState.Suspicion) *>
+                                          Message.noResponse
+                                      case None =>
+                                        Message.noResponse
+                                    },
+                                    protocolTimeout
+                                  )
+                                case None =>
+                                  changeNodeState(probedNode, NodeState.Dead) *>
+                                    Message.noResponse
+                              }
+                          case None =>
+                            Message.noResponse
+                        },
+                        protocolTimeout
+                      )
+                  )
             }
         )
-
       }
     } yield protocol
-
-  private def onAckTimeout(
-    nodes: Nodes,
-    probedNode: NodeAddress,
-    ackId: Long,
-    acks: TMap[Long, _Ack],
-    deleteAck: Long => UIO[Option[_Ack]],
-    protocolTimeout: Duration
-  ): ZIO[Logging, keeper.Error, Message[FailureDetection]] =
-    acks.get(ackId).commit.flatMap {
-      case Some(_) =>
-        log.warn(s"node: $probedNode missed ack with id $ackId") *>
-          nodes
-            .changeNodeState(probedNode, NodeState.Unreachable) *>
-          nodes.next.flatMap {
-            case Some(next) =>
-              Message.withTimeout(
-                Message.Direct(next, PingReq(probedNode, ackId)),
-                deleteAck(ackId).flatMap {
-                  case Some(_) =>
-                    nodes
-                      .changeNodeState(probedNode, NodeState.Suspicion) *>
-                      Message.noResponse
-                  case None =>
-                    Message.noResponse
-                },
-                protocolTimeout
-              )
-            case None =>
-              nodes
-                .changeNodeState(probedNode, NodeState.Suspicion) *>
-                Message.noResponse
-          }
-      case None =>
-        Message.noResponse
-
-    }
 
 }
