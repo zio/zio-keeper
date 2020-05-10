@@ -5,15 +5,14 @@ import java.util.UUID
 import zio._
 import zio.clock.Clock
 import zio.duration._
-import zio.keeper.membership.Membership
-import zio.keeper.membership.hyparview.PeerService
+import zio.keeper.membership.{ Membership, MembershipEvent }
+import zio.keeper.membership.hyparview.{ PeerEvent, PeerService, TRandom }
 import zio.keeper.{ ByteCodec, Error, NodeAddress, SendError }
 import zio.logging._
 import zio.logging.Logging
 import zio.keeper.membership.hyparview.ActiveProtocol._
 import zio.keeper.membership.hyparview.PeerEvent._
 import zio.keeper.uuid.makeRandomUUID
-import zio.keeper.membership.hyparview.TRandom
 import zio.stream.ZStream
 
 import scala.Function.untupled
@@ -130,6 +129,10 @@ object PlumTree {
         } yield new Membership.Service[A] {
           override val localMember: ZIO[Any, Nothing, NodeAddress] = PeerService.identity.provide(env)
           override val nodes: ZIO[Any, Nothing, Set[NodeAddress]]  = PeerService.getPeers.provide(env)
+          override def events: stream.Stream[Nothing, MembershipEvent] = PeerService.events.provide(env).map {
+            case PeerEvent.NeighborDown(node) => MembershipEvent.Leave(node)
+            case PeerEvent.NeighborUp(node)   => MembershipEvent.Join(node)
+          }
           override def send(data: A, receipt: NodeAddress): ZIO[Any, SendError, Unit] = {
             for {
               chunk <- ByteCodec.decode(data).mapError(SendError.SerializationFailed)

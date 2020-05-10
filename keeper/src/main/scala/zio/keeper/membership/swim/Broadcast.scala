@@ -6,7 +6,13 @@ import zio.{ Chunk, UIO }
 
 import scala.collection.immutable.TreeSet
 
-final class Broadcast(ref: TRef[TreeSet[Item]], sequenceId: TRef[Int], messageOverhead: Int, messageLimit: Int) {
+final class Broadcast(
+  ref: TRef[TreeSet[Item]],
+  sequenceId: TRef[Int],
+  messageOverhead: Int,
+  messageLimit: Int,
+  resent: Int
+) {
 
   def add(message: Message.Broadcast[Chunk[Byte]]): UIO[Unit] =
     sequenceId
@@ -15,7 +21,7 @@ final class Broadcast(ref: TRef[TreeSet[Item]], sequenceId: TRef[Int], messageOv
         seqId =>
           ref.update(
             items =>
-              items ++ TreeSet(Item(seqId, 10 /* this should calculated based of num of nodes */, message.message))
+              items ++ TreeSet(Item(seqId, resent /* this should calculated based of num of nodes */, message.message))
           )
       )
       .commit
@@ -30,7 +36,11 @@ final class Broadcast(ref: TRef[TreeSet[Item]], sequenceId: TRef[Int], messageOv
           (toSend, toReschedule :+ item, size)
       }
 
-      val newValue  = TreeSet.empty[Item] ++ toSend.map(item => item.copy(resend = item.resend - 1)) ++ toReschedule
+      val newValue = TreeSet.empty[Item] ++ toSend
+        .map(item => item.copy(resend = item.resend - 1))
+        .filter(_.resend > 0) ++
+        toReschedule
+
       val broadcast = toSend.map(item => item.chunk).toList
       (broadcast, newValue)
     }.commit
@@ -39,8 +49,8 @@ final class Broadcast(ref: TRef[TreeSet[Item]], sequenceId: TRef[Int], messageOv
 
 object Broadcast {
 
-  def make(mtu: Int): UIO[Broadcast] =
-    STM.mapN(TRef.make(TreeSet.empty[Item]), TRef.make(0))(new Broadcast(_, _, 100, mtu)).commit
+  def make(mtu: Int, resent: Int): UIO[Broadcast] =
+    STM.mapN(TRef.make(TreeSet.empty[Item]), TRef.make(0))(new Broadcast(_, _, 100, mtu, resent)).commit
 
   final case class Item(seqId: Int, resend: Int, chunk: Chunk[Byte])
   implicit val ordering: Ordering[Item] = Ordering.by[Item, Int](_.resend)

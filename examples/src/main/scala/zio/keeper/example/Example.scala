@@ -13,20 +13,22 @@ import zio.keeper.TaggedCodec
 import zio.keeper.membership.swim.{ SWIM, SwimConfig }
 import zio.logging.Logging
 import zio.nio.core.{ InetAddress, SocketAddress }
+import zio.keeper.membership._
+import zio.logging._
 
-object Node1 extends zio.ManagedApp {
+object Node1 extends zio.App {
 
   def run(args: List[String]) =
     TestNode.start(5557, Set.empty)
 }
 
-object Node2 extends zio.ManagedApp {
+object Node2 extends zio.App {
 
   def run(args: List[String]) =
     TestNode.start(5558, Set(5557))
 }
 
-object Node3 extends zio.ManagedApp {
+object Node3 extends zio.App {
 
   def run(args: List[String]) =
     TestNode.start(5559, Set(5557))
@@ -60,37 +62,36 @@ object TestNode {
 
   def start(port: Int, otherPorts: Set[Int]) =
 //   Fiber.dumpAll.flatMap(ZIO.foreach(_)(_.prettyPrintM.flatMap(putStrLn(_).provideLayer(ZEnv.live)))).delay(10.seconds).uninterruptible.fork.toManaged_ *>
-    environment(port, otherPorts).orDie.flatMap(
-      env =>
-        (for {
-          membership0 <- ZManaged.access[SWIM[PingPong]](_.get)
-          _           <- sleep(5.seconds).toManaged_
-          nodes       <- membership0.nodes.toManaged_
-          _           <- ZIO.foreach(nodes)(n => membership0.send(Ping(1), n)).toManaged_
-          _ <- membership0.receive.foreach {
-                case (sender, message) =>
-                  putStrLn("receive message: " + message) *> membership0.send(Pong(1), sender).ignore *> sleep(
-                    5.seconds
-                  )
-              }.toManaged_
-        } yield 0)
-          .provideCustomLayer(env)
-          .catchAll(ex => putStrLn("error: " + ex).toManaged_.as(1))
+    (for {
+      _ <- sleep(5.seconds)
+      _ <- events[PingPong].foreach(event => log.info("membership event: " + event)).fork
+      _ <- broadcast[PingPong](Ping(1))
+      _ <- receive[PingPong].foreach {
+            case (sender, message) =>
+              log.info(s"receive message: $message from: $sender") *>
+                ZIO.whenCase(message) {
+                  case Ping(i) => send[PingPong](Pong(i + 1), sender).ignore
+                  case Pong(i) => send[PingPong](Pong(i + 1), sender).ignore
+                }
+          }
+    } yield 0)
+      .provideCustomLayer(environment(port, otherPorts))
+      .catchAll(ex => putStrLn("error: " + ex).as(1))
+
+  private def environment(port: Int, others: Set[Int]) = {
+    val config     = Config.fromMap(Map("PORT" -> port.toString), SwimConfig.description).orDie
+    val seeds      = discovery(others)
+    val membership = (seeds ++ logging ++ Clock.live ++ config) >>> SWIM.live[PingPong]
+    logging ++ membership
+  }
+
+  def discovery(others: Set[Int]): ULayer[Discovery] =
+    ZLayer.fromManaged(
+      ZManaged
+        .foreach(others) { port =>
+          InetAddress.localHost.flatMap(SocketAddress.inetSocketAddress(_, port)).toManaged_
+        }
+        .orDie
+        .flatMap(addrs => Discovery.staticList(addrs.toSet).build.map(_.get))
     )
-
-  private def environment(port: Int, others: Set[Int]) =
-    discovery(others).map { dsc =>
-      val config = Config.fromMap(Map("PORT" -> port.toString), SwimConfig.description)
-      val mem    = (dsc ++ logging ++ Clock.live ++ config) >>> SWIM.live[PingPong]
-      dsc ++ logging ++ mem
-    }
-
-  def discovery(others: Set[Int]): Managed[Exception, Layer[Nothing, Discovery]] =
-    ZManaged
-      .foreach(others) { port =>
-        InetAddress.localHost.flatMap(SocketAddress.inetSocketAddress(_, port)).toManaged_
-      }
-      .orDie
-      .map(addrs => Discovery.staticList(addrs.toSet))
-
 }
