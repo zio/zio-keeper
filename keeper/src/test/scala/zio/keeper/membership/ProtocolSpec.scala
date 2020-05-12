@@ -1,7 +1,7 @@
 package zio.keeper.membership
 
 import zio.ZIO
-import zio.keeper.{ NodeAddress, TaggedCodec }
+import zio.keeper.{ ByteCodec, NodeAddress }
 import zio.keeper.membership.PingPong.{ Ping, Pong }
 import zio.keeper.membership.swim.{ Message, Protocol }
 import zio.stream.ZStream
@@ -31,11 +31,11 @@ object ProtocolSpec extends DefaultRunnableSpec {
     testM("binary request response") {
       for {
         protocol       <- protocolDefinition.map(_.binary)
-        binaryMessage  <- TaggedCodec.write[PingPong](Ping(123))
+        binaryMessage  <- ByteCodec.encode[PingPong](Ping(123))
         responseBinary <- protocol.onMessage(Message.Direct(testNode, binaryMessage))
         response <- responseBinary match {
                      case Message.Direct(addr, chunk) =>
-                       TaggedCodec.read[PingPong](chunk).map(pp => Message.Direct(addr, pp))
+                       ByteCodec.decode[PingPong](chunk).map(pp => Message.Direct(addr, pp))
                      case _ => ZIO.succeed(Message.NoResponse)
                    }
       } yield assert(response)(equalTo(Message.Direct[PingPong](testNode, Pong(123))))

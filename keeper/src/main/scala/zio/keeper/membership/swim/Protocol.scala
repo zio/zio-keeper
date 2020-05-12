@@ -1,6 +1,6 @@
 package zio.keeper.membership.swim
 
-import zio.keeper.{ Error, TaggedCodec }
+import zio.keeper.{ ByteCodec, Error }
 import zio.logging.Logging
 import zio.logging._
 import zio.stream.ZStream
@@ -20,18 +20,18 @@ trait Protocol[M] {
    * @param codec - TaggedCodec that handles serialization to Chunk[Byte]
    * @return - Protocol that operates on Chunk[Byte]
    */
-  final def binary(implicit codec: TaggedCodec[M]): Protocol[Chunk[Byte]] =
+  final def binary(implicit codec: ByteCodec[M]): Protocol[Chunk[Byte]] =
     new Protocol[Chunk[Byte]] {
 
       override val onMessage: Message.Direct[Chunk[Byte]] => ZIO[Any, Error, Message[Chunk[Byte]]] =
         msg =>
-          TaggedCodec
-            .read[M](msg.message)
+          ByteCodec
+            .decode[M](msg.message)
             .flatMap(decoded => self.onMessage(Message.Direct(msg.node, decoded)))
-            .flatMap(_.transformM(TaggedCodec.write[M]))
+            .flatMap(_.transformM(ByteCodec.encode[M]))
 
       override val produceMessages: Stream[Error, Message[Chunk[Byte]]] =
-        self.produceMessages.mapM(_.transformM(TaggedCodec.write[M]))
+        self.produceMessages.mapM(_.transformM(ByteCodec.encode[M]))
     }
 
   /**
