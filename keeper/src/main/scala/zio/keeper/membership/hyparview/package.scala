@@ -2,8 +2,8 @@ package zio.keeper.membership
 
 import java.util.UUID
 
-import zio.keeper.{ ByteCodec, Error, NodeAddress, SendError, SerializationError, TaggedCodec, TransportError }
-import zio.keeper.SerializationError.{ DeserializationTypeError, SerializationTypeError }
+import zio.keeper.{ ByteCodec, Error, NodeAddress, SendError, TransportError }
+import zio.keeper.SerializationError.DeserializationTypeError
 import zio.keeper.membership.hyparview.InitialProtocol._
 import zio.keeper.transport.{ ChunkConnection, Transport }
 import zio.logging.Logging
@@ -46,8 +46,6 @@ package object hyparview {
 
   private[hyparview] def readJoinReply[R, E >: DeserializationTypeError, T](
     stream: ZStream[R, E, Chunk[Byte]]
-  )(
-    implicit ev: ByteCodec[JoinReply]
   ): ZManaged[R, E, Option[(NodeAddress, ZStream[R, E, Chunk[Byte]])]] =
     stream.process.mapM { pull =>
       val continue =
@@ -71,9 +69,8 @@ package object hyparview {
       val continue =
         pull.foldM[R, E, Boolean](
           _.fold[ZIO[R, E, Boolean]](ZIO.succeed(false))(ZIO.fail(_)), { msg =>
-            TaggedCodec
-              .read[NeighborReply](msg)
-              .mapError(e => DeserializationTypeError(e.msg))
+            ByteCodec
+              .decode[NeighborReply](msg)
               .map {
                 case NeighborReply.Accept => true
                 case NeighborReply.Reject => false
@@ -95,9 +92,8 @@ package object hyparview {
       def openConnection(to: NodeAddress, msg: InitialProtocol) =
         for {
           con <- Transport.connect(to)
-          msg <- TaggedCodec
-                  .write[InitialProtocol](msg)
-                  .mapError(e => SerializationTypeError(e.msg))
+          msg <- ByteCodec
+                  .encode[InitialProtocol](msg)
                   .toManaged_
           _ <- con.send(msg).toManaged_
         } yield con
@@ -137,26 +133,21 @@ package object hyparview {
                   pull
                     .foldM(
                       _.fold[ZIO[R, E, Option[NodeAddress]]](ZIO.succeed(None))(ZIO.fail(_)), { raw =>
-                        TaggedCodec
-                          .read[InitialProtocol](raw)
-                          .mapError(e => SerializationError.DeserializationTypeError(e.msg))
+                        ByteCodec
+                          .decode[InitialProtocol](raw)
                           .tap(msg => log.debug(s"receiveInitialProtocol: $msg"))
                           .flatMap {
                             case msg: Neighbor =>
                               val accept = for {
-                                reply <- TaggedCodec
-                                          .write[NeighborReply](NeighborReply.Accept)
-                                          .mapError(e => SerializationTypeError(e.msg))
-                                _ <- log.debug(s"Accepting neighborhood request from ${msg.sender}")
-                                _ <- con.send(reply)
+                                reply <- ByteCodec.encode[NeighborReply](NeighborReply.Accept)
+                                _     <- log.debug(s"Accepting neighborhood request from ${msg.sender}")
+                                _     <- con.send(reply)
                               } yield Some(msg.sender)
 
                               val reject = for {
-                                reply <- TaggedCodec
-                                          .write[NeighborReply](NeighborReply.Reject)
-                                          .mapError(e => SerializationTypeError(e.msg))
-                                _ <- log.debug(s"Rejecting neighborhood request from ${msg.sender}")
-                                _ <- con.send(reply)
+                                reply <- ByteCodec.encode[NeighborReply](NeighborReply.Reject)
+                                _     <- log.debug(s"Rejecting neighborhood request from ${msg.sender}")
+                                _     <- con.send(reply)
                               } yield None
 
                               if (msg.isHighPriority) {
@@ -190,10 +181,8 @@ package object hyparview {
                                                 .ForwardJoin(localAddr, msg.sender, TimeToLive(config.arwl))
                                             )
                                       )
-                                reply <- ByteCodec
-                                          .decode(JoinReply(localAddr))
-                                          .mapError(e => SerializationTypeError(e.msg))
-                                _ <- con.send(reply)
+                                reply <- ByteCodec.encode(JoinReply(localAddr))
+                                _     <- con.send(reply)
                               } yield Some(msg.sender)
                             case msg: ForwardJoinReply =>
                               // nothing to do here, we just continue to the next protocol
@@ -246,9 +235,8 @@ package object hyparview {
                 for {
                   _   <- log.debug(s"Running neighbor protocol with remote $node").toManaged_
                   con <- Transport.connect(node)
-                  msg <- TaggedCodec
-                          .write[InitialProtocol](msg)
-                          .mapError(e => SerializationTypeError(e.msg))
+                  msg <- ByteCodec
+                          .encode[InitialProtocol](msg)
                           .toManaged_
                   _    <- con.send(msg).toManaged_
                   cont <- readNeighborReply(con.receive)
@@ -289,7 +277,7 @@ package object hyparview {
                       remote,
                       msg =>
                         (for {
-                          chunk <- TaggedCodec.write[ActiveProtocol](msg).mapError(SendError.SerializationFailed)
+                          chunk <- ByteCodec.encode[ActiveProtocol](msg).mapError(SendError.SerializationFailed)
                           _     <- reply(chunk).mapError(SendError.TransportFailed)
                           _     <- log.error(s"sendActiveProtocol: $remote -> $msg")
                         } yield ())
@@ -318,9 +306,8 @@ package object hyparview {
         case (keepInPassive, end, config) =>
           stream
             .mapM { raw =>
-              TaggedCodec
-                .read[ActiveProtocol](raw)
-                .mapError(e => DeserializationTypeError(e.msg))
+              ByteCodec
+                .decode[ActiveProtocol](raw)
                 .tap(msg => log.debug(s"receiveActiveProtocol: $remote -> $msg"))
                 .flatMap {
                   case msg: Disconnect =>

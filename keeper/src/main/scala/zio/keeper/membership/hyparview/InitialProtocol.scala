@@ -1,32 +1,19 @@
 package zio.keeper.membership.hyparview
 
 import upickle.default._
-import zio.keeper.{ ByteCodec, NodeAddress, TaggedCodec }
+import zio.keeper.{ ByteCodec, NodeAddress }
 
 sealed abstract class InitialProtocol
 
 object InitialProtocol {
 
-  implicit def tagged(
-    implicit
-    c1: ByteCodec[Neighbor],
-    c2: ByteCodec[Join],
-    c3: ByteCodec[ForwardJoinReply],
-    c4: ByteCodec[ShuffleReply]
-  ): TaggedCodec[InitialProtocol] =
-    TaggedCodec.instance(
-      {
-        case _: Neighbor         => 0
-        case _: Join             => 1
-        case _: ForwardJoinReply => 2
-        case _: ShuffleReply     => 3
-      }, {
-        case 0 => c1.asInstanceOf[ByteCodec[InitialProtocol]]
-        case 1 => c2.asInstanceOf[ByteCodec[InitialProtocol]]
-        case 2 => c3.asInstanceOf[ByteCodec[InitialProtocol]]
-        case 3 => c4.asInstanceOf[ByteCodec[InitialProtocol]]
-      }
-    )
+  implicit val byteCodec: ByteCodec[InitialProtocol] =
+    ByteCodec.tagged[InitialProtocol][
+      Neighbor,
+      Join,
+      ForwardJoinReply,
+      ShuffleReply
+    ]
 
   final case class Neighbor(
     sender: NodeAddress,

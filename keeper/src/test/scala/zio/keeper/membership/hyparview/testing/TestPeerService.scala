@@ -9,7 +9,7 @@ import zio.keeper.membership.hyparview.ActiveProtocol._
 import zio.keeper.membership.hyparview.PeerEvent._
 import zio.keeper.membership.hyparview.{ ActiveProtocol, PeerEvent, PeerService }
 import zio.keeper.transport.Transport
-import zio.keeper.{ ByteCodec, Error, NodeAddress, SendError, TaggedCodec }
+import zio.keeper.{ ByteCodec, Error, NodeAddress, SendError }
 import zio.stm.{ STM, TQueue, TRef, ZSTM }
 import zio.stream.{ Take, ZStream }
 
@@ -34,8 +34,8 @@ object TestPeerService {
             senderL <- ZIO
                         .effect(new BigInteger(chunk.take(4).toArray).intValue())
                         .mapError(_ => DeserializationTypeError("Failed reading length"))
-            sender <- ByteCodec.encode[NodeAddress](chunk.drop(4).take(senderL))
-            msgRaw <- TaggedCodec.read[ActiveProtocol](chunk.drop(4 + senderL))
+            sender <- ByteCodec.decode[NodeAddress](chunk.drop(4).take(senderL))
+            msgRaw <- ByteCodec.decode[ActiveProtocol](chunk.drop(4 + senderL))
             msg <- msgRaw match {
                     case m: ActiveProtocol.PlumTreeProtocol => ZIO.succeed(m)
                     case m                                  => ZIO.fail(DeserializationTypeError(s"Invalid message type ${m.getClass}"))
@@ -44,8 +44,8 @@ object TestPeerService {
 
         override def toChunk(a: Envelope): IO[SerializationTypeError, Chunk[Byte]] =
           for {
-            sender  <- ByteCodec.decode(a.sender)
-            msg     <- TaggedCodec.write[ActiveProtocol](a.msg)
+            sender  <- ByteCodec.encode(a.sender)
+            msg     <- ByteCodec.encode[ActiveProtocol](a.msg)
             senderL = Chunk.fromArray(ByteBuffer.allocate(4).putInt(sender.length).array())
           } yield (senderL ++ sender ++ msg)
       }
@@ -73,7 +73,7 @@ object TestPeerService {
             .bind(identifier)
             .flatMapPar[Transport, Error, (NodeAddress, PlumTreeProtocol)](concurrentConnections) { channel =>
               channel.receive
-                .mapM(ByteCodec.encode[Envelope](_).map(envelope => (envelope.sender, envelope.msg)))
+                .mapM(ByteCodec.decode[Envelope](_).map(envelope => (envelope.sender, envelope.msg)))
                 .orElse(ZStream.empty)
             }
             .into(msgsQueue)
@@ -99,7 +99,7 @@ object TestPeerService {
             case false => ZIO.fail(SendError.NotConnected)
             case true =>
               ByteCodec
-                .decode(Envelope(identifier, message))
+                .encode(Envelope(identifier, message))
                 .mapError(SendError.SerializationFailed)
                 .flatMap(Transport.send(to, _).mapError(SendError.TransportFailed))
                 .provide(env)

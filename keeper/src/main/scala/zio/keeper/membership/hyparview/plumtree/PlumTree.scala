@@ -135,13 +135,13 @@ object PlumTree {
           }
           override def send(data: A, receipt: NodeAddress): ZIO[Any, SendError, Unit] = {
             for {
-              chunk <- ByteCodec.decode(data).mapError(SendError.SerializationFailed)
+              chunk <- ByteCodec.encode(data).mapError(SendError.SerializationFailed)
               _     <- PeerService.send(receipt, UserMessage(chunk))
             } yield ()
           }.provide(env)
 
           override def broadcast(data: A): ZIO[Any, SendError, Unit] = {
-            ByteCodec.decode(data).mapError(SendError.SerializationFailed(_)).flatMap { chunk =>
+            ByteCodec.encode(data).mapError(SendError.SerializationFailed(_)).flatMap { chunk =>
               makeRandomUUID.flatMap { uuid =>
                 val msg = Gossip(uuid, chunk)
                 PeerState.eagerPushPeers

@@ -15,8 +15,7 @@ import zio.stream._
 
 object SWIM {
 
-  def live[B: TaggedCodec: Tag]
-    : ZLayer[Config[SwimConfig] with Discovery with Logging with Clock, Error, Membership[B]] =
+  def live[B: ByteCodec: Tag]: ZLayer[Config[SwimConfig] with Discovery with Logging with Clock, Error, Membership[B]] =
     ZLayer.fromManaged(for {
       swimConfig   <- config[SwimConfig].toManaged_
       _            <- log.info("starting SWIM on port: " + swimConfig.port).toManaged_
@@ -62,7 +61,7 @@ object SWIM {
 
       override def broadcast(data: B): IO[zio.keeper.Error, Unit] =
         for {
-          bytes <- TaggedCodec.write[User[B]](User(data))
+          bytes <- ByteCodec.encode[User[B]](User(data))
           _     <- broadcast0.add(Message.Broadcast(bytes))
         } yield ()
 

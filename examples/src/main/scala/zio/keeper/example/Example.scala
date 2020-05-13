@@ -9,7 +9,7 @@ import zio.duration._
 import zio.keeper.ByteCodec
 import zio.keeper.discovery.Discovery
 import zio.keeper.example.TestNode.PingPong.{ Ping, Pong }
-import zio.keeper.TaggedCodec
+import zio.keeper.ByteCodec
 import zio.keeper.membership.swim.{ SWIM, SwimConfig }
 import zio.logging.Logging
 import zio.nio.core.{ InetAddress, SocketAddress }
@@ -41,23 +41,27 @@ object TestNode {
   sealed trait PingPong
 
   object PingPong {
-    case class Ping(i: Int) extends PingPong
-    case class Pong(i: Int) extends PingPong
+    final case class Ping(i: Int) extends PingPong
 
-    implicit val pingCodec: ByteCodec[Ping] =
-      ByteCodec.fromReadWriter(macroRW[Ping])
+    object Ping {
 
-    implicit val pongCodec: ByteCodec[Pong] =
-      ByteCodec.fromReadWriter(macroRW[Pong])
+      implicit val pingCodec: ByteCodec[Ping] =
+        ByteCodec.fromReadWriter(macroRW[Ping])
+    }
 
-    implicit def tagged(implicit p1: ByteCodec[Ping], p2: ByteCodec[Pong]) =
-      TaggedCodec.instance[PingPong]({
-        case Ping(_) => 1
-        case Pong(_) => 2
-      }, {
-        case 1 => p1.asInstanceOf[ByteCodec[PingPong]]
-        case 2 => p2.asInstanceOf[ByteCodec[PingPong]]
-      })
+    final case class Pong(i: Int) extends PingPong
+
+    object Pong {
+
+      implicit val pongCodec: ByteCodec[Pong] =
+        ByteCodec.fromReadWriter(macroRW[Pong])
+    }
+
+    implicit val codec: ByteCodec[PingPong] =
+      ByteCodec.tagged[PingPong][
+        Ping,
+        Pong
+      ]
   }
 
   def start(port: Int, otherPorts: Set[Int]) =

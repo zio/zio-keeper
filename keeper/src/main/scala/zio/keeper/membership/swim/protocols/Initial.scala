@@ -2,7 +2,7 @@ package zio.keeper.membership.swim.protocols
 
 import upickle.default._
 import zio.ZIO
-import zio.keeper.{ ByteCodec, NodeAddress, TaggedCodec }
+import zio.keeper.{ ByteCodec, NodeAddress }
 import zio.keeper.discovery.Discovery
 import zio.keeper.membership.swim.Nodes.NodeState
 import zio.keeper.membership.swim.{ Message, Nodes, Protocol }
@@ -14,33 +14,26 @@ sealed trait Initial
 
 object Initial {
 
-  implicit def taggedRequests(
-    implicit
-    c4: ByteCodec[Join],
-    c6: ByteCodec[Accept.type],
-    c7: ByteCodec[Reject]
-  ): TaggedCodec[Initial] =
-    TaggedCodec.instance(
-      {
-        case _: Join   => 13
-        case Accept    => 15
-        case _: Reject => 16
-      }, {
-        case 13 => c4.asInstanceOf[ByteCodec[Initial]]
-        case 15 => c6.asInstanceOf[ByteCodec[Initial]]
-        case 16 => c7.asInstanceOf[ByteCodec[Initial]]
-      }
-    )
+  implicit val byteCodec: ByteCodec[Initial] =
+    ByteCodec.tagged[Initial][
+      Join,
+      Accept.type,
+      Reject
+    ]
 
   final case class Join(nodeAddress: NodeAddress) extends Initial
 
-  implicit val codecJoin: ByteCodec[Join] =
-    ByteCodec.fromReadWriter(macroRW[Join])
+  object Join {
 
-  case object Accept extends Initial
+    implicit val codecJoin: ByteCodec[Join] =
+      ByteCodec.fromReadWriter(macroRW[Join])
+  }
 
-  implicit val codecAccept: ByteCodec[Accept.type] =
-    ByteCodec.fromReadWriter(macroRW[Accept.type])
+  case object Accept extends Initial {
+
+    implicit val codecAccept: ByteCodec[Accept.type] =
+      ByteCodec.fromReadWriter(macroRW[Accept.type])
+  }
 
   final case class Reject(msg: String) extends Initial
 
