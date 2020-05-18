@@ -1,7 +1,7 @@
 package zio.keeper.membership
 
 import zio._
-import zio.keeper.{ ByteCodec, NodeAddress, TaggedCodec, TransportError }
+import zio.keeper.{ ByteCodec, NodeAddress, TransportError }
 import zio.keeper.membership.PingPong.{ Ping, Pong }
 import zio.keeper.membership.swim.Messages.WithPiggyback
 import zio.keeper.membership.swim.{ Broadcast, Message, Messages, Protocol }
@@ -40,12 +40,12 @@ object MessagesSpec extends DefaultRunnableSpec {
         )
       )
 
-    def simulateNewConnection[A: TaggedCodec](message: Message.Direct[A]) =
+    def simulateNewConnection[A: ByteCodec](message: Message.Direct[A]) =
       for {
         queue <- ZQueue.unbounded[Byte]
-        _ <- TaggedCodec
-              .write(message.message)
-              .map(WithPiggyback(message.node, 1, _, List.empty))
+        _ <- ByteCodec
+              .encode(message.message)
+              .map(WithPiggyback(message.node, _, List.empty))
               .flatMap(ByteCodec[WithPiggyback].toChunk)
               .map { chunk =>
                 val size = chunk.size
@@ -107,7 +107,7 @@ object MessagesSpec extends DefaultRunnableSpec {
                       ByteCodec[WithPiggyback].fromChunk(chunk.drop(4))
                   }
                   .mapM {
-                    case WithPiggyback(_, _, chunk, _) => TaggedCodec.read[PingPong](chunk)
+                    case WithPiggyback(_, _, chunk, _) => ByteCodec.read[PingPong](chunk)
                   }
                   .take(2)
                   .runCollect

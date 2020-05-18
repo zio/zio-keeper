@@ -6,43 +6,46 @@ import zio.duration.Duration
 import zio.keeper.membership.swim.Nodes._
 import zio.keeper.membership.swim.{ Message, Protocol }
 import zio.keeper.{ ByteCodec, NodeAddress, TaggedCodec }
+import zio.keeper.membership.swim.Nodes.{ NodeState, NodeStateChanged }
+import zio.keeper.{ ByteCodec, NodeAddress }
+import zio.keeper.membership.swim.{ Message, Nodes, Protocol }
+import zio.keeper.{ ByteCodec, NodeAddress }
+import zio.stm.TMap
 
 sealed trait Suspicion
 
 object Suspicion {
 
-  implicit def taggedRequests(
-    implicit
-    c4: ByteCodec[Suspect],
-    c6: ByteCodec[Alive],
-    c7: ByteCodec[Dead]
-  ): TaggedCodec[Suspicion] =
-    TaggedCodec.instance(
-      {
-        case _: Suspect => 33
-        case _: Alive   => 35
-        case _: Dead    => 36
-      }, {
-        case 33 => c4.asInstanceOf[ByteCodec[Suspicion]]
-        case 35 => c6.asInstanceOf[ByteCodec[Suspicion]]
-        case 36 => c7.asInstanceOf[ByteCodec[Suspicion]]
-      }
-    )
+  implicit val byteCodec: ByteCodec[Suspicion] =
+    ByteCodec.tagged[Suspicion][
+      Suspect,
+      Alive,
+      Dead
+    ]
 
   final case class Suspect(from: NodeAddress, nodeId: NodeAddress) extends Suspicion
 
-  implicit val codecSuspect: ByteCodec[Suspect] =
-    ByteCodec.fromReadWriter(macroRW[Suspect])
+  object Suspect {
+
+    implicit val codecSuspect: ByteCodec[Suspect] =
+      ByteCodec.fromReadWriter(macroRW[Suspect])
+  }
 
   final case class Alive(nodeId: NodeAddress) extends Suspicion
 
-  implicit val codecAlive: ByteCodec[Alive] =
-    ByteCodec.fromReadWriter(macroRW[Alive])
+  object Alive {
+
+    implicit val codecAlive: ByteCodec[Alive] =
+      ByteCodec.fromReadWriter(macroRW[Alive])
+  }
 
   final case class Dead(nodeId: NodeAddress) extends Suspicion
 
-  implicit val codecDead: ByteCodec[Dead] =
-    ByteCodec.fromReadWriter(macroRW[Dead])
+  object Dead {
+
+    implicit val codecDead: ByteCodec[Dead] =
+      ByteCodec.fromReadWriter(macroRW[Dead])
+  }
 
   def protocol(local: NodeAddress, timeout: Duration) =
     Protocol[Suspicion].make(

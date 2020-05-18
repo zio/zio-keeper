@@ -8,7 +8,7 @@ import zio.console.Console
 import zio.duration._
 import zio.keeper.discovery.{ Discovery, TestDiscovery }
 import zio.keeper.membership.swim.{ SWIM, SwimConfig }
-import zio.keeper.{ ByteCodec, TaggedCodec }
+import zio.keeper.ByteCodec
 import zio.logging.{ LogAnnotation, Logging, log }
 import zio.stream.Sink
 import zio.test.Assertion._
@@ -31,14 +31,17 @@ object SwimSpec {
   sealed trait EmptyProtocol
 
   object EmptyProtocol {
-    case object EmptyMessage extends EmptyProtocol
 
-    implicit val taggedCodec = new TaggedCodec[EmptyProtocol] {
-      override def tagOf(a: EmptyProtocol): Byte = 1
+    case object EmptyMessage extends EmptyProtocol {
 
-      override def codecFor(tag: Byte): IO[Unit, ByteCodec[EmptyProtocol]] =
-        ZIO.succeed(ByteCodec.fromReadWriter(macroRW[EmptyProtocol]))
+      implicit val codec: ByteCodec[EmptyMessage.type] =
+        ByteCodec.fromReadWriter(macroRW[EmptyMessage.type])
     }
+
+    implicit val codec: ByteCodec[EmptyProtocol] =
+      ByteCodec.tagged[EmptyProtocol][
+        EmptyMessage.type
+      ]
   }
 
   private val newMember =

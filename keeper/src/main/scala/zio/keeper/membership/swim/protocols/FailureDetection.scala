@@ -2,6 +2,10 @@ package zio.keeper.membership.swim.protocols
 
 import upickle.default._
 import zio.duration._
+import zio.keeper.{ ByteCodec, NodeAddress }
+import zio.keeper.membership.swim.Nodes.NodeState
+import zio.keeper.membership.swim.{ Message, Nodes, Protocol }
+import zio.logging.Logging
 import zio.keeper.membership.swim.Nodes._
 import zio.keeper.membership.swim.{ Message, Protocol }
 import zio.keeper.{ ByteCodec, NodeAddress, TaggedCodec }
@@ -14,26 +18,13 @@ sealed trait FailureDetection
 
 object FailureDetection {
 
-  implicit def tagged(
-    implicit
-    c1: ByteCodec[Ack.type],
-    c2: ByteCodec[Ping.type],
-    c3: ByteCodec[PingReq],
-    c4: ByteCodec[Nack.type]
-  ): TaggedCodec[FailureDetection] =
-    TaggedCodec.instance(
-      {
-        case Ack        => 10
-        case Ping       => 11
-        case _: PingReq => 12
-        case Nack       => 13
-      }, {
-        case 10 => c1.asInstanceOf[ByteCodec[FailureDetection]]
-        case 11 => c2.asInstanceOf[ByteCodec[FailureDetection]]
-        case 12 => c3.asInstanceOf[ByteCodec[FailureDetection]]
-        case 13 => c4.asInstanceOf[ByteCodec[FailureDetection]]
-      }
-    )
+  implicit val byteCodec: ByteCodec[FailureDetection] =
+    ByteCodec.tagged[FailureDetection][
+      Ack,
+      Ping,
+      PingReq,
+      Nack
+    ]
 
   final case object Ack extends FailureDetection
 

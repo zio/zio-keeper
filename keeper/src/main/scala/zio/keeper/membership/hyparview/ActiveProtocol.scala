@@ -4,45 +4,24 @@ import java.util.UUID
 
 import upickle.default._
 import zio.Chunk
-import zio.keeper.{ ByteCodec, NodeAddress, TaggedCodec }
+import zio.keeper.{ ByteCodec, NodeAddress }
 import zio.keeper.orphans._
 
 sealed abstract class ActiveProtocol
 
 object ActiveProtocol {
 
-  implicit def tagged(
-    implicit
-    c1: ByteCodec[Disconnect],
-    c2: ByteCodec[ForwardJoin],
-    c3: ByteCodec[Shuffle],
-    c4: ByteCodec[Prune.type],
-    c5: ByteCodec[IHave],
-    c6: ByteCodec[Graft],
-    c7: ByteCodec[UserMessage],
-    c8: ByteCodec[Gossip]
-  ): TaggedCodec[ActiveProtocol] =
-    TaggedCodec.instance(
-      {
-        case _: Disconnect  => 10
-        case _: ForwardJoin => 11
-        case _: Shuffle     => 12
-        case Prune          => 13
-        case _: IHave       => 14
-        case _: Graft       => 15
-        case _: UserMessage => 16
-        case _: Gossip      => 17
-      }, {
-        case 10 => c1.asInstanceOf[ByteCodec[ActiveProtocol]]
-        case 11 => c2.asInstanceOf[ByteCodec[ActiveProtocol]]
-        case 12 => c3.asInstanceOf[ByteCodec[ActiveProtocol]]
-        case 13 => c4.asInstanceOf[ByteCodec[ActiveProtocol]]
-        case 14 => c5.asInstanceOf[ByteCodec[ActiveProtocol]]
-        case 15 => c6.asInstanceOf[ByteCodec[ActiveProtocol]]
-        case 16 => c7.asInstanceOf[ByteCodec[ActiveProtocol]]
-        case 17 => c8.asInstanceOf[ByteCodec[ActiveProtocol]]
-      }
-    )
+  implicit val byteCodec: ByteCodec[ActiveProtocol] =
+    ByteCodec.tagged[ActiveProtocol][
+      Disconnect,
+      ForwardJoin,
+      Shuffle,
+      Prune.type,
+      IHave,
+      Graft,
+      UserMessage,
+      Gossip
+    ]
 
   final case class Disconnect(
     sender: NodeAddress,
