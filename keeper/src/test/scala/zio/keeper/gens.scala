@@ -7,6 +7,7 @@ import zio.keeper.membership.hyparview.ActiveProtocol._
 import zio.keeper.membership.hyparview.InitialProtocol._
 import zio.keeper.membership.hyparview.NeighborReply._
 import zio.keeper.membership.hyparview._
+import zio.keeper.membership.swim.protocols.FailureDetection.{Ack, Nack, Ping, PingReq}
 import zio.random.Random
 import zio.test._
 
@@ -102,4 +103,19 @@ object gens {
 
   val activeProtocol: Gen[Random with Sized, ActiveProtocol] =
     Gen.oneOf(disconnect, forwardJoin, shuffle, plumTreeProtocol)
+
+  val ping: Gen[Any, Ping.type] =
+    Gen.const(Ping)
+
+  val ack: Gen[Any, Ack.type] =
+    Gen.const(Ack)
+
+  val nack: Gen[Any, Nack.type] =
+    Gen.const(Nack)
+
+  val pingReq: Gen[Random with Sized, PingReq] =
+    nodeAddress.map(PingReq(_))
+
+  val failureDetectionProtocol =
+    Gen.oneOf(ping, ack, nack, pingReq)
 }

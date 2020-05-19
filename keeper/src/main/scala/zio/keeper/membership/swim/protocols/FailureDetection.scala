@@ -2,29 +2,17 @@ package zio.keeper.membership.swim.protocols
 
 import upickle.default._
 import zio.duration._
-import zio.keeper.{ ByteCodec, NodeAddress }
-import zio.keeper.membership.swim.Nodes.NodeState
-import zio.keeper.membership.swim.{ Message, Nodes, Protocol }
-import zio.logging.Logging
-import zio.keeper.membership.swim.Nodes._
-import zio.keeper.membership.swim.{ Message, Protocol }
-import zio.keeper.{ ByteCodec, NodeAddress, TaggedCodec }
+import zio.keeper.membership.swim.Nodes.{NodeState, _}
+import zio.keeper.membership.swim.{Message, Protocol}
+import zio.keeper.{ByteCodec, NodeAddress}
 import zio.logging._
 import zio.stm.TMap
 import zio.stream.ZStream
-import zio.{ Schedule, ZIO }
+import zio.{Schedule, ZIO}
 
 sealed trait FailureDetection
 
 object FailureDetection {
-
-  implicit val byteCodec: ByteCodec[FailureDetection] =
-    ByteCodec.tagged[FailureDetection][
-      Ack,
-      Ping,
-      PingReq,
-      Nack
-    ]
 
   final case object Ack extends FailureDetection
 
@@ -48,6 +36,14 @@ object FailureDetection {
     implicit val codec: ByteCodec[PingReq] =
       ByteCodec.fromReadWriter(macroRW[PingReq])
   }
+
+  implicit val byteCodec: ByteCodec[FailureDetection] =
+    ByteCodec.tagged[FailureDetection][
+      Ack.type,
+      Ping.type,
+      PingReq,
+      Nack.type
+    ]
 
   def protocol(protocolPeriod: Duration, protocolTimeout: Duration) =
     for {

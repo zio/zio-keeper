@@ -45,7 +45,7 @@ object MessagesSpec extends DefaultRunnableSpec {
         queue <- ZQueue.unbounded[Byte]
         _ <- ByteCodec
               .encode(message.message)
-              .map(WithPiggyback(message.node, _, List.empty))
+              .map(WithPiggyback(message.node, message.conversationId, _, List.empty))
               .flatMap(ByteCodec[WithPiggyback].toChunk)
               .map { chunk =>
                 val size = chunk.size
@@ -107,7 +107,7 @@ object MessagesSpec extends DefaultRunnableSpec {
                       ByteCodec[WithPiggyback].fromChunk(chunk.drop(4))
                   }
                   .mapM {
-                    case WithPiggyback(_, _, chunk, _) => ByteCodec.read[PingPong](chunk)
+                    case WithPiggyback(_, _, chunk, _) => ByteCodec.decode[PingPong](chunk)
                   }
                   .take(2)
                   .runCollect

@@ -2,15 +2,9 @@ package zio.keeper.membership.swim.protocols
 
 import upickle.default._
 import zio.keeper.discovery._
-import zio.keeper.membership.swim.Nodes._
-import zio.keeper.membership.swim.{ Message, Protocol }
-import zio.keeper.{ ByteCodec, NodeAddress, TaggedCodec }
-import zio.ZIO
-import zio.keeper.{ ByteCodec, NodeAddress }
-import zio.keeper.discovery.Discovery
-import zio.keeper.membership.swim.Nodes.NodeState
-import zio.keeper.membership.swim.{ Message, Nodes, Protocol }
-import zio.logging.Logging
+import zio.keeper.membership.swim.Nodes.{NodeState, _}
+import zio.keeper.membership.swim.{Message, Protocol}
+import zio.keeper.{ByteCodec, NodeAddress}
 import zio.logging._
 import zio.stream.ZStream
 

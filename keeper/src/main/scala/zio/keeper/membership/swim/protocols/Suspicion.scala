@@ -3,14 +3,9 @@ package zio.keeper.membership.swim.protocols
 import upickle.default.macroRW
 import zio.ZIO
 import zio.duration.Duration
-import zio.keeper.membership.swim.Nodes._
-import zio.keeper.membership.swim.{ Message, Protocol }
-import zio.keeper.{ ByteCodec, NodeAddress, TaggedCodec }
-import zio.keeper.membership.swim.Nodes.{ NodeState, NodeStateChanged }
-import zio.keeper.{ ByteCodec, NodeAddress }
-import zio.keeper.membership.swim.{ Message, Nodes, Protocol }
-import zio.keeper.{ ByteCodec, NodeAddress }
-import zio.stm.TMap
+import zio.keeper.membership.swim.Nodes.{NodeState, NodeStateChanged, _}
+import zio.keeper.membership.swim.{Message, Protocol}
+import zio.keeper.{ByteCodec, NodeAddress}
 
 sealed trait Suspicion
 

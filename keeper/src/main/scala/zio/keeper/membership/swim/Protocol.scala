@@ -1,12 +1,9 @@
 package zio.keeper.membership.swim
 
-import zio.keeper.{ByteCodec, Error, TaggedCodec}
-import zio.logging.Logging
-import zio.logging._
-import zio.stream.ZStream
+import zio.keeper.{ByteCodec, Error}
+import zio.logging.{Logging, _}
+import zio.stream.{ZStream, _}
 import zio.{Chunk, IO, ZIO}
-import zio.stream._
-import zio.keeper.{ ByteCodec, Error }
 
 /**
  * Protocol represents message flow.
@@ -29,7 +26,7 @@ trait Protocol[M] {
           ByteCodec
             .decode[M](msg.message)
             .flatMap(decoded => self.onMessage(msg.copy(message = decoded)))
-            .flatMap(_.transformM(.writeByteCodec.encode[M]))
+            .flatMap(_.transformM(ByteCodec.encode[M]))
 
       override val produceMessages: Stream[Error, Message[Chunk[Byte]]] =
         self.produceMessages.mapM(_.transformM(ByteCodec.encode[M]))
