@@ -7,7 +7,9 @@ import zio.keeper.membership.hyparview.ActiveProtocol._
 import zio.keeper.membership.hyparview.InitialProtocol._
 import zio.keeper.membership.hyparview.NeighborReply._
 import zio.keeper.membership.hyparview._
+import zio.keeper.membership.swim.protocols.{FailureDetection, Initial, Suspicion}
 import zio.keeper.membership.swim.protocols.FailureDetection.{Ack, Nack, Ping, PingReq}
+import zio.keeper.membership.swim.protocols.Suspicion.{Alive, Dead, Suspect}
 import zio.random.Random
 import zio.test._
 
@@ -116,6 +118,30 @@ object gens {
   val pingReq: Gen[Random with Sized, PingReq] =
     nodeAddress.map(PingReq(_))
 
-  val failureDetectionProtocol =
+  val failureDetectionProtocol: Gen[Random with Sized, FailureDetection] =
     Gen.oneOf(ping, ack, nack, pingReq)
+
+  val suspect: Gen[Random with Sized, Suspect] =
+    nodeAddress.zip(nodeAddress).map{case (from, to) => Suspect(from, to)}
+
+  val alive: Gen[Random with Sized, Alive] =
+    nodeAddress.map(Alive)
+
+  val dead: Gen[Random with Sized, Dead] =
+    nodeAddress.map(Dead)
+
+  val suspicionProtocol: Gen[Random with Sized, Suspicion] =
+    Gen.oneOf(suspect, alive, dead)
+
+  val swimJoin: Gen[Random with Sized, Initial.Join] =
+    nodeAddress.map(Initial.Join)
+
+  val swimAccept: Gen[Random with Sized, Initial.Accept.type] =
+    Gen.const(Initial.Accept)
+
+  val swimReject: Gen[Random with Sized, Initial.Reject] =
+    Gen.alphaNumericString.map(Initial.Reject)
+
+  val initialSwimlProtocol: Gen[Random with Sized, Initial] =
+    Gen.oneOf(swimReject, swimAccept, swimJoin)
 }

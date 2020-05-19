@@ -2,40 +2,34 @@ package zio.keeper.membership.swim.protocols
 
 import upickle.default._
 import zio.duration._
-import zio.keeper.membership.swim.Nodes.{NodeState, _}
-import zio.keeper.membership.swim.{Message, Protocol}
-import zio.keeper.{ByteCodec, NodeAddress}
+import zio.keeper.membership.swim.Nodes.{ NodeState, _ }
+import zio.keeper.membership.swim.{ Message, Protocol }
+import zio.keeper.{ ByteCodec, NodeAddress }
 import zio.logging._
 import zio.stm.TMap
 import zio.stream.ZStream
-import zio.{Schedule, ZIO}
+import zio.{ Schedule, ZIO }
 
 sealed trait FailureDetection
 
 object FailureDetection {
 
-  final case object Ack extends FailureDetection
+  final case object Ping                        extends FailureDetection
+  final case object Ack                         extends FailureDetection
+  final case object Nack                        extends FailureDetection
+  final case class PingReq(target: NodeAddress) extends FailureDetection
 
   implicit val ackCodec: ByteCodec[Ack.type] =
     ByteCodec.fromReadWriter(macroRW[Ack.type])
 
-  final case object Nack extends FailureDetection
-
   implicit val nackCodec: ByteCodec[Nack.type] =
     ByteCodec.fromReadWriter(macroRW[Nack.type])
-
-  final case object Ping extends FailureDetection
 
   implicit val pingCodec: ByteCodec[Ping.type] =
     ByteCodec.fromReadWriter(macroRW[Ping.type])
 
-  final case class PingReq(target: NodeAddress) extends FailureDetection
-
-  object PingReq {
-
-    implicit val codec: ByteCodec[PingReq] =
-      ByteCodec.fromReadWriter(macroRW[PingReq])
-  }
+  implicit val pingReccodec: ByteCodec[PingReq] =
+    ByteCodec.fromReadWriter(macroRW[PingReq])
 
   implicit val byteCodec: ByteCodec[FailureDetection] =
     ByteCodec.tagged[FailureDetection][

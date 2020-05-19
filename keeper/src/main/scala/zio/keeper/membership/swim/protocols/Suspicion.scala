@@ -3,13 +3,26 @@ package zio.keeper.membership.swim.protocols
 import upickle.default.macroRW
 import zio.ZIO
 import zio.duration.Duration
-import zio.keeper.membership.swim.Nodes.{NodeState, NodeStateChanged, _}
-import zio.keeper.membership.swim.{Message, Protocol}
-import zio.keeper.{ByteCodec, NodeAddress}
+import zio.keeper.membership.swim.Nodes.{ NodeState, NodeStateChanged, _ }
+import zio.keeper.membership.swim.{ Message, Protocol }
+import zio.keeper.{ ByteCodec, NodeAddress }
 
 sealed trait Suspicion
 
 object Suspicion {
+
+  final case class Suspect(from: NodeAddress, nodeId: NodeAddress) extends Suspicion
+  final case class Alive(nodeId: NodeAddress)                      extends Suspicion
+  final case class Dead(nodeId: NodeAddress)                       extends Suspicion
+
+  implicit val suspectCodec: ByteCodec[Suspect] =
+    ByteCodec.fromReadWriter(macroRW[Suspect])
+
+  implicit val aliveCodec: ByteCodec[Alive] =
+    ByteCodec.fromReadWriter(macroRW[Alive])
+
+  implicit val deadCodec: ByteCodec[Dead] =
+    ByteCodec.fromReadWriter(macroRW[Dead])
 
   implicit val byteCodec: ByteCodec[Suspicion] =
     ByteCodec.tagged[Suspicion][
@@ -17,30 +30,6 @@ object Suspicion {
       Alive,
       Dead
     ]
-
-  final case class Suspect(from: NodeAddress, nodeId: NodeAddress) extends Suspicion
-
-  object Suspect {
-
-    implicit val codecSuspect: ByteCodec[Suspect] =
-      ByteCodec.fromReadWriter(macroRW[Suspect])
-  }
-
-  final case class Alive(nodeId: NodeAddress) extends Suspicion
-
-  object Alive {
-
-    implicit val codecAlive: ByteCodec[Alive] =
-      ByteCodec.fromReadWriter(macroRW[Alive])
-  }
-
-  final case class Dead(nodeId: NodeAddress) extends Suspicion
-
-  object Dead {
-
-    implicit val codecDead: ByteCodec[Dead] =
-      ByteCodec.fromReadWriter(macroRW[Dead])
-  }
 
   def protocol(local: NodeAddress, timeout: Duration) =
     Protocol[Suspicion].make(
