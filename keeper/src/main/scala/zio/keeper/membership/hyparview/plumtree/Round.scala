@@ -15,7 +15,7 @@ object Round {
   implicit val codec: ByteCodec[Round] =
     ByteCodec.instance(
       chunk =>
-        BigInt(chunk.toArray).intValue() match {
+        BigInt(chunk.toArray).intValue match {
           case x if x >= 0 => ZIO.succeed(new Round(x) {})
           case x           => ZIO.fail(DeserializationTypeError(s"Invalid range for round $x"))
         }
