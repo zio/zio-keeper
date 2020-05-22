@@ -9,18 +9,20 @@ import zio.keeper.NodeAddress
 import zio.keeper.membership.ProtocolRecorder.ProtocolRecorder
 import zio.keeper.membership.swim.Nodes._
 import zio.keeper.membership.swim.protocols.FailureDetection
-import zio.keeper.membership.swim.protocols.FailureDetection.{ Ack, Ping, PingReq }
-import zio.keeper.membership.swim.{ ConversationId, Message, Nodes, Protocol }
-import zio.logging.{ Logging, log }
-import zio.stream.ZStream
+import zio.keeper.membership.swim.protocols.FailureDetection.{Ack, Ping, PingReq}
+import zio.keeper.membership.swim.{ConversationId, Message, Nodes, Protocol}
+import zio.logging.{Logging, log}
+import zio.stream.{Sink, ZStream}
 import zio.test.Assertion._
 import zio.test.environment.TestClock
-import zio.test.{ assert, _ }
+import zio.test.{assert, _}
+import zio.console._
 
 object FailureDetectionSpec extends DefaultRunnableSpec {
 
   val logger     = Logging.console((_, line) => line)
   val nodesLayer = (ZLayer.requires[Clock] ++ logger) >>> Nodes.live
+
 
   val recorder: ZLayer[Clock with Console, Nothing, ProtocolRecorder[FailureDetection]] =
     (ZLayer.requires[Clock] ++ nodesLayer ++ logger ++ ConversationId.live) >>>
@@ -32,6 +34,8 @@ object FailureDetectionSpec extends DefaultRunnableSpec {
         )
         .orDie
 
+  val testLayer = ConversationId.live ++ logger ++ nodesLayer ++ recorder
+
   val nodeAddress1 = NodeAddress(Array(1, 2, 3, 4), 1111)
   val nodeAddress2 = NodeAddress(Array(11, 22, 33, 44), 1111)
   val nodeAddress3 = NodeAddress(Array(2, 3, 4, 5), 1111)
@@ -39,63 +43,50 @@ object FailureDetectionSpec extends DefaultRunnableSpec {
   val spec = suite("failure detection")(
     testM("Ping healthy Nodes periodically") {
       for {
-        recorder <- ProtocolRecorder[FailureDetection]
+        recorder <- ProtocolRecorder[FailureDetection].flatMap(_.withBehavior {
+          case Message.Direct(nodeAddr, ackId, Ping) =>
+            Message.Direct(nodeAddr, ackId, Ack)
+        })
         _        <- addNode(nodeAddress1)
         _        <- changeNodeState(nodeAddress1, NodeState.Healthy)
         _        <- addNode(nodeAddress2)
         _        <- changeNodeState(nodeAddress2, NodeState.Healthy)
         _        <- addNode(nodeAddress3)
         _        <- changeNodeState(nodeAddress3, NodeState.Unreachable)
-        _         <- TestClock.adjust(10.milliseconds)
-        addr1 <- ZIO.foreach(1 to 10) { _ =>
-                  recorder
-                    .collectFirstM {
-                      case Message.Direct(nodeAddr, ackId, Ping) =>
-                        recorder.send(Message.Direct(nodeAddr, ackId, Ack)).as(nodeAddr)
-                    }
-                    .tap(_ => TestClock.adjust(1.second))
-                }
-      } yield assert(addr1.toSet)(equalTo(Set(nodeAddress2, nodeAddress1)))
-    },
+        _         <- TestClock.adjust(100.seconds)
+        messages <- recorder.collectN(3){case Message.Direct(addr, _, Ping) => addr}
+      } yield assert(messages.toSet)(equalTo(Set(nodeAddress2, nodeAddress1)))
+    }.provideCustomLayer(testLayer) @@ TestAspect.ignore,
     testM("should change to Dead if there is no nodes to send PingReq") {
       for {
         recorder  <- ProtocolRecorder[FailureDetection]
         _         <- addNode(nodeAddress1)
         _         <- changeNodeState(nodeAddress1, NodeState.Healthy)
-        _         <- TestClock.adjust(10.milliseconds)
-        messages  <- recorder.collect(1)
-        _         <- TestClock.adjust(750.milliseconds)
-        _         <- recorder.collect(1)
+        _         <- TestClock.adjust(1500.milliseconds)
+        messages  <- recorder.collectN(2){case msg => msg}
         nodeState <- nodeState(nodeAddress1)
-      } yield assert(messages)(equalTo(List(Message.Direct(nodeAddress1, 1, Ping)))) &&
+      } yield assert(messages)(equalTo(List(Message.Direct(nodeAddress1, 1, Ping), Message.NoResponse))) &&
         assert(nodeState)(equalTo(NodeState.Dead))
-    },
+    }.provideCustomLayer(testLayer) ,
     testM("should send PingReq to other node") {
       for {
-        recorder <- ProtocolRecorder[FailureDetection]
+        recorder <- ProtocolRecorder[FailureDetection].flatMap(_.withBehavior{
+          case Message.Direct(`nodeAddress2`, ackId, Ping) =>
+            Message.Direct(nodeAddress2, ackId, Ack)
+          case Message.Direct(`nodeAddress1`, _, Ping) =>
+            Message.NoResponse //simulate failing node
+        })
         _        <- addNode(nodeAddress1)
         _        <- changeNodeState(nodeAddress1, NodeState.Healthy)
         _        <- addNode(nodeAddress2)
         _        <- changeNodeState(nodeAddress2, NodeState.Healthy)
-        _        <- TestClock.adjust(10.milliseconds)
-        _ <- recorder.collectFirstM {
-              case Message.Direct(`nodeAddress2`, ackId, Ping) =>
-                recorder.send(Message.Direct(nodeAddress2, ackId, Ack))
-            }
-        _ <- TestClock.adjust(1.second)
-        _ <- recorder.collectFirstM {
-              case Message.Direct(`nodeAddress1`, _, Ping) =>
-                ZIO.unit
-            }
-        _ <- TestClock.adjust(1.second)
-        msg <- recorder.collectFirstM {
-                case Message.Direct(`nodeAddress2`, _, msg: PingReq) =>
-                  ZIO.succeed(msg)
-              }
+        _        <- TestClock.adjust(10.seconds)
+        msg <- recorder.collectN(1){ case Message.Direct(_, _, msg: PingReq) => msg}
         nodeState <- nodeState(nodeAddress1)
-      } yield assert(msg)(equalTo(PingReq(nodeAddress1))) && assert(nodeState)(equalTo(NodeState.Unreachable))
-    }
-  ).provideCustomLayer(ConversationId.live ++ logger ++ nodesLayer ++ recorder)
+      } yield assert(msg)(equalTo(List(PingReq(nodeAddress1)))) &&
+        assert(nodeState)(equalTo(NodeState.Unreachable))
+    }.provideCustomLayer(testLayer) @@ TestAspect.ignore
+  )
 
 }
 
@@ -103,9 +94,8 @@ object ProtocolRecorder {
   type ProtocolRecorder[A] = Has[ProtocolRecorder.Service[A]]
 
   trait Service[A] {
-    def collectFirstM[R, E, B](pf: PartialFunction[Message[A], ZIO[R, E, B]]): ZIO[R, E, B]
-    def collectM[R, E, B](n: Long)(pf: PartialFunction[Message[A], ZIO[R, E, B]]): ZIO[R, E, List[B]]
-    def collect(n: Long): UIO[List[Message[A]]]
+    def withBehavior(pf: PartialFunction[Message.Direct[A], Message[A]]): UIO[Service[A]]
+    def collectN[B](n: Long)(pr: PartialFunction[Message[A], B]): UIO[List[B]]
     def send(msg: Message.Direct[A]): IO[zio.keeper.Error, Message[A]]
   }
 
@@ -117,33 +107,44 @@ object ProtocolRecorder {
     ZLayer.fromEffect {
       def loop(
         messageQueue: zio.Queue[Message[A]],
-        message: Message[A]
-      ): ZIO[Clock with Logging with Nodes, Nothing, Unit] =
+        message: Message[A],
+        behaviorRef: Ref[PartialFunction[Message.Direct[A], Message[A]]],
+        protocol: Protocol[A]
+      ): ZIO[Clock with Logging with Nodes, zio.keeper.Error, Unit] =
         (message match {
           case Message.WithTimeout(message, action, timeout) =>
-            messageQueue.offer(message).unit *> action.delay(timeout).flatMap(loop(messageQueue, _)).fork.unit
+            loop(messageQueue, message, behaviorRef, protocol).unit *> action.delay(timeout).flatMap(loop(messageQueue, _, behaviorRef, protocol)).fork.unit
+          case md: Message.Direct[A] => messageQueue.offer(md) *> behaviorRef.get.flatMap{
+            fn => ZIO.whenCase(fn(md)){
+              case d: Message.Direct[A] => log.info("response") *> protocol.onMessage(d)
+            }
+          }
           case msg =>
             messageQueue.offer(msg).unit
         }) *> log.info("recorded message: " + message)
       for {
+        behaviorRef <- Ref.make[PartialFunction[Message.Direct[A], Message[A]]](PartialFunction.empty)
         protocol     <- protocolFactory
         messageQueue <- ZQueue.bounded[Message[A]](100)
-        _            <- protocol.produceMessages.foreach(loop(messageQueue, _)).fork
-
+        _            <- protocol.produceMessages.foreach(loop(messageQueue, _, behaviorRef, protocol)).fork
         stream = ZStream.fromQueue(messageQueue)
 
       } yield new Service[A] {
 
-        override def collectFirstM[R1, E1, B](pf: PartialFunction[Message[A], ZIO[R1, E1, B]]): ZIO[R1, E1, B] =
-          stream.collectM(pf).runHead.map(_.get)
+        //        override def collectFirstM[R1, E1, B](pf: PartialFunction[Message[A], ZIO[R1, E1, B]]): ZIO[R1, E1, B] =
+        //          messageQueue.take.retryUntil(pf.isDefinedAt(_)).flatMap(pf(_))
+        //
+        //        override def collectM[R1, E1, B](
+        //          n: Long
+        //        )(pf: PartialFunction[Message[A], ZIO[R1, E1, B]]): ZIO[R1, E1, List[B]] =
+        //          Ref.make(0)
+        //          messageQueue.take.
+        //            messageQueue.collectM(pf).take(n).runCollect
+        override def withBehavior(pf: PartialFunction[Message.Direct[A], Message[A]]): UIO[Service[A]] =
+          behaviorRef.set(pf).as(this)
 
-        override def collectM[R1, E1, B](
-          n: Long
-        )(pf: PartialFunction[Message[A], ZIO[R1, E1, B]]): ZIO[R1, E1, List[B]] =
-          stream.collectM(pf).take(n).runCollect
-
-        override def collect(n: Long): UIO[List[Message[A]]] =
-          stream.take(n).runCollect
+        override def collectN[B](n: Long)(pf: PartialFunction[Message[A], B]): UIO[List[B]] =
+          stream.collect(pf).run(Sink.collectAllN[B](n)).timeoutFail(new RuntimeException)(2.seconds).provideLayer(Clock.live).orDie
 
         override def send(msg: Message.Direct[A]): IO[zio.keeper.Error, Message[A]] =
           protocol.onMessage(msg)
