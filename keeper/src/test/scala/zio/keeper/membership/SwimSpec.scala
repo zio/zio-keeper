@@ -6,13 +6,14 @@ import zio.clock.Clock
 import zio.config.Config
 import zio.console.Console
 import zio.duration._
-import zio.keeper.discovery.{ Discovery, TestDiscovery }
-import zio.keeper.membership.swim.{ SWIM, SwimConfig }
+import zio.keeper.discovery.{Discovery, TestDiscovery}
+import zio.keeper.membership.swim.{SWIM, SwimConfig}
 import zio.keeper.ByteCodec
-import zio.logging.{ LogAnnotation, Logging, log }
+import zio.logging.{LogAnnotation, Logging, log}
+import zio.random.Random
 import zio.stream.Sink
 import zio.test.Assertion._
-import zio.test.{ DefaultRunnableSpec, TestAspect, assert, suite, testM }
+import zio.test.{DefaultRunnableSpec, TestAspect, assert, suite, testM}
 
 //TODO disable since it hangs on CI
 object SwimSpec extends DefaultRunnableSpec {
@@ -99,7 +100,7 @@ object SwimSpec extends DefaultRunnableSpec {
         } yield assert(nodes1)(hasSameElements(List(node2, node3))) &&
           assert(nodes2)(hasSameElements(List(node1, node3))) &&
           assert(nodes3)(hasSameElements(List(node1, node2)))
-      }.provideLayer(Clock.live ++ logging ++ (logging >>> TestDiscovery.live)),
+      }.provideLayer(Clock.live ++ logging ++ (logging ++ Random.live >>> TestDiscovery.live)),
       testM("should receive notification") {
         for {
           member1     <- newMember
@@ -122,7 +123,7 @@ object SwimSpec extends DefaultRunnableSpec {
               )
             )
           )
-      }.provideLayer(Clock.live ++ logging ++ (logging >>> TestDiscovery.live))
+      }.provideLayer(Clock.live  ++ logging ++ (logging ++ Random.live >>> TestDiscovery.live))
     ) @@ TestAspect.sequential
 
 }

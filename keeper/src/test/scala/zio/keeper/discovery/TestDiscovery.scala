@@ -4,6 +4,7 @@ import zio._
 import zio.keeper.NodeAddress
 import zio.logging.Logging
 import zio.logging._
+import zio.random._
 
 object TestDiscovery {
 
@@ -18,13 +19,14 @@ object TestDiscovery {
   val nextPort: URIO[TestDiscovery, Int] =
     URIO.accessM[TestDiscovery](_.get.nextPortNumber)
 
-  val live: ZLayer[Logging, Nothing, Discovery with TestDiscovery] =
+  val live: ZLayer[Logging with Random, Nothing, Discovery with TestDiscovery] =
     ZLayer.fromEffectMany {
       for {
         logger <- ZIO.environment[Logging]
         _      <- logger.get.info("creating test discovery")
         nodes  <- Ref.make(Set.empty[NodeAddress])
-        ports  <- Ref.make(10000)
+        randomPort <- nextInt(20000).map(_ + 10000)
+        ports  <- Ref.make(randomPort)
         test   = new Test(nodes, ports, logger.get)
       } yield Has.allOf[Discovery.Service, Service](test, test)
     }
