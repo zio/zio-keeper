@@ -22,12 +22,12 @@ object TestDiscovery {
   val live: ZLayer[Logging with Random, Nothing, Discovery with TestDiscovery] =
     ZLayer.fromEffectMany {
       for {
-        logger <- ZIO.environment[Logging]
-        _      <- logger.get.info("creating test discovery")
-        nodes  <- Ref.make(Set.empty[NodeAddress])
+        logger     <- ZIO.environment[Logging]
+        _          <- logger.get.info("creating test discovery")
+        nodes      <- Ref.make(Set.empty[NodeAddress])
         randomPort <- nextInt(20000).map(_ + 10000)
-        ports  <- Ref.make(randomPort)
-        test   = new Test(nodes, ports, logger.get)
+        ports      <- Ref.make(randomPort)
+        test       = new Test(nodes, ports, logger.get)
       } yield Has.allOf[Discovery.Service, Service](test, test)
     }
 

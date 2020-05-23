@@ -6,14 +6,14 @@ import zio.clock.Clock
 import zio.config.Config
 import zio.console.Console
 import zio.duration._
-import zio.keeper.discovery.{Discovery, TestDiscovery}
-import zio.keeper.membership.swim.{SWIM, SwimConfig}
+import zio.keeper.discovery.{ Discovery, TestDiscovery }
+import zio.keeper.membership.swim.{ SWIM, SwimConfig }
 import zio.keeper.ByteCodec
-import zio.logging.{LogAnnotation, Logging, log}
+import zio.logging.{ LogAnnotation, Logging, log }
 import zio.random.Random
 import zio.stream.Sink
 import zio.test.Assertion._
-import zio.test.{DefaultRunnableSpec, TestAspect, assert, suite, testM}
+import zio.test.{ DefaultRunnableSpec, TestAspect, assert, suite, testM }
 
 //TODO disable since it hangs on CI
 object SwimSpec extends DefaultRunnableSpec {
@@ -123,7 +123,7 @@ object SwimSpec extends DefaultRunnableSpec {
               )
             )
           )
-      }.provideLayer(Clock.live  ++ logging ++ (logging ++ Random.live >>> TestDiscovery.live))
+      }.provideLayer(Clock.live ++ logging ++ (logging ++ Random.live >>> TestDiscovery.live))
     ) @@ TestAspect.sequential
 
 }
