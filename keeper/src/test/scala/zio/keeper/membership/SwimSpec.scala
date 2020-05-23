@@ -124,6 +124,6 @@ object SwimSpec extends DefaultRunnableSpec {
             )
           )
       }.provideLayer(Clock.live ++ logging ++ (logging ++ Random.live >>> TestDiscovery.live))
-    ) @@ TestAspect.sequential @@ TestAspect.diagnose(15.seconds)
+    ) @@ TestAspect.ignore
 
 }
