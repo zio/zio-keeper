@@ -7,9 +7,9 @@ import zio.keeper.membership.hyparview.ActiveProtocol._
 import zio.keeper.membership.hyparview.InitialProtocol._
 import zio.keeper.membership.hyparview.NeighborReply._
 import zio.keeper.membership.hyparview._
-import zio.keeper.membership.swim.protocols.{FailureDetection, Initial, Suspicion}
-import zio.keeper.membership.swim.protocols.FailureDetection.{Ack, Nack, Ping, PingReq}
-import zio.keeper.membership.swim.protocols.Suspicion.{Alive, Dead, Suspect}
+import zio.keeper.membership.swim.protocols.{ FailureDetection, Initial, Suspicion }
+import zio.keeper.membership.swim.protocols.FailureDetection.{ Ack, Nack, Ping, PingReq }
+import zio.keeper.membership.swim.protocols.Suspicion.{ Alive, Dead, Suspect }
 import zio.random.Random
 import zio.test._
 
@@ -122,7 +122,7 @@ object gens {
     Gen.oneOf(ping, ack, nack, pingReq)
 
   val suspect: Gen[Random with Sized, Suspect] =
-    nodeAddress.zip(nodeAddress).map{case (from, to) => Suspect(from, to)}
+    nodeAddress.zip(nodeAddress).map { case (from, to) => Suspect(from, to) }
 
   val alive: Gen[Random with Sized, Alive] =
     nodeAddress.map(Alive)

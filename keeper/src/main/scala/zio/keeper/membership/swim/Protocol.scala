@@ -1,9 +1,9 @@
 package zio.keeper.membership.swim
 
-import zio.keeper.{ByteCodec, Error}
-import zio.logging.{Logging, _}
-import zio.stream.{ZStream, _}
-import zio.{Chunk, IO, ZIO}
+import zio.keeper.{ ByteCodec, Error }
+import zio.logging.{ Logging, _ }
+import zio.stream.{ ZStream, _ }
+import zio.{ Chunk, IO, ZIO }
 
 /**
  * Protocol represents message flow.

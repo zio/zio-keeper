@@ -1,9 +1,9 @@
 package zio.keeper.membership
 
 import zio.ZIO
-import zio.keeper.{ByteCodec, NodeAddress}
-import zio.keeper.membership.PingPong.{Ping, Pong}
-import zio.keeper.membership.swim.{ConversationId, Message, Protocol}
+import zio.keeper.{ ByteCodec, NodeAddress }
+import zio.keeper.membership.PingPong.{ Ping, Pong }
+import zio.keeper.membership.swim.{ ConversationId, Message, Protocol }
 import zio.stream.ZStream
 import zio.test.Assertion._
 import zio.test._

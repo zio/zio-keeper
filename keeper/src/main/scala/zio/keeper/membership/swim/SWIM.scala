@@ -20,8 +20,7 @@ object SWIM {
       ConversationId.live ++
       Nodes.live
 
-  def live[B: ByteCodec: Tag]
-    : ZLayer[Config[SwimConfig] with Discovery with Logging with Clock, Error, Membership[B]] =
+  def live[B: ByteCodec: Tag]: ZLayer[Config[SwimConfig] with Discovery with Logging with Clock, Error, Membership[B]] =
     internalLayer >>>
       ZLayer.fromManaged(for {
         env          <- ZManaged.environment[ConversationId with Nodes]
@@ -66,11 +65,11 @@ object SWIM {
         _          <- messages0.process(swim).toManaged_
       } yield new Membership.Service[B] {
 
-      override def broadcast(data: B): IO[zio.keeper.Error, Unit] =
-        for {
-          bytes <- ByteCodec.encode[User[B]](User(data))
-          _     <- broadcast0.add(Message.Broadcast(bytes))
-        } yield ()
+        override def broadcast(data: B): IO[zio.keeper.Error, Unit] =
+          for {
+            bytes <- ByteCodec.encode[User[B]](User(data))
+            _     <- broadcast0.add(Message.Broadcast(bytes))
+          } yield ()
 
         override val localMember: UIO[NodeAddress] =
           ZIO.succeed(localNodeAddress)

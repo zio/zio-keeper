@@ -12,10 +12,10 @@ import zio.keeper.ByteCodec
 import zio.logging.{ LogAnnotation, Logging, log }
 import zio.stream.Sink
 import zio.test.Assertion._
-import zio.test.{ assert, suite, testM }
+import zio.test.{ DefaultRunnableSpec, TestAspect, assert, suite, testM }
 
 //TODO disable since it hangs on CI
-object SwimSpec {
+object SwimSpec extends DefaultRunnableSpec {
 
   private case class MemberHolder[A](instance: Membership.Service[A], stop: UIO[Unit]) {
 
@@ -123,6 +123,6 @@ object SwimSpec {
             )
           )
       }.provideLayer(Clock.live ++ logging ++ (logging >>> TestDiscovery.live))
-    )
+    ) @@ TestAspect.sequential
 
 }
