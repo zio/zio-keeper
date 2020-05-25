@@ -2,6 +2,7 @@ package zio.keeper.membership.swim
 
 import zio.config.ConfigDescriptor._
 import zio.duration.{ Duration, _ }
+import zio.config.Config
 
 case class SwimConfig(
   port: Int,
@@ -21,4 +22,6 @@ object SwimConfig {
       zioDuration("SUSPICION_TIMEOUT").default(3.seconds) |@|
       int("MESSAGE_SIZE_LIMIT").default(64000) |@|
       int("BROADCAST_RESENT").default(10))(SwimConfig.apply, SwimConfig.unapply)
+
+  val fromEnv = Config.fromSystemEnv(description)
 }
