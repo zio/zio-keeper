@@ -8,7 +8,7 @@ object encoding {
   def byteArrayToInt(b: Array[Byte]): IO[DeserializationTypeError, Int] =
     ZIO
       .effect {
-        BigInt.apply(b).intValue()
+        BigInt.apply(b).intValue
       }
       .mapError(DeserializationTypeError(_))
 
