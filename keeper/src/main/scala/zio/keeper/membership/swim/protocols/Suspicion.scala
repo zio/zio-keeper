@@ -3,15 +3,26 @@ package zio.keeper.membership.swim.protocols
 import upickle.default.macroRW
 import zio.ZIO
 import zio.duration.Duration
-import zio.keeper.membership.swim.Nodes.{ NodeState, NodeStateChanged }
+import zio.keeper.membership.swim.Nodes.{ NodeState, NodeStateChanged, _ }
+import zio.keeper.membership.swim.{ Message, Protocol }
 import zio.keeper.{ ByteCodec, NodeAddress }
-import zio.keeper.membership.swim.{ Message, Nodes, Protocol }
-import zio.keeper.{ ByteCodec, NodeAddress }
-import zio.stm.TMap
 
 sealed trait Suspicion
 
 object Suspicion {
+
+  final case class Suspect(from: NodeAddress, nodeId: NodeAddress) extends Suspicion
+  final case class Alive(nodeId: NodeAddress)                      extends Suspicion
+  final case class Dead(nodeId: NodeAddress)                       extends Suspicion
+
+  implicit val suspectCodec: ByteCodec[Suspect] =
+    ByteCodec.fromReadWriter(macroRW[Suspect])
+
+  implicit val aliveCodec: ByteCodec[Alive] =
+    ByteCodec.fromReadWriter(macroRW[Alive])
+
+  implicit val deadCodec: ByteCodec[Dead] =
+    ByteCodec.fromReadWriter(macroRW[Dead])
 
   implicit val byteCodec: ByteCodec[Suspicion] =
     ByteCodec.tagged[Suspicion][
@@ -20,104 +31,58 @@ object Suspicion {
       Dead
     ]
 
-  final case class Suspect(from: NodeAddress, nodeId: NodeAddress) extends Suspicion
+  def protocol(local: NodeAddress, timeout: Duration) =
+    Protocol[Suspicion].make(
+      {
+        case Message.Direct(sender, _, Suspect(_, `local`)) =>
+          Message
+            .direct(sender, Alive(local))
+            .map(
+              Message.Batch(
+                _,
+                Message.Broadcast(Alive(local))
+              )
+            )
 
-  object Suspect {
+        case Message.Direct(_, _, Suspect(_, node)) =>
+          nodeState(node)
+            .orElseSucceed(NodeState.Dead)
+            .flatMap {
+              case NodeState.Dead | NodeState.Suspicion =>
+                Message.noResponse
+              case _ =>
+                changeNodeState(node, NodeState.Suspicion).ignore *>
+                  Message.noResponse //it will trigger broadcast by events
+            }
 
-    implicit val codecSuspect: ByteCodec[Suspect] =
-      ByteCodec.fromReadWriter(macroRW[Suspect])
-  }
+        case Message.Direct(sender, _, msg @ Dead(nodeAddress)) if sender == nodeAddress =>
+          changeNodeState(nodeAddress, NodeState.Left).ignore
+            .as(Message.Broadcast(msg))
 
-  final case class Alive(nodeId: NodeAddress) extends Suspicion
+        case Message.Direct(_, _, msg @ Dead(nodeAddress)) =>
+          nodeState(nodeAddress).orElseSucceed(NodeState.Dead).flatMap {
+            case NodeState.Dead => Message.noResponse
+            case _ =>
+              changeNodeState(nodeAddress, NodeState.Dead).ignore
+                .as(Message.Broadcast(msg))
+          }
 
-  object Alive {
-
-    implicit val codecAlive: ByteCodec[Alive] =
-      ByteCodec.fromReadWriter(macroRW[Alive])
-  }
-
-  final case class Dead(nodeId: NodeAddress) extends Suspicion
-
-  object Dead {
-
-    implicit val codecDead: ByteCodec[Dead] =
-      ByteCodec.fromReadWriter(macroRW[Dead])
-  }
-
-  def protocol(nodes: Nodes, local: NodeAddress, timeout: Duration) =
-    for {
-      suspects <- TMap.empty[NodeAddress, Unit].commit
-      protocol <- Protocol[Suspicion].make(
-                   {
-                     case Message.Direct(sender, Suspect(_, `local`)) =>
-                       ZIO.succeed(
-                         Message.Batch(
-                           Message.Direct(sender, Alive(local)),
-                           Message.Broadcast(Alive(local))
-                         )
-                       )
-
-                     case Message.Direct(_, Suspect(_, node)) =>
-                       suspects
-                         .get(node)
-                         .commit
-                         .zip(nodes.nodeState(node).orElseSucceed(NodeState.Dead))
-                         .flatMap {
-                           case (Some(_), _) =>
-                             Message.noResponse
-                           case (_, NodeState.Dead | NodeState.Suspicion) =>
-                             Message.noResponse
-                           case (None, _) =>
-                             nodes.changeNodeState(node, NodeState.Suspicion).ignore *>
-                               Message.noResponse //it will trigger broadcast by events
-                         }
-
-                     case Message.Direct(sender, msg @ Dead(nodeAddress)) if sender == nodeAddress =>
-                       nodes
-                         .changeNodeState(nodeAddress, NodeState.Left)
-                         .ignore
-                         .as(Message.Broadcast(msg))
-
-                     case Message.Direct(_, msg @ Dead(nodeAddress)) =>
-                       nodes.nodeState(nodeAddress).orElseSucceed(NodeState.Dead).flatMap {
-                         case NodeState.Dead => Message.noResponse
-                         case _ =>
-                           nodes
-                             .changeNodeState(nodeAddress, NodeState.Dead)
-                             .ignore
-                             .as(Message.Broadcast(msg))
-                       }
-
-                     case Message.Direct(_, msg @ Alive(nodeAddress)) =>
-                       suspects.delete(nodeAddress).commit *>
-                         nodes
-                           .changeNodeState(nodeAddress, NodeState.Healthy)
-                           .ignore
-                           .as(Message.Broadcast(msg))
-                   },
-                   nodes.internalEvents.collectM {
-                     case NodeStateChanged(node, _, NodeState.Suspicion) =>
-                       suspects
-                         .put(
-                           node,
-                           ()
-                         )
-                         .commit
-                         .flatMap(
-                           _ =>
-                             Message.withTimeout(
-                               Message.Broadcast(Suspect(local, node)),
-                               ZIO.ifM(suspects.contains(node).commit)(
-                                 nodes
-                                   .changeNodeState(node, NodeState.Dead)
-                                   .as(Message.Broadcast(Dead(node))),
-                                 Message.noResponse
-                               ),
-                               timeout
-                             )
-                         )
-                   }
-                 )
-    } yield protocol
+        case Message.Direct(_, _, msg @ Alive(nodeAddress)) =>
+          changeNodeState(nodeAddress, NodeState.Healthy).ignore
+            .as(Message.Broadcast(msg))
+      },
+      internalEvents.collectM {
+        case NodeStateChanged(node, _, NodeState.Suspicion) =>
+          Message.withTimeout(
+            Message.Broadcast(Suspect(local, node)),
+            ZIO.ifM(nodeState(node).map(_ == NodeState.Suspicion).orElseSucceed(false))(
+              changeNodeState(node, NodeState.Dead)
+                .as(Message.Broadcast(Dead(node))),
+              Message.noResponse
+            ),
+            timeout
+          )
+      }
+    )
 
 }

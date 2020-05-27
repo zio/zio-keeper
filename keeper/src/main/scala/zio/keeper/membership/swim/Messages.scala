@@ -36,9 +36,12 @@ final class Messages(
       )
       .flatMap {
         case Take.Value(withPiggyback) =>
-          messages.offer(Take.Value(Message.Direct(withPiggyback.node, withPiggyback.message))) *>
+          messages.offer(
+            Take.Value(Message.Direct(withPiggyback.node, withPiggyback.conversationId, withPiggyback.message))
+          ) *>
             ZIO.foreach(withPiggyback.gossip)(
-              chunk => messages.offer(Take.Value(Message.Direct(withPiggyback.node, chunk)))
+              chunk =>
+                messages.offer(Take.Value(Message.Direct(withPiggyback.node, withPiggyback.conversationId, chunk)))
             )
         case err: Take.Fail[Error] => messages.offer(err)
         case Take.End              => messages.offer(Take.End)
@@ -59,10 +62,10 @@ final class Messages(
   def send(msg: Message[Chunk[Byte]]): ZIO[Clock with Logging, Error, Unit] =
     msg match {
       case Message.NoResponse => ZIO.unit
-      case Message.Direct(nodeAddress, message) =>
+      case Message.Direct(nodeAddress, conversationId, message) =>
         for {
           broadcast     <- broadcast.broadcast(message.size)
-          withPiggyback = WithPiggyback(local, message, broadcast)
+          withPiggyback = WithPiggyback(local, conversationId, message, broadcast)
           chunk         <- ByteCodec[WithPiggyback].toChunk(withPiggyback)
           nodeAddress   <- nodeAddress.socketAddress
           _             <- transport.connect(nodeAddress).use(_.send(chunk))
@@ -119,7 +122,12 @@ final class Messages(
 
 object Messages {
 
-  final case class WithPiggyback(node: NodeAddress, message: Chunk[Byte], gossip: List[Chunk[Byte]])
+  final case class WithPiggyback(
+    node: NodeAddress,
+    conversationId: Long,
+    message: Chunk[Byte],
+    gossip: List[Chunk[Byte]]
+  )
 
   implicit val codec: ByteCodec[WithPiggyback] =
     ByteCodec.fromReadWriter(macroRW[WithPiggyback])

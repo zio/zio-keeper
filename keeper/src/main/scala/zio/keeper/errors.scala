@@ -4,9 +4,7 @@ import zio.duration.Duration
 import zio.keeper.transport.Address
 import zio.nio.core.SocketAddress
 
-sealed abstract class Error(val msg: String = "") {
-  override def toString: String = msg
-}
+sealed abstract class Error(val msg: String = "", val cause: Throwable = null) extends Exception(msg, cause)
 
 sealed abstract class SerializationError(msg: String = "") extends Error(msg = msg)
 
@@ -55,12 +53,12 @@ object SendError {
   final case class TransportFailed(err: TransportError)         extends SendError(msg = err.msg)
 }
 
-sealed abstract class TransportError(msg: String = "") extends Error(msg = msg)
+sealed abstract class TransportError(msg: String = "", cause: Throwable = null) extends Error(msg, cause)
 
 object TransportError {
 
   final case class ExceptionWrapper(throwable: Throwable)
-      extends TransportError(msg = if (throwable.getMessage == null) throwable.toString else throwable.getMessage)
+      extends TransportError(msg = "Exception in transport", cause = throwable)
 
   final case class MaxConnectionsReached(n: Int) extends TransportError(msg = s"Reached max connections: $n")
 

@@ -11,6 +11,7 @@ import zio.nio.core.SocketAddress
 import zio.stream.ZStream
 import zio.test.Assertion._
 import zio.test._
+import zio.keeper.membership.swim.ConversationId
 
 object MessagesSpec extends DefaultRunnableSpec {
 
@@ -44,7 +45,7 @@ object MessagesSpec extends DefaultRunnableSpec {
         queue <- ZQueue.unbounded[Byte]
         _ <- ByteCodec
               .encode(message.message)
-              .map(WithPiggyback(message.node, _, List.empty))
+              .map(WithPiggyback(message.node, message.conversationId, _, List.empty))
               .flatMap(ByteCodec[WithPiggyback].toChunk)
               .map { chunk =>
                 val size = chunk.size
@@ -81,9 +82,10 @@ object MessagesSpec extends DefaultRunnableSpec {
 
   val protocol = Protocol[PingPong].make(
     {
-      case Message.Direct(sender, Ping(i)) =>
-        ZIO.succeed(Message.Direct(sender, Pong(i)))
-      case _ => Message.noResponse
+      case Message.Direct(sender, _, Ping(i)) =>
+        Message.direct(sender, Pong(i))
+      case _ =>
+        Message.noResponse
     },
     ZStream.empty
   )
@@ -97,21 +99,21 @@ object MessagesSpec extends DefaultRunnableSpec {
           for {
             dl <- protocol
             _  <- messages.process(dl.binary)
-            _  <- testTransport.simulateNewConnection(Message.Direct(testNodeAddress, PingPong.Ping(123): PingPong))
-            _  <- testTransport.simulateNewConnection(Message.Direct(testNodeAddress, PingPong.Ping(321): PingPong))
+            _  <- testTransport.simulateNewConnection(Message.Direct(testNodeAddress, 1, PingPong.Ping(123): PingPong))
+            _  <- testTransport.simulateNewConnection(Message.Direct(testNodeAddress, 2, PingPong.Ping(321): PingPong))
             m <- testTransport.sentMessages
                   .mapM {
                     case (_, chunk) =>
                       ByteCodec[WithPiggyback].fromChunk(chunk.drop(4))
                   }
                   .mapM {
-                    case WithPiggyback(_, chunk, _) => ByteCodec.decode[PingPong](chunk)
+                    case WithPiggyback(_, _, chunk, _) => ByteCodec.decode[PingPong](chunk)
                   }
                   .take(2)
                   .runCollect
           } yield assert(m)(hasSameElements(List(PingPong.Pong(123), PingPong.Pong(321))))
       }
     }
-  ).provideCustomLayer(logger)
+  ).provideCustomLayer(logger ++ ConversationId.live)
 
 }
