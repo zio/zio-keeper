@@ -58,10 +58,9 @@ object FailureDetectionSpec extends DefaultRunnableSpec {
         _         <- addNode(nodeAddress1)
         _         <- changeNodeState(nodeAddress1, NodeState.Healthy)
         _         <- TestClock.adjust(1500.milliseconds)
-        messages  <- recorder.collectN(2) { case msg => msg }
+        _         <- recorder.collectN(1) { case Message.NoResponse => () }
         nodeState <- nodeState(nodeAddress1)
-      } yield assert(messages)(equalTo(List(Message.Direct(nodeAddress1, 1, Ping), Message.NoResponse))) &&
-        assert(nodeState)(equalTo(NodeState.Dead))
+      } yield assert(nodeState)(equalTo(NodeState.Dead))
     }.provideCustomLayer(testLayer),
     testM("should send PingReq to other node") {
       for {
