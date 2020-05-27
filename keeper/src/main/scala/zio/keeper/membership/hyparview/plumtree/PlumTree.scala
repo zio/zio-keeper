@@ -6,7 +6,7 @@ import zio._
 import zio.clock.Clock
 import zio.duration._
 import zio.keeper.membership.{ Membership, MembershipEvent }
-import zio.keeper.membership.hyparview.{ PeerEvent, PeerService, TRandom }
+import zio.keeper.membership.hyparview.{ PeerEvent, PeerService, Round, TRandom }
 import zio.keeper.{ ByteCodec, Error, NodeAddress, SendError }
 import zio.logging._
 import zio.logging.Logging
@@ -45,9 +45,9 @@ object PlumTree {
 
     def processMessages(
       deduplication: BoundedTMap[UUID, Gossip],
-      gossipOut: (NodeAddress, UUID, Int) => UIO[Unit],
+      gossipOut: (NodeAddress, UUID, Round) => UIO[Unit],
       userOut: (NodeAddress, Chunk[Byte]) => UIO[Unit],
-      onReceive: Either[(UUID, Int, NodeAddress), (UUID, Int, NodeAddress)] => UIO[Unit]
+      onReceive: Either[(UUID, Round, NodeAddress), (UUID, Round, NodeAddress)] => UIO[Unit]
     ): ZIO[PeerState with Logging with PeerService, Error, Unit] =
       PeerService.receive.foreach {
         case (sender, msg) =>
@@ -68,7 +68,7 @@ object PlumTree {
                       )
                 }
             case IHave(messages) =>
-              def process(uuid: UUID, round: Int) =
+              def process(uuid: UUID, round: Round) =
                 deduplication.contains(uuid).commit.flatMap {
                   case true =>
                     log.debug(s"Received IHave for already received message $uuid")
@@ -89,7 +89,7 @@ object PlumTree {
                         case (eagerPeers, lazyPeers) =>
                           val sendEager = ZIO.foreach_(eagerPeers.filterNot(_ == sender)) { peer =>
                             PeerService
-                              .send(peer, m.copy(round = round + 1))
+                              .send(peer, m.copy(round = round.inc))
                               .foldCauseM(
                                 log.error(s"Failed sending message to $peer", _),
                                 _ => log.info(s"Sent Gossip to $peer")
@@ -97,7 +97,7 @@ object PlumTree {
                           }
 
                           // no need to filter here as we ensured sender is in eager peers
-                          val sendLazy = ZIO.foreach_(lazyPeers.map((_, uuid, round + 1)))(gossipOut.tupled)
+                          val sendLazy = ZIO.foreach_(lazyPeers.map((_, uuid, round.inc)))(gossipOut.tupled)
 
                           sendEager *> sendLazy *> userOut(sender, payload)
                       }
@@ -118,10 +118,10 @@ object PlumTree {
         for {
           env          <- ZManaged.environment[TRandom with PeerService with Logging with PeerState]
           messages     <- BoundedTMap.make[UUID, Gossip](deduplicationBuffer).toManaged_
-          gossip       <- Queue.sliding[(NodeAddress, UUID, Int)](gossipBuffer).toManaged(_.shutdown)
+          gossip       <- Queue.sliding[(NodeAddress, UUID, Round)](gossipBuffer).toManaged(_.shutdown)
           userMessages <- Queue.sliding[(NodeAddress, Chunk[Byte])](messagesBuffer).toManaged(_.shutdown)
           graftQueue <- Queue
-                         .sliding[Either[(UUID, Int, NodeAddress), (UUID, Int, NodeAddress)]](graftMessagesBuffer)
+                         .sliding[Either[(UUID, Round, NodeAddress), (UUID, Round, NodeAddress)]](graftMessagesBuffer)
                          .toManaged(_.shutdown)
           _ <- processEvents.toManaged_.fork
           _ <- processMessages(
@@ -154,7 +154,7 @@ object PlumTree {
           override def broadcast(data: A): ZIO[Any, SendError, Unit] = {
             ByteCodec.encode(data).mapError(SendError.SerializationFailed(_)).flatMap { chunk =>
               makeRandomUUID.flatMap { uuid =>
-                val round = 0
+                val round = Round.zero
                 val msg   = Gossip(uuid, chunk, round)
                 PeerState.eagerPushPeers
                   .zip(PeerState.lazyPushPeers)

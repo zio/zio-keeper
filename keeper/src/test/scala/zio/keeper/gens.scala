@@ -18,6 +18,14 @@ object gens {
   val timeToLive: Gen[Random, TimeToLive] =
     Gen.anyInt.map(TimeToLive.apply)
 
+  val round: Gen[Random, Round] =
+    Gen.int(0, 128).map { n =>
+      def go(round: Round, remaining: Int): Round =
+        if (remaining <= 0) round
+        else go(round.inc, remaining - 1)
+      go(Round.zero, n)
+    }
+
   val nodeAddress: Gen[Random with Sized, NodeAddress] =
     Gen.listOf(Gen.anyByte).map(_.toArray).zipWith(Gen.anyInt)(NodeAddress.apply)
 
@@ -83,10 +91,7 @@ object gens {
     Gen.const(Prune)
 
   val iHave: Gen[Random with Sized, IHave] =
-    Gen.listOf(uuid.zip(Gen.int(0, 1024))).flatMap {
-      case Nil     => Gen.empty
-      case x :: xs => Gen.const(IHave(::(x, xs)))
-    }
+    Gen.listOf(uuid.zip(round)).map(entries => IHave.apply(Chunk.fromIterable(entries)))
 
   val graft: Gen[Any, Graft] =
     uuid.map(Graft(_))
@@ -98,7 +103,7 @@ object gens {
     for {
       body  <- Gen.listOf(Gen.anyByte).map(Chunk.fromIterable)
       uuid  <- uuid
-      round <- Gen.int(0, 1024)
+      round <- round
     } yield Gossip(uuid, body, round)
 
   val plumTreeProtocol: Gen[Random with Sized, PlumTreeProtocol] =
