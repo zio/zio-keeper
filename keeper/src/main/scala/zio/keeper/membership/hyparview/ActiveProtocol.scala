@@ -71,7 +71,7 @@ object ActiveProtocol {
   }
 
   final case class IHave(
-    uuids: ::[UUID]
+    messages: ::[(UUID, Int)] // TODO: switch to round type
   ) extends PlumTreeProtocol
 
   object IHave {
@@ -102,7 +102,8 @@ object ActiveProtocol {
 
   final case class Gossip(
     uuid: UUID,
-    payload: Chunk[Byte]
+    payload: Chunk[Byte],
+    round: Int // TODO: switch to Round type
   ) extends PlumTreeProtocol
 
   object Gossip {

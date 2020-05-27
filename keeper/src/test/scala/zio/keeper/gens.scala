@@ -83,7 +83,7 @@ object gens {
     Gen.const(Prune)
 
   val iHave: Gen[Random with Sized, IHave] =
-    Gen.listOf(uuid).flatMap {
+    Gen.listOf(uuid.zip(Gen.int(0, 1024))).flatMap {
       case Nil     => Gen.empty
       case x :: xs => Gen.const(IHave(::(x, xs)))
     }
@@ -96,9 +96,10 @@ object gens {
 
   val gossip: Gen[Random with Sized, Gossip] =
     for {
-      body <- Gen.listOf(Gen.anyByte).map(Chunk.fromIterable)
-      uuid <- uuid
-    } yield Gossip(uuid, body)
+      body  <- Gen.listOf(Gen.anyByte).map(Chunk.fromIterable)
+      uuid  <- uuid
+      round <- Gen.int(0, 1024)
+    } yield Gossip(uuid, body, round)
 
   val plumTreeProtocol: Gen[Random with Sized, PlumTreeProtocol] =
     Gen.oneOf(prune, iHave, graft, userMessage, gossip)
