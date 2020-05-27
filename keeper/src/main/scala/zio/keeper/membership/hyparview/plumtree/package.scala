@@ -17,7 +17,7 @@ package object plumtree {
   type PeerState = Has[PeerState.Service]
 
   def sendGraft[R <: PeerState with PeerService with Clock with Logging, E](
-    stream: ZStream[R, E, Either[(UUID, Int, NodeAddress), (UUID, Int, NodeAddress)]],
+    stream: ZStream[R, E, Either[(UUID, Round, NodeAddress), (UUID, Round, NodeAddress)]],
     initialDelay: Duration,
     sendSchedule: Schedule[R, Unit, _],
     optimizeThreshold: Int
@@ -28,11 +28,11 @@ package object plumtree {
     } {
       case (uuid, events) =>
         ZStream.fromEffect(ZIO.sleep(initialDelay)) ++
-          ZStream.fromEffect(Ref.make(Vector.empty[(NodeAddress, Int)])).flatMap { candidates =>
+          ZStream.fromEffect(Ref.make(Vector.empty[(NodeAddress, Round)])).flatMap { candidates =>
             val go: ZIO[R, Nothing, Unit] =
               candidates
                 .modify { old =>
-                  val sorted = old.sortBy(_._2)
+                  val sorted = old.sortBy(_._2.value)
                   (sorted.headOption.map(_._1), sorted.drop(1))
                 }
                 .flatMap(
@@ -58,7 +58,7 @@ package object plumtree {
                     remainingCandidates.sortBy(_._2).headOption.fold[URIO[R, Unit]](ZIO.unit) {
                       case (candidate, candidateRound) =>
                         // we have a candidate that has a shorter connection than the winner
-                        if (round - candidateRound >= optimizeThreshold) {
+                        if (round.value - candidateRound.value >= optimizeThreshold) {
                           (PeerState.moveToLazyPeers(winner) *> PeerState.addToEagerPeers(candidate)).commit *>
                             PeerService
                               .send(winner, Prune)
@@ -83,7 +83,7 @@ package object plumtree {
     }
 
   def sendIHave[R <: Logging with PeerService with Clock, E](
-    stream: Stream[E, (NodeAddress, UUID, Int)],
+    stream: Stream[E, (NodeAddress, UUID, Round)],
     schedule: Schedule[R, Option[List[UUID]], _],
     maxMessageSize: Long = 12
   ): ZStream[R, E, Unit] =
@@ -93,13 +93,13 @@ package object plumtree {
           group
             .map { case (_, uuid, round) => (uuid, round) }
             .aggregateAsyncWithin(
-              ZSink.collectAllN[(UUID, Int)](maxMessageSize),
-              schedule.contramap[Option[List[(UUID, Int)]]](_.map(_.map(_._1)))
+              ZSink.collectAllN[(UUID, Round)](maxMessageSize),
+              schedule.contramap[Option[List[(UUID, Round)]]](_.map(_.map(_._1)))
             )
             .foreach {
               case xs @ ::(_, _) =>
                 PeerService
-                  .send(target, ActiveProtocol.IHave(xs))
+                  .send(target, ActiveProtocol.IHave(Chunk.fromIterable(xs)))
                   .foldCauseM(
                     log.error("Failed sending IHave message", _),
                     _ => log.debug("Sent IHave message")
