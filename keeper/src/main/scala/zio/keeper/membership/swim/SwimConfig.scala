@@ -16,7 +16,7 @@ case class SwimConfig(
 object SwimConfig {
 
   val description =
-    (int("PORT").default(55557) |@|
+    (int("PORT").default(5557) |@|
       zioDuration("PROTOCOL_INTERVAL").default(3.seconds) |@|
       zioDuration("PROTOCOL_TIMEOUT").default(1.seconds) |@|
       zioDuration("SUSPICION_TIMEOUT").default(3.seconds) |@|

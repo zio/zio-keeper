@@ -11,18 +11,16 @@ import zio.logging.Logger
 import zio.nio.core.{ InetAddress, InetSocketAddress, SocketAddress }
 import zio.{ IO, UIO, ZIO }
 
-private trait K8DnsDiscovery extends Discovery.Service {
-
-  val log: Logger[String]
-
-  val serviceDns: InetAddress
-
-  val serviceDnsTimeout: Duration
-
-  val servicePort: Int
+private class K8DnsDiscovery(
+  log: Logger[String],
+  serviceDns: InetAddress,
+  serviceDnsTimeout: Duration,
+  servicePort: Int
+) extends Discovery.Service {
 
   final override val discoverNodes: IO[Error, Set[InetSocketAddress]] = {
     for {
+      _         <- log.info(s"k8s dns dicovery: $serviceDns, port: $servicePort, timeout: $serviceDnsTimeout")
       addresses <- lookup(serviceDns, serviceDnsTimeout)
       nodes     <- IO.foreach(addresses)(addr => SocketAddress.inetSocketAddress(addr, servicePort))
     } yield nodes.toSet[InetSocketAddress]
