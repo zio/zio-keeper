@@ -71,12 +71,12 @@ object FailureDetectionSpec extends KeeperSpec {
                      case Message.Direct(`nodeAddress1`, _, Ping) =>
                        Message.NoResponse //simulate failing node
                    }
-        _         <- addNode(nodeAddress1)
-        _         <- changeNodeState(nodeAddress1, NodeState.Healthy)
-        _         <- addNode(nodeAddress2)
-        _         <- changeNodeState(nodeAddress2, NodeState.Healthy)
-        _         <- TestClock.adjust(10.seconds)
-        msg       <- recorder.collectN(1) { case Message.Direct(_, _, msg: PingReq) => msg }
+        _   <- addNode(nodeAddress1)
+        _   <- changeNodeState(nodeAddress1, NodeState.Healthy)
+        _   <- addNode(nodeAddress2)
+        _   <- changeNodeState(nodeAddress2, NodeState.Healthy)
+        _   <- TestClock.adjust(10.seconds)
+        msg <- recorder.collectN(1) { case Message.Direct(_, _, msg: PingReq) => msg }
       } yield assert(msg)(equalTo(List(PingReq(nodeAddress1))))
     }.provideCustomLayer(testLayer),
     testM("should change to Healthy when ack after PingReq arrives") {
@@ -95,11 +95,10 @@ object FailureDetectionSpec extends KeeperSpec {
         _ <- changeNodeState(nodeAddress2, NodeState.Healthy)
         _ <- TestClock.adjust(10.seconds)
         _ <- recorder.collectN(1) { case Message.Direct(_, _, msg: PingReq) => msg }
-        _ <- internalEvents.collect {
-              case NodeStateChanged(`nodeAddress1`, NodeState.Unreachable, NodeState.Healthy) => ()
-            }.runHead
-        nodeState <- nodeState(nodeAddress1)
-      } yield assert(nodeState)(equalTo(NodeState.Healthy))
+        event <- internalEvents.collect {
+                  case NodeStateChanged(`nodeAddress1`, NodeState.Unreachable, NodeState.Healthy) => ()
+                }.runHead
+      } yield assert(event.isDefined)(equalTo(true))
     }.provideCustomLayer(testLayer)
   )
 }
