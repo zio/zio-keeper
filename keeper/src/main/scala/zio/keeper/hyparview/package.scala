@@ -12,7 +12,6 @@ import zio.stream.{ Stream, ZStream }
 import zio.{ Chunk, Has, IO, Promise, Ref, UIO, URIO, ZIO, ZManaged, ZQueue }
 
 package object hyparview {
-  type Membership[A]   = Has[Membership.Service[A]]
   type PeerService     = Has[PeerService.Service]
   type HyParViewConfig = Has[HyParViewConfig.Service]
   type TRandom         = Has[TRandom.Service]
