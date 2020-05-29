@@ -1,4 +1,4 @@
-package zio.keeper.membership
+package zio.keeper.membership.swim
 
 import upickle.default.macroRW
 import zio.keeper.ByteCodec

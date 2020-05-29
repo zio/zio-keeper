@@ -1,4 +1,4 @@
-package zio.keeper.membership
+package zio.keeper.membership.swim
 
 import upickle.default._
 import zio._
@@ -6,17 +6,17 @@ import zio.clock.Clock
 import zio.config.Config
 import zio.console.Console
 import zio.duration._
+import zio.keeper.{ ByteCodec, KeeperSpec }
 import zio.keeper.discovery.{ Discovery, TestDiscovery }
-import zio.keeper.membership.swim.{ SWIM, SwimConfig }
-import zio.keeper.ByteCodec
+import zio.keeper.membership.{ Membership, MembershipEvent }
 import zio.logging.{ LogAnnotation, Logging, log }
 import zio.random.Random
 import zio.stream.Sink
 import zio.test.Assertion._
-import zio.test.{ DefaultRunnableSpec, TestAspect, assert, suite, testM }
+import zio.test._
 
 //TODO disable since it hangs on CI
-object SwimSpec extends DefaultRunnableSpec {
+object SwimSpec extends KeeperSpec {
 
   private case class MemberHolder[A](instance: Membership.Service[A], stop: UIO[Unit]) {
 

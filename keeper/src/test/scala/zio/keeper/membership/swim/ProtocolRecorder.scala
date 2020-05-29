@@ -1,9 +1,8 @@
-package zio.keeper.membership
+package zio.keeper.membership.swim
 
 import izumi.reflect.Tags.Tag
 import zio._
 import zio.clock.Clock
-import zio.keeper.membership.swim.{ Message, Nodes, Protocol }
 import zio.logging.Logging
 import zio.stream.{ Sink, ZStream }
 

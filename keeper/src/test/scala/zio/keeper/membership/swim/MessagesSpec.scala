@@ -1,18 +1,15 @@
-package zio.keeper.membership
+package zio.keeper.membership.swim
 
 import zio._
-import zio.keeper.membership.PingPong.{ Ping, Pong }
+import zio.keeper.{ ByteCodec, KeeperSpec, NodeAddress }
 import zio.keeper.membership.swim.Messages.WithPiggyback
-import zio.keeper.membership.swim.{ Broadcast, Message, Messages, Protocol }
+import zio.keeper.membership.swim.PingPong.{ Ping, Pong }
 import zio.logging.Logging
 import zio.stream.ZStream
 import zio.test.Assertion._
 import zio.test._
-import zio.keeper.membership.swim.ConversationId
-import zio.keeper.NodeAddress
-import zio.keeper.ByteCodec
 
-object MessagesSpec extends DefaultRunnableSpec {
+object MessagesSpec extends KeeperSpec {
 
   val logger = Logging.console((_, line) => line)
 
@@ -86,7 +83,7 @@ object MessagesSpec extends DefaultRunnableSpec {
                          .take(1)
                          .runCollect
             bytes <- ByteCodec[WithPiggyback].toChunk(m)
-          } yield assert(m.gossip.size)(equalTo(1253)) && assert(bytes.size)(equalTo(62758))
+          } yield assert(m.gossip.size)(equalTo(1141)) && assert(bytes.size)(equalTo(62868))
       }
     }
   ).provideCustomLayer(logger ++ ConversationId.live)

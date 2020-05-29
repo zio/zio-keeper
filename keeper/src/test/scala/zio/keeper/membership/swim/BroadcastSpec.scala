@@ -1,11 +1,11 @@
-package zio.keeper.membership
+package zio.keeper.membership.swim
 
-import zio.{ Chunk, ZIO }
-import zio.keeper.membership.swim.{ Broadcast, Message }
+import zio.keeper.KeeperSpec
 import zio.test.Assertion._
 import zio.test._
+import zio.{ Chunk, ZIO }
 
-object BroadcastSpec extends DefaultRunnableSpec {
+object BroadcastSpec extends KeeperSpec {
 
   def generateMessage(size: Int) =
     Chunk.fromArray(Array.fill[Byte](size)(1))

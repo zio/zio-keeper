@@ -1,12 +1,11 @@
-package zio.keeper.membership
+package zio.keeper.membership.swim
 
 import zio._
-import zio.stream._
+import zio.keeper.{ ByteCodec, TransportError }
 import zio.keeper.membership.swim.Messages.WithPiggyback
 import zio.keeper.transport._
 import zio.nio.core.SocketAddress
-import zio.keeper.ByteCodec
-import zio.keeper.TransportError
+import zio.stream._
 
 class TestTransport(in: Queue[WithPiggyback], out: Queue[WithPiggyback]) extends ConnectionLessTransport.Service {
 

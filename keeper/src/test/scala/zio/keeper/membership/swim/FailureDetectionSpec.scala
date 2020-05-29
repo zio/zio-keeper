@@ -1,21 +1,20 @@
-package zio.keeper.membership
+package zio.keeper.membership.swim
 
 import zio._
 import zio.clock.Clock
 import zio.console.Console
 import zio.duration._
-import zio.keeper.NodeAddress
-import zio.keeper.membership.ProtocolRecorder.ProtocolRecorder
+import zio.keeper.{ KeeperSpec, NodeAddress }
 import zio.keeper.membership.swim.Nodes.{ nodeState, _ }
+import zio.keeper.membership.swim.ProtocolRecorder.ProtocolRecorder
 import zio.keeper.membership.swim.protocols.FailureDetection
 import zio.keeper.membership.swim.protocols.FailureDetection.{ Ack, Ping, PingReq }
-import zio.keeper.membership.swim.{ ConversationId, Message, Nodes }
 import zio.logging.Logging
 import zio.test.Assertion._
 import zio.test.environment.TestClock
 import zio.test.{ assert, _ }
 
-object FailureDetectionSpec extends DefaultRunnableSpec {
+object FailureDetectionSpec extends KeeperSpec {
 
   val logger     = Logging.console((_, line) => line)
   val nodesLayer = (ZLayer.requires[Clock] ++ logger) >>> Nodes.live

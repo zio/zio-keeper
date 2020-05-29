@@ -80,7 +80,6 @@ object TestNode {
       .provideCustomLayer(dependencies(port, otherPorts))
       .catchAll(ex => putStrLn("error: " + ex).as(1))
 
-
   val program =
 //   Fiber.dumpAll.flatMap(ZIO.foreach(_)(_.prettyPrintM.flatMap(putStrLn(_).provideLayer(ZEnv.live)))).delay(10.seconds).uninterruptible.fork.toManaged_ *>
     for {

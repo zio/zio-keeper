@@ -1,11 +1,11 @@
-package zio.keeper.membership
+package zio.keeper.membership.swim
 
-import zio.keeper.ByteCodec
+import zio.keeper.{ ByteCodec, KeeperSpec }
 import zio.keeper.membership.swim.protocols.User
 import zio.test.Assertion._
 import zio.test._
 
-object UserProtocolSpec extends DefaultRunnableSpec {
+object UserProtocolSpec extends KeeperSpec {
 
   val spec = suite("User Protocol Serialization")(
     testM("Ping read and write") {
