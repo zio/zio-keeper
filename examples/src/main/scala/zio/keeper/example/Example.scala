@@ -10,7 +10,7 @@ import zio.keeper.ByteCodec
 import zio.keeper.discovery.Discovery
 import zio.keeper.example.TestNode.PingPong.{ Ping, Pong }
 import zio.keeper.ByteCodec
-import zio.keeper.membership.swim.{ Swim, SwimConfig }
+import zio.keeper.swim.{ Swim, SwimConfig }
 import zio.logging.Logging
 import zio.nio.core.{ InetAddress, SocketAddress }
 import zio.keeper._
