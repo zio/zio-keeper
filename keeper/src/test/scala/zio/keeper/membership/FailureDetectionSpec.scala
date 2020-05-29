@@ -6,7 +6,7 @@ import zio.console.Console
 import zio.duration._
 import zio.keeper.NodeAddress
 import zio.keeper.membership.ProtocolRecorder.ProtocolRecorder
-import zio.keeper.membership.swim.Nodes._
+import zio.keeper.membership.swim.Nodes.{ nodeState, _ }
 import zio.keeper.membership.swim.protocols.FailureDetection
 import zio.keeper.membership.swim.protocols.FailureDetection.{ Ack, Ping, PingReq }
 import zio.keeper.membership.swim.{ ConversationId, Message, Nodes }
@@ -26,6 +26,7 @@ object FailureDetectionSpec extends DefaultRunnableSpec {
         .make(
           FailureDetection
             .protocol(1.second, 500.milliseconds)
+            .flatMap(_.debug)
         )
         .orDie
 
@@ -80,7 +81,28 @@ object FailureDetectionSpec extends DefaultRunnableSpec {
         nodeState <- nodeState(nodeAddress1)
       } yield assert(msg)(equalTo(List(PingReq(nodeAddress1)))) &&
         assert(nodeState)(equalTo(NodeState.Unreachable))
+    }.provideCustomLayer(testLayer),
+    testM("should change to Healthy when ack after PingReq arrives") {
+      for {
+        recorder <- ProtocolRecorder[FailureDetection] {
+                     case Message.Direct(`nodeAddress2`, ackId, Ping) =>
+                       Message.Direct(nodeAddress2, ackId, Ack)
+                     case Message.Direct(`nodeAddress1`, _, Ping) =>
+                       Message.NoResponse //simulate failing node
+                     case Message.Direct(`nodeAddress2`, ackId, _: PingReq) =>
+                       Message.Direct(nodeAddress2, ackId, Ack)
+                   }
+        _ <- addNode(nodeAddress1)
+        _ <- changeNodeState(nodeAddress1, NodeState.Healthy)
+        _ <- addNode(nodeAddress2)
+        _ <- changeNodeState(nodeAddress2, NodeState.Healthy)
+        _ <- TestClock.adjust(10.seconds)
+        _ <- recorder.collectN(1) { case Message.Direct(_, _, msg: PingReq) => msg }
+        _ <- internalEvents.collect {
+              case NodeStateChanged(`nodeAddress1`, NodeState.Unreachable, NodeState.Healthy) => ()
+            }.runHead
+        nodeState <- nodeState(nodeAddress1)
+      } yield assert(nodeState)(equalTo(NodeState.Healthy))
     }.provideCustomLayer(testLayer)
   )
-
 }

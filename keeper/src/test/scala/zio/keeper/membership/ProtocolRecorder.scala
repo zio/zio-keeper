@@ -51,7 +51,7 @@ object ProtocolRecorder {
     message match {
       case Message.WithTimeout(message, action, timeout) =>
         consumeMessages(messageQueue, message, behaviorRef, protocol).unit *>
-          action.delay(timeout).flatMap(consumeMessages(messageQueue, _, behaviorRef, protocol)).fork.unit
+          action.delay(timeout).flatMap(consumeMessages(messageQueue, _, behaviorRef, protocol)).unit
       case md: Message.Direct[A] =>
         messageQueue.offer(md) *>
           behaviorRef.get.flatMap { fn =>
