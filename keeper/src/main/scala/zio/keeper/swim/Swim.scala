@@ -18,17 +18,19 @@ import zio.clock._
 object Swim {
   type SwimEnv = Config[SwimConfig] with Discovery with Logging with Clock
 
-  private val internalLayer = ZLayer.requires[SwimEnv] ++ ConversationId.live ++ Nodes.live
+  private[this] final val QueueSize = 1000
 
   def live[B: ByteCodec: Tag]: ZLayer[SwimEnv, Error, Membership[B]] = {
+    val internalLayer = ZLayer.requires[SwimEnv] ++ ConversationId.live ++ Nodes.live
+
     val managed =
       for {
         env              <- ZManaged.environment[ConversationId with Nodes]
         swimConfig       <- config[SwimConfig].toManaged_
         _                <- log.info("starting SWIM on port: " + swimConfig.port).toManaged_
         udpTransport     <- transport.udp.live(swimConfig.messageSizeLimit).build.map(_.get)
-        userIn           <- Queue.bounded[Message.Direct[B]](1000).toManaged(_.shutdown)
-        userOut          <- Queue.bounded[Message.Direct[B]](1000).toManaged(_.shutdown)
+        userIn           <- Queue.bounded[Message.Direct[B]](QueueSize).toManaged(_.shutdown)
+        userOut          <- Queue.bounded[Message.Direct[B]](QueueSize).toManaged(_.shutdown)
         localNodeAddress <- NodeAddress.local(swimConfig.port).toManaged_
         _                <- Nodes.prettyPrint.flatMap(log.info(_)).repeat(Schedule.spaced(5.seconds)).toManaged_.fork
         initial          <- Initial.protocol(localNodeAddress).flatMap(_.debug).toManaged_
