@@ -77,7 +77,6 @@ object FailureDetectionSpec extends KeeperSpec {
         _         <- changeNodeState(nodeAddress2, NodeState.Healthy)
         _         <- TestClock.adjust(10.seconds)
         msg       <- recorder.collectN(1) { case Message.Direct(_, _, msg: PingReq) => msg }
-        nodeState <- nodeState(nodeAddress1)
       } yield assert(msg)(equalTo(List(PingReq(nodeAddress1))))
     }.provideCustomLayer(testLayer),
     testM("should change to Healthy when ack after PingReq arrives") {
