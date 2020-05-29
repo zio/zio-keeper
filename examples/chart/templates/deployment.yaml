@@ -1,14 +1,14 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "experiment-chart.fullname" . }}
+  name: {{ include "zio-keeper-node.fullname" . }}
   labels:
-    {{- include "experiment-chart.labels" . | nindent 4 }}
+    {{- include "zio-keeper-node.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "experiment-chart.selectorLabels" . | nindent 6 }}
+      {{- include "zio-keeper-node.selectorLabels" . | nindent 6 }}
   template:
     metadata:
     {{- with .Values.podAnnotations }}
@@ -16,7 +16,7 @@ spec:
         {{- toYaml . | nindent 8 }}
     {{- end }}
       labels:
-        {{- include "experiment-chart.selectorLabels" . | nindent 8 }}
+        {{- include "zio-keeper-node.selectorLabels" . | nindent 8 }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:

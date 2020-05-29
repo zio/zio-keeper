@@ -1,6 +1,6 @@
 apiVersion: v2
-name: experiment-chart
-description: A Helm chart for Kubernetes
+name: zio-keeper-node
+description: A Helm chart for ZIO Keeper node
 
 # A chart can be either an 'application' or a 'library' chart.
 #

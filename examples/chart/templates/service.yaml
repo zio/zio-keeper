@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "experiment-chart.fullname" . }}
+  name: {{ include "zio-keeper-node.fullname" . }}
   labels:
-    {{- include "experiment-chart.labels" . | nindent 4 }}
+    {{- include "zio-keeper-node.labels" . | nindent 4 }}
 spec:
   clusterIP: None
   ports:
@@ -12,4 +12,4 @@ spec:
       protocol: UDP
       name: swim
   selector:
-    {{- include "experiment-chart.selectorLabels" . | nindent 4 }}
+    {{- include "zio-keeper-node.selectorLabels" . | nindent 4 }}

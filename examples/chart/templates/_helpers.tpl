@@ -2,7 +2,7 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "experiment-chart.name" -}}
+{{- define "zio-keeper-node.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
@@ -11,7 +11,7 @@ Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 If release name contains chart name it will be used as a full name.
 */}}
-{{- define "experiment-chart.fullname" -}}
+{{- define "zio-keeper-node.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -27,16 +27,16 @@ If release name contains chart name it will be used as a full name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "experiment-chart.chart" -}}
+{{- define "zio-keeper-node.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "experiment-chart.labels" -}}
-helm.sh/chart: {{ include "experiment-chart.chart" . }}
-{{ include "experiment-chart.selectorLabels" . }}
+{{- define "zio-keeper-node.labels" -}}
+helm.sh/chart: {{ include "zio-keeper-node.chart" . }}
+{{ include "zio-keeper-node.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -46,17 +46,17 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels
 */}}
-{{- define "experiment-chart.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "experiment-chart.name" . }}
+{{- define "zio-keeper-node.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "zio-keeper-node.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
 Create the name of the service account to use
 */}}
-{{- define "experiment-chart.serviceAccountName" -}}
+{{- define "zio-keeper-node.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "experiment-chart.fullname" .) .Values.serviceAccount.name }}
+{{- default (include "zio-keeper-node.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}

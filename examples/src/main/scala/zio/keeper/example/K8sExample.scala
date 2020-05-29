@@ -23,7 +23,7 @@ object K8sTestNode extends zio.App {
       for {
         config <- ZManaged.environment[Config[SwimConfig]].map(_.get)
         serviceDns <- InetAddress
-                       .byName("experiment-experiment-chart.zio-keeper-experiment.svc.cluster.local")
+                       .byName("zio-keeper-node.zio-keeper-experiment.svc.cluster.local")
                        .orDie
                        .toManaged_
         discovery <- Discovery.k8Dns(serviceDns, 10.seconds, config.port).build.map(_.get)
