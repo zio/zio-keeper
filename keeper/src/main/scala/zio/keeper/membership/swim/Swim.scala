@@ -1,12 +1,13 @@
 package zio.keeper.membership.swim
 
 import izumi.reflect.Tags.Tag
-import zio.{ IO, Queue, Schedule, UIO, ZIO, ZLayer }
+import zio.{ Queue, Schedule, UIO, ZLayer }
+import zio.clock.Clock
 import zio.config._
 import zio.duration._
 import zio.keeper._
 import zio.keeper.membership.swim.protocols._
-import zio.keeper.membership.{ Membership, MembershipEvent }
+import zio.logging.Logging
 import zio.logging._
 import zio.stream._
 import zio.ZManaged
@@ -50,28 +51,20 @@ object Swim {
         _          <- messages0.process(swim).toManaged_
       } yield new Membership.Service[B] {
 
-        override def broadcast(data: B): IO[zio.keeper.Error, Unit] =
-          for {
+        override def broadcast(data: B): UIO[Unit] = {
+          (for {
             bytes <- ByteCodec.encode[User[B]](User(data))
             _     <- broadcast0.add(Message.Broadcast(bytes))
-          } yield ()
-
-        override val localMember: UIO[NodeAddress] =
-          ZIO.succeed(localNodeAddress)
-
-        override val nodes: UIO[Set[NodeAddress]] =
-          env.get[Nodes.Service].healthyNodes.map(_.map(_._1).toSet)
+          } yield ()).orDie
+        }
 
         override val receive: Stream[Nothing, (NodeAddress, B)] =
           ZStream.fromQueue(userIn).collect {
             case Message.Direct(n, _, m) => (n, m)
           }
 
-        override def send(data: B, receipt: NodeAddress): IO[Nothing, Unit] =
+        override def send(data: B, receipt: NodeAddress): UIO[Unit] =
           Message.direct(receipt, data).provide(env).flatMap(userOut.offer(_).unit)
-
-        override val events: Stream[Nothing, MembershipEvent] =
-          env.get[Nodes.Service].events
       }
 
     internalLayer >>> ZLayer.fromManaged(managed)

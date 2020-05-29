@@ -2,7 +2,7 @@ package zio.keeper.membership
 
 import java.util.UUID
 
-import zio.keeper.{ ByteCodec, Error, NodeAddress, SendError, TransportError }
+import zio.keeper._
 import zio.keeper.SerializationError.DeserializationTypeError
 import zio.keeper.membership.hyparview.InitialProtocol._
 import zio.keeper.transport.{ ChunkConnection, Transport }
@@ -23,15 +23,6 @@ package object hyparview {
 
   def broadcast(data: Chunk[Byte]): ZIO[Membership[Chunk[Byte]], Error, Unit] =
     ZIO.accessM(_.get.broadcast(data))
-
-  def events: ZStream[Membership[Chunk[Byte]], Error, MembershipEvent] =
-    ZStream.accessStream(_.get.events)
-
-  def localMember: ZIO[Membership[Chunk[Byte]], Nothing, NodeAddress] =
-    ZIO.accessM(_.get.localMember)
-
-  def nodes: ZIO[Membership[Chunk[Byte]], Nothing, Set[NodeAddress]] =
-    ZIO.accessM(_.get.nodes)
 
   def receive: ZStream[Membership[Chunk[Byte]], Error, (NodeAddress, Chunk[Byte])] =
     ZStream.accessStream(_.get.receive)

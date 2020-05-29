@@ -5,15 +5,20 @@ import java.util.UUID
 import zio._
 import zio.clock.Clock
 import zio.duration._
+<<<<<<< HEAD
 import zio.keeper.membership.{ Membership, MembershipEvent }
 import zio.keeper.membership.hyparview.{ PeerEvent, PeerService, Round, TRandom }
 import zio.keeper.{ ByteCodec, Error, NodeAddress, SendError }
+=======
+import zio.keeper.membership.hyparview.{ PeerService, TRandom }
+import zio.keeper._
+>>>>>>> 800a67e... Remove membership object from membership package
 import zio.logging._
 import zio.logging.Logging
 import zio.keeper.membership.hyparview.ActiveProtocol._
 import zio.keeper.membership.hyparview.PeerEvent._
 import zio.keeper.uuid.makeRandomUUID
-import zio.stream.ZStream
+import zio.stream.{ Stream, ZStream }
 
 import scala.Function.untupled
 
@@ -138,47 +143,44 @@ object PlumTree {
                 optimizeThreshold
               ).runDrain.toManaged_.fork
         } yield new Membership.Service[A] {
-          override val localMember: ZIO[Any, Nothing, NodeAddress] = PeerService.identity.provide(env)
-          override val nodes: ZIO[Any, Nothing, Set[NodeAddress]]  = PeerService.getPeers.provide(env)
-          override def events: stream.Stream[Nothing, MembershipEvent] = PeerService.events.provide(env).map {
-            case PeerEvent.NeighborDown(node) => MembershipEvent.Leave(node)
-            case PeerEvent.NeighborUp(node)   => MembershipEvent.Join(node)
-          }
-          override def send(data: A, receipt: NodeAddress): ZIO[Any, SendError, Unit] = {
-            for {
+          override def send(data: A, receipt: NodeAddress): UIO[Unit] = {
+            (for {
               chunk <- ByteCodec.encode(data).mapError(SendError.SerializationFailed)
               _     <- PeerService.send(receipt, UserMessage(chunk))
-            } yield ()
+            } yield ()).orDie
           }.provide(env)
 
-          override def broadcast(data: A): ZIO[Any, SendError, Unit] = {
-            ByteCodec.encode(data).mapError(SendError.SerializationFailed(_)).flatMap { chunk =>
-              makeRandomUUID.flatMap { uuid =>
-                val round = Round.zero
-                val msg   = Gossip(uuid, chunk, round)
-                PeerState.eagerPushPeers
-                  .zip(PeerState.lazyPushPeers)
-                  .commit
-                  .flatMap {
-                    case (eagerPeers, lazyPeers) =>
-                      val sendEager = ZIO.foreach_(eagerPeers) { peer =>
-                        PeerService
-                          .send(peer, msg)
-                          .foldCauseM(
-                            log.error(s"Failed sending message to $peer", _),
-                            _ => log.info(s"Sent Gossip to $peer")
-                          )
-                      }
+          override def broadcast(data: A): UIO[Unit] = {
+            ByteCodec
+              .encode(data)
+              .flatMap { chunk =>
+                makeRandomUUID.flatMap { uuid =>
+                  val round = Round.zero
+                  val msg   = Gossip(uuid, chunk, round)
+                  PeerState.eagerPushPeers
+                    .zip(PeerState.lazyPushPeers)
+                    .commit
+                    .flatMap {
+                      case (eagerPeers, lazyPeers) =>
+                        val sendEager = ZIO.foreach_(eagerPeers) { peer =>
+                          PeerService
+                            .send(peer, msg)
+                            .foldCauseM(
+                              log.error(s"Failed sending message to $peer", _),
+                              _ => log.info(s"Sent Gossip to $peer")
+                            )
+                        }
 
-                      // no need to filter here as we ensured sender is in eager peers
-                      val sendLazy = ZIO.foreach_(lazyPeers.map((_, uuid, round)))(gossip.offer)
-                      messages.add(uuid, msg).commit *> sendEager *> sendLazy
-                  }
+                        // no need to filter here as we ensured sender is in eager peers
+                        val sendLazy = ZIO.foreach_(lazyPeers.map((_, uuid, round)))(gossip.offer)
+                        messages.add(uuid, msg).commit *> sendEager *> sendLazy
+                    }
+                }
               }
-            }
+              .orDie
           }.provide(env)
 
-          override def receive: ZStream[Any, Nothing, (NodeAddress, A)] =
+          override def receive: Stream[Nothing, (NodeAddress, A)] =
             ZStream
               .fromQueue(userMessages)
               .mapM {

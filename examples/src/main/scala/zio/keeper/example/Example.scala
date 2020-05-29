@@ -13,7 +13,7 @@ import zio.keeper.ByteCodec
 import zio.keeper.membership.swim.{ Swim, SwimConfig }
 import zio.logging.Logging
 import zio.nio.core.{ InetAddress, SocketAddress }
-import zio.keeper.membership._
+import zio.keeper._
 import zio.logging._
 
 object Node1 extends zio.App {
@@ -65,10 +65,8 @@ object TestNode {
   }
 
   def start(port: Int, otherPorts: Set[Int]) =
-//   Fiber.dumpAll.flatMap(ZIO.foreach(_)(_.prettyPrintM.flatMap(putStrLn(_).provideLayer(ZEnv.live)))).delay(10.seconds).uninterruptible.fork.toManaged_ *>
     (for {
       _ <- sleep(5.seconds)
-      _ <- events[PingPong].foreach(event => log.info("membership event: " + event)).fork
       _ <- broadcast[PingPong](Ping(1))
       _ <- receive[PingPong].foreach {
             case (sender, message) =>
