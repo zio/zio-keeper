@@ -14,34 +14,22 @@ import zio.keeper.discovery._
 import zio.clock._
 
 object Swim {
+  type SwimEnv = Config[SwimConfig] with Discovery with Logging with Clock
 
-  private val internalLayer =
-    ZLayer.requires[Config[SwimConfig] with Discovery with Logging with Clock] ++
-      ConversationId.live ++
-      Nodes.live
+  private val internalLayer = ZLayer.requires[SwimEnv] ++ ConversationId.live ++ Nodes.live
 
-  def live[B: ByteCodec: Tag]: ZLayer[Config[SwimConfig] with Discovery with Logging with Clock, Error, Membership[B]] =
-    internalLayer >>>
-      ZLayer.fromManaged(for {
-        env          <- ZManaged.environment[ConversationId with Nodes]
-        swimConfig   <- config[SwimConfig].toManaged_
-        _            <- log.info("starting SWIM on port: " + swimConfig.port).toManaged_
-        udpTransport <- transport.udp.live(swimConfig.messageSizeLimit).build.map(_.get)
-
-        userIn <- Queue
-                   .bounded[Message.Direct[B]](1000)
-                   .toManaged(_.shutdown)
-        userOut <- Queue
-                    .bounded[Message.Direct[B]](1000)
-                    .toManaged(_.shutdown)
+  def live[B: ByteCodec: Tag]: ZLayer[SwimEnv, Error, Membership[B]] = {
+    val managed =
+      for {
+        env              <- ZManaged.environment[ConversationId with Nodes]
+        swimConfig       <- config[SwimConfig].toManaged_
+        _                <- log.info("starting SWIM on port: " + swimConfig.port).toManaged_
+        udpTransport     <- transport.udp.live(swimConfig.messageSizeLimit).build.map(_.get)
+        userIn           <- Queue.bounded[Message.Direct[B]](1000).toManaged(_.shutdown)
+        userOut          <- Queue.bounded[Message.Direct[B]](1000).toManaged(_.shutdown)
         localNodeAddress <- NodeAddress.local(swimConfig.port).toManaged_
-
-        _ <- Nodes.prettyPrint.flatMap(log.info(_)).repeat(Schedule.spaced(5.seconds)).toManaged_.fork
-
-        initial <- Initial
-                    .protocol(localNodeAddress)
-                    .flatMap(_.debug)
-                    .toManaged_
+        _                <- Nodes.prettyPrint.flatMap(log.info(_)).repeat(Schedule.spaced(5.seconds)).toManaged_.fork
+        initial          <- Initial.protocol(localNodeAddress).flatMap(_.debug).toManaged_
 
         failureDetection <- FailureDetection
                              .protocol(swimConfig.protocolInterval, swimConfig.protocolTimeout)
@@ -54,10 +42,7 @@ object Swim {
                       .map(_.binary)
                       .toManaged_
 
-        user <- User
-                 .protocol[B](userIn, userOut)
-                 .map(_.binary)
-                 .toManaged_
+        user       <- User.protocol[B](userIn, userOut).map(_.binary).toManaged_
         deadLetter <- DeadLetter.protocol.toManaged_
         swim       = Protocol.compose(initial.binary, failureDetection, suspicion, user, deadLetter)
         broadcast0 <- Broadcast.make(swimConfig.messageSizeLimit, swimConfig.broadcastResent).toManaged_
@@ -87,6 +72,8 @@ object Swim {
 
         override val events: Stream[Nothing, MembershipEvent] =
           env.get[Nodes.Service].events
+      }
 
-      })
+    internalLayer >>> ZLayer.fromManaged(managed)
+  }
 }
