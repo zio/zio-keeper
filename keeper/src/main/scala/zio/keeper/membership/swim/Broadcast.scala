@@ -29,8 +29,7 @@ final class Broadcast(
   def broadcast(currentMessageSize: Int): UIO[List[Chunk[Byte]]] =
     ref.modify { items =>
       val (toSend, toReschedule, _) = items.foldRight((Vector.empty[Item], Vector.empty[Item], currentMessageSize)) {
-        case (item, (toSend, toReschedule, size))
-            if item.chunk.size + messageOverhead <= messageLimit - currentMessageSize =>
+        case (item, (toSend, toReschedule, size)) if size + item.chunk.size + messageOverhead <= messageLimit =>
           (toSend :+ item, toReschedule, size + item.chunk.size + messageOverhead)
         case (item, (toSend, toReschedule, size)) =>
           (toSend, toReschedule :+ item, size)
@@ -50,9 +49,9 @@ final class Broadcast(
 object Broadcast {
 
   def make(mtu: Int, resent: Int): UIO[Broadcast] =
-    STM.mapN(TRef.make(TreeSet.empty[Item]), TRef.make(0))(new Broadcast(_, _, 100, mtu, resent)).commit
+    STM.mapN(TRef.make(TreeSet.empty[Item]), TRef.make(0))(new Broadcast(_, _, 3, mtu, resent)).commit
 
   final case class Item(seqId: Int, resend: Int, chunk: Chunk[Byte])
-  implicit val ordering: Ordering[Item] = Ordering.by[Item, Int](_.resend)
+  implicit val ordering: Ordering[Item] = Ordering.by[Item, Int](_.seqId)
 
 }

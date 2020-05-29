@@ -70,8 +70,12 @@ final class Messages(
           nodeAddress   <- nodeAddress.socketAddress
           _             <- transport.connect(nodeAddress).use(_.send(chunk))
         } yield ()
-      case msg: Message.Batch[Chunk[Byte]] =>
-        ZIO.foreach_(msg.first :: msg.second :: msg.rest.toList)(send)
+      case msg: Message.Batch[Chunk[Byte]] => {
+        val (broadcast, rest) =
+          (msg.first :: msg.second :: msg.rest.toList).partition(_.isInstanceOf[Message.Broadcast[_]])
+        ZIO.foreach_(broadcast)(send) *>
+          ZIO.foreach_(rest)(send)
+      }
       case msg @ Message.Broadcast(_) =>
         broadcast.add(msg)
       case WithTimeout(message, action, timeout) =>

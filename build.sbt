@@ -69,7 +69,7 @@ lazy val dockerSettings = Seq(
   dockerUpdateLatest := false,
   dockerEntrypoint := Seq("bin/k-8-s-test-node"),
   dynverSeparator in ThisBuild := "-"
-)  
+)
 
 lazy val examples = project
   .in(file("examples"))

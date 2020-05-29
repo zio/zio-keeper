@@ -21,9 +21,12 @@ object K8sTestNode extends zio.App {
   val discovery =
     ZLayer.fromManaged(
       for {
-        config     <- ZManaged.environment[Config[SwimConfig]].map(_.get)
-        serviceDns <- InetAddress.byName("experiment-experiment-chart.zio-keeper-experiment.svc.cluster.local").orDie.toManaged_
-        discovery  <- Discovery.k8Dns(serviceDns, 10.seconds, config.port).build.map(_.get)
+        config <- ZManaged.environment[Config[SwimConfig]].map(_.get)
+        serviceDns <- InetAddress
+                       .byName("experiment-experiment-chart.zio-keeper-experiment.svc.cluster.local")
+                       .orDie
+                       .toManaged_
+        discovery <- Discovery.k8Dns(serviceDns, 10.seconds, config.port).build.map(_.get)
       } yield discovery
     )
 
