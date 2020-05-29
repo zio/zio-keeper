@@ -1,4 +1,4 @@
-package zio.keeper.membership
+package zio.keeper
 
 import zio.Has
 

@@ -5,22 +5,13 @@ import java.util.UUID
 import zio._
 import zio.clock.Clock
 import zio.duration._
-<<<<<<< HEAD:keeper/src/main/scala/zio/keeper/membership/hyparview/plumtree/PlumTree.scala
-<<<<<<< HEAD
-import zio.keeper.membership.{ Membership, MembershipEvent }
-import zio.keeper.membership.hyparview.{ PeerEvent, PeerService, Round, TRandom }
-import zio.keeper.{ ByteCodec, Error, NodeAddress, SendError }
-=======
-import zio.keeper.membership.hyparview.{ PeerService, TRandom }
-=======
 import zio.keeper.hyparview.{ PeerService, TRandom }
->>>>>>> b2432fd... Flatten package hierarchy:keeper/src/main/scala/zio/keeper/hyparview/plumtree/PlumTree.scala
 import zio.keeper._
->>>>>>> 800a67e... Remove membership object from membership package
 import zio.logging._
 import zio.logging.Logging
 import zio.keeper.hyparview.ActiveProtocol._
 import zio.keeper.hyparview.PeerEvent._
+import zio.keeper.hyparview.Round
 import zio.keeper.uuid.makeRandomUUID
 import zio.stream.{ Stream, ZStream }
 

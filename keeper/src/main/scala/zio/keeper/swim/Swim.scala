@@ -6,12 +6,8 @@ import zio.clock.Clock
 import zio.config._
 import zio.duration._
 import zio.keeper._
-<<<<<<< HEAD:keeper/src/main/scala/zio/keeper/membership/swim/Swim.scala
-import zio.keeper.membership.swim.protocols._
-=======
 import zio.keeper.discovery.Discovery
 import zio.keeper.swim.protocols._
->>>>>>> b2432fd... Flatten package hierarchy:keeper/src/main/scala/zio/keeper/swim/Swim.scala
 import zio.logging.Logging
 import zio.logging._
 import zio.stream._

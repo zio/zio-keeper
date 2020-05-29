@@ -1,4 +1,4 @@
-package zio.keeper.membership.swim
+package zio.keeper.swim
 
 import zio._
 

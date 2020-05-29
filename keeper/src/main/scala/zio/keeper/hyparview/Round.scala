@@ -1,4 +1,4 @@
-package zio.keeper.hyparview.plumtree
+package zio.keeper.hyparview
 
 import zio._
 import zio.keeper.ByteCodec
@@ -24,7 +24,10 @@ object Round {
       round => ZIO.succeed(Chunk.fromArray(intToByteArray(round.value)))
     )
 
-  implicit val ordering: Ordering[Round] = Ordering.by(_.value)
+  implicit val ordering: Ordering[Round] =
+    Ordering.by(_.value)
 
-  val zero: Round = new Round(0) {}
+  val zero: Round =
+    new Round(0) {}
+
 }

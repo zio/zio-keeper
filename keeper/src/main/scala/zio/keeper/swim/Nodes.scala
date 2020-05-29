@@ -3,14 +3,8 @@ package zio.keeper.swim
 import zio._
 import zio.clock.Clock
 import zio.keeper.ClusterError.UnknownNode
-<<<<<<< HEAD:keeper/src/main/scala/zio/keeper/membership/swim/Nodes.scala
-import zio.keeper.membership.MembershipEvent
-import zio.keeper.membership.MembershipEvent.{ Join, Leave }
-=======
 import zio.keeper.MembershipEvent
 import zio.keeper.MembershipEvent.{ Join, Leave }
-import zio.keeper.swim.Nodes.{ NodeState, NodeStateChanged }
->>>>>>> b2432fd... Flatten package hierarchy:keeper/src/main/scala/zio/keeper/swim/Nodes.scala
 import zio.keeper.{ Error, NodeAddress }
 import zio.logging._
 import zio.stm.TMap

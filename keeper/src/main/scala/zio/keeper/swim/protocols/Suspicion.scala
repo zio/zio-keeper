@@ -3,11 +3,10 @@ package zio.keeper.swim.protocols
 import upickle.default.macroRW
 import zio.ZIO
 import zio.duration.Duration
-import zio.keeper.swim.Nodes.{ NodeState, NodeStateChanged }
+import zio.keeper.swim.Nodes._
 import zio.keeper.{ ByteCodec, NodeAddress }
-import zio.keeper.swim.{ Message, Nodes, Protocol }
+import zio.keeper.swim.{ Message, Protocol }
 import zio.keeper.{ ByteCodec, NodeAddress }
-import zio.stm.TMap
 
 sealed trait Suspicion
 
