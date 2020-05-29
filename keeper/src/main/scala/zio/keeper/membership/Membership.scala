@@ -5,7 +5,7 @@ import zio.stream.Stream
 import zio.{ IO, UIO }
 
 object Membership {
-  trait Service[A] extends {
+  trait Service[A] {
     def broadcast(data: A): IO[zio.keeper.Error, Unit]
     def events: Stream[Nothing, MembershipEvent]
     def localMember: UIO[NodeAddress]
