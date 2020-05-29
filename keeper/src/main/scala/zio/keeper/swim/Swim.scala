@@ -18,7 +18,7 @@ import zio.clock._
 object Swim {
   type SwimEnv = Config[SwimConfig] with Discovery with Logging with Clock
 
-  private[this] final val QueueSize = 1000
+  final private[this] val QueueSize = 1000
 
   def live[B: ByteCodec: Tag]: ZLayer[SwimEnv, Error, Membership[B]] = {
     val internalLayer = ZLayer.requires[SwimEnv] ++ ConversationId.live ++ Nodes.live
