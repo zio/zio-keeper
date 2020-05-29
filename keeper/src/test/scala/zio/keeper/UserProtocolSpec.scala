@@ -1,7 +1,6 @@
-package zio.keeper.membership
+package zio.keeper
 
-import zio.keeper.ByteCodec
-import zio.keeper.membership.swim.protocols.User
+import zio.keeper.swim.protocols.User
 import zio.test.Assertion._
 import zio.test._
 

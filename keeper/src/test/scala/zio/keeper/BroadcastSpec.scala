@@ -1,7 +1,7 @@
-package zio.keeper.membership
+package zio.keeper
 
 import zio.{ Chunk, ZIO }
-import zio.keeper.membership.swim.{ Broadcast, Message }
+import zio.keeper.swim.{ Broadcast, Message }
 import zio.test._
 import zio.test.Assertion._
 

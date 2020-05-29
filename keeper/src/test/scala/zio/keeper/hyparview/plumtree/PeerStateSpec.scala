@@ -1,9 +1,9 @@
-package zio.keeper.membership.hyparview.plumtree
+package zio.keeper.hyparview.plumtree
 
 import zio._
 import zio.keeper.KeeperSpec
-import zio.keeper.membership.hyparview.testing.TestPeerService
-import zio.keeper.membership.hyparview.{ PeerService, TRandom }
+import zio.keeper.hyparview.testing.TestPeerService
+import zio.keeper.hyparview.{ PeerService, TRandom }
 import zio.keeper.transport.Transport
 import zio.keeper.transport.testing.InMemoryTransport
 import zio.keeper.gens

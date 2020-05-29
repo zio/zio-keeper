@@ -1,4 +1,4 @@
-package zio.keeper.membership.hyparview
+package zio.keeper.hyparview
 
 import zio.ZManaged
 import zio.random.Random

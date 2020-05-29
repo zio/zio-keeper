@@ -1,17 +1,16 @@
-package zio.keeper.membership
+package zio.keeper
 
 import zio._
-import zio.keeper.{ ByteCodec, NodeAddress, TransportError }
-import zio.keeper.membership.PingPong.{ Ping, Pong }
-import zio.keeper.membership.swim.Messages.WithPiggyback
-import zio.keeper.membership.swim.{ Broadcast, Message, Messages, Protocol }
+import zio.keeper.PingPong.{ Ping, Pong }
+import zio.keeper.swim.Messages.WithPiggyback
+import zio.keeper.swim.{ Broadcast, Message, Messages, Protocol }
 import zio.keeper.transport.{ Bind, Channel, ConnectionLessTransport }
 import zio.logging.Logging
 import zio.nio.core.SocketAddress
 import zio.stream.ZStream
 import zio.test.Assertion._
 import zio.test._
-import zio.keeper.membership.swim.ConversationId
+import zio.keeper.swim.ConversationId
 
 object MessagesSpec extends DefaultRunnableSpec {
 

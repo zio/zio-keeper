@@ -1,14 +1,13 @@
-package zio.keeper.membership
+package zio.keeper
 
 import zio.ZLayer
 import zio.clock.Clock
-import zio.keeper.NodeAddress
-import zio.keeper.membership.swim.Nodes
+import zio.keeper.swim.Nodes
 import zio.logging.Logging
 import zio.stream.Sink
 import zio.test.Assertion._
 import zio.test.{ DefaultRunnableSpec, _ }
-import zio.keeper.membership.swim.Nodes._
+import zio.keeper.swim.Nodes._
 
 object NodesSpec extends DefaultRunnableSpec {
 

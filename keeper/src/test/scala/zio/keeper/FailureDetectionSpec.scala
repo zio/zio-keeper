@@ -1,15 +1,14 @@
-package zio.keeper.membership
+package zio.keeper
 
 import zio._
 import zio.clock.Clock
 import zio.console.Console
 import zio.duration._
-import zio.keeper.NodeAddress
-import zio.keeper.membership.ProtocolRecorder.ProtocolRecorder
-import zio.keeper.membership.swim.Nodes._
-import zio.keeper.membership.swim.protocols.FailureDetection
-import zio.keeper.membership.swim.protocols.FailureDetection.{ Ack, Ping, PingReq }
-import zio.keeper.membership.swim.{ ConversationId, Message, Nodes }
+import zio.keeper.ProtocolRecorder.ProtocolRecorder
+import zio.keeper.swim.Nodes._
+import zio.keeper.swim.protocols.FailureDetection
+import zio.keeper.swim.protocols.FailureDetection.{ Ack, Ping, PingReq }
+import zio.keeper.swim.{ ConversationId, Message, Nodes }
 import zio.logging.Logging
 import zio.test.Assertion._
 import zio.test.environment.TestClock

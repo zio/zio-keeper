@@ -1,13 +1,13 @@
-package zio.keeper.membership.hyparview.testing
+package zio.keeper.hyparview.testing
 
 import java.math.BigInteger
 import java.nio.ByteBuffer
 
 import zio._
 import zio.keeper.SerializationError.{ DeserializationTypeError, SerializationTypeError }
-import zio.keeper.membership.hyparview.ActiveProtocol._
-import zio.keeper.membership.hyparview.PeerEvent._
-import zio.keeper.membership.hyparview.{ ActiveProtocol, PeerEvent, PeerService }
+import zio.keeper.hyparview.ActiveProtocol._
+import zio.keeper.hyparview.PeerEvent._
+import zio.keeper.hyparview.{ ActiveProtocol, PeerEvent, PeerService }
 import zio.keeper.transport.Transport
 import zio.keeper.{ ByteCodec, Error, NodeAddress, SendError }
 import zio.stm.{ STM, TQueue, TRef, ZSTM }

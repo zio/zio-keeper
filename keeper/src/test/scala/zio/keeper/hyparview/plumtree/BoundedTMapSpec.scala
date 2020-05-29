@@ -1,4 +1,4 @@
-package zio.keeper.membership.hyparview.plumtree
+package zio.keeper.hyparview.plumtree
 
 import zio.keeper.KeeperSpec
 import zio.stm.STM
