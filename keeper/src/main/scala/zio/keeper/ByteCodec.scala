@@ -1,8 +1,14 @@
 package zio.keeper
 
-import upickle.default._
+import java.nio.charset.StandardCharsets
+import java.util.UUID
+
 import zio._
 import zio.keeper.SerializationError.{ DeserializationTypeError, SerializationTypeError }
+import zio.keeper.encoding._
+
+import upickle.default._
+
 import scala.reflect.ClassTag
 
 trait ByteCodec[A] { self =>
@@ -10,8 +16,28 @@ trait ByteCodec[A] { self =>
 
   def toChunk(a: A): IO[SerializationTypeError, Chunk[Byte]]
 
-  def bimap[B, C](f: A => B, g: B => A): ByteCodec[B] =
+  def zip[B](that: ByteCodec[B]): ByteCodec[(A, B)] =
+    ByteCodec.instance { chunk =>
+      val (sizeChunk, dataChunk) = chunk.splitAt(4)
+      for {
+        split  <- byteArrayToInt(sizeChunk.toArray)
+        first  <- self.fromChunk(dataChunk.take(split))
+        second <- that.fromChunk(dataChunk.drop(split))
+      } yield (first, second)
+    } {
+      case (first, second) =>
+        self.toChunk(first).zipWith(that.toChunk(second)) {
+          case (firstChunk, secondChunk) =>
+            val sizeChunk = Chunk.fromArray(intToByteArray(firstChunk.size))
+            sizeChunk ++ firstChunk ++ secondChunk
+        }
+    }
+
+  def bimap[B](f: A => B, g: B => A): ByteCodec[B] =
     ByteCodec.instance(self.fromChunk(_).map(f))((self.toChunk _).compose(g))
+
+  def bimapM[B](f: A => IO[DeserializationTypeError, B], g: B => IO[SerializationTypeError, A]): ByteCodec[B] =
+    ByteCodec.instance(self.fromChunk(_).flatMap(f))(g(_).flatMap(self.toChunk))
 
   private[ByteCodec] def unsafeWiden[A1 >: A](implicit tag: ClassTag[A]): ByteCodec[A1] =
     new ByteCodec[A1] {
@@ -255,5 +281,64 @@ object ByteCodec {
 
       def fromChunk(chunk: Chunk[Byte]) =
         ZIO.effect(readBinary[A](chunk.toArray)(rw)).mapError(DeserializationTypeError(_))
+    }
+
+  implicit val byteCodec: ByteCodec[Byte] =
+    instance { chunk =>
+      val size = chunk.length
+      if (size == 1) ZIO.succeed(chunk.headOption.get)
+      else ZIO.fail(DeserializationTypeError(s"Expected chunk of length 1; got $size"))
+    } { elem =>
+      ZIO.succeed(Chunk.single(elem))
+    }
+
+  implicit val intCodec: ByteCodec[Int] =
+    instance { chunk =>
+      byteArrayToInt(chunk.toArray)
+    } { value =>
+      ZIO.succeed(Chunk.fromArray(intToByteArray(value)))
+    }
+
+  implicit val stringCodec: ByteCodec[String] =
+    instance { chunk =>
+      ZIO
+        .effect {
+          new String(chunk.toArray, StandardCharsets.UTF_8)
+        }
+        .mapError(DeserializationTypeError(_))
+    } { value =>
+      ZIO.succeed(Chunk.fromArray(value.getBytes(StandardCharsets.UTF_8)))
+    }
+
+  implicit val uuidCodec: ByteCodec[UUID] =
+    stringCodec.bimapM(
+      str => ZIO.effect(UUID.fromString(str)).mapError(DeserializationTypeError(_)),
+      uuid => ZIO.succeed(uuid.toString)
+    )
+
+  implicit def tupleCodec[A: ByteCodec, B: ByteCodec]: ByteCodec[(A, B)] =
+    ByteCodec[A].zip(ByteCodec[B])
+
+  implicit def chunkCodec[A: ByteCodec]: ByteCodec[Chunk[A]] =
+    instance { chunk =>
+      def go(remaining: Chunk[Byte], acc: List[A]): IO[DeserializationTypeError, Chunk[A]] =
+        if (remaining.isEmpty) ZIO.succeed(Chunk.fromIterable(acc))
+        else {
+          val (sizeChunk, dataChunk) = remaining.splitAt(4)
+          byteArrayToInt(sizeChunk.toArray).flatMap { elementSize =>
+            ByteCodec[A].fromChunk(dataChunk.take(elementSize)).flatMap { nextA =>
+              go(dataChunk.drop(elementSize), nextA :: acc)
+            }
+          }
+        }
+      go(chunk, Nil)
+    } { data =>
+      data.foldM(Chunk.empty: Chunk[Byte]) {
+        case (acc, next) =>
+          ByteCodec[A].toChunk(next).map { chunk =>
+            val sizeChunk = Chunk.fromArray(intToByteArray(chunk.size))
+            sizeChunk ++ chunk ++ acc
+          }
+      }
     }
 }

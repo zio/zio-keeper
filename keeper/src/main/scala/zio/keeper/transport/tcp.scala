@@ -1,12 +1,12 @@
 package zio.keeper.transport
 
-import java.math.BigInteger
 import java.{ util => ju }
 
 import zio._
 import zio.clock.Clock
 import zio.duration._
 import zio.keeper.{ NodeAddress, TransportError, uuid }
+import zio.keeper.encoding._
 import zio.logging.Logging
 import zio.logging.log
 import zio.nio.channels._
@@ -27,13 +27,8 @@ object tcp {
       } yield {
         new Connection[Any, TransportError, Chunk[Byte]] {
           override def send(dataChunk: Chunk[Byte]): IO[TransportError, Unit] = {
-            val size = dataChunk.size
-            val sizeChunk = Chunk(
-              (size >>> 24).toByte,
-              (size >>> 16).toByte,
-              (size >>> 8).toByte,
-              size.toByte
-            )
+            val size      = dataChunk.size
+            val sizeChunk = Chunk.fromArray(intToByteArray(size))
 
             log.debug(s"$id: Sending $size bytes") *>
               writeLock
@@ -52,9 +47,7 @@ object tcp {
                   for {
                     length <- channel
                                .read(4)
-                               .flatMap(
-                                 c => ZIO.effect(new BigInteger(c.toArray).intValue())
-                               )
+                               .flatMap(c => byteArrayToInt(c.toArray))
                     data <- channel.read(length * 8)
                     _    <- log.debug(s"$id: Received $length bytes")
                   } yield data

@@ -5,7 +5,6 @@ import java.util.UUID
 import upickle.default._
 import zio.Chunk
 import zio.keeper.{ ByteCodec, NodeAddress }
-import zio.keeper.orphans._
 
 sealed abstract class ActiveProtocol
 
@@ -71,13 +70,13 @@ object ActiveProtocol {
   }
 
   final case class IHave(
-    uuids: ::[UUID]
+    messages: Chunk[(UUID, Round)]
   ) extends PlumTreeProtocol
 
   object IHave {
 
     implicit val codec: ByteCodec[IHave] =
-      ByteCodec.fromReadWriter(macroRW[IHave])
+      ByteCodec[Chunk[(UUID, Round)]].bimap(IHave.apply, _.messages)
   }
 
   final case class Graft(
@@ -97,17 +96,21 @@ object ActiveProtocol {
   object UserMessage {
 
     implicit val codec: ByteCodec[UserMessage] =
-      ByteCodec.fromReadWriter(macroRW[UserMessage])
+      ByteCodec[Chunk[Byte]].bimap(UserMessage.apply, _.payload)
   }
 
   final case class Gossip(
     uuid: UUID,
-    payload: Chunk[Byte]
+    payload: Chunk[Byte],
+    round: Round
   ) extends PlumTreeProtocol
 
   object Gossip {
 
     implicit val codec: ByteCodec[Gossip] =
-      ByteCodec.fromReadWriter(macroRW[Gossip])
+      ByteCodec[(UUID, (Chunk[Byte], Round))].bimap(
+        { case (uuid, (payload, round)) => Gossip(uuid, payload, round) },
+        gossip => (gossip.uuid, (gossip.payload, gossip.round))
+      )
   }
 }

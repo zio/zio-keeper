@@ -52,7 +52,7 @@ object Nodes {
      */
     def nodeState(id: NodeAddress): IO[Error, NodeState]
 
-    def numberOfNodes: UIO[Int]
+    val numberOfNodes: UIO[Int]
 
     /**
      * Lists members that are in healthy state.
@@ -158,7 +158,7 @@ object Nodes {
         def nodeState(id: NodeAddress): IO[Error, NodeState] =
           nodeStates.get(id).commit.get.orElseFail(UnknownNode(id))
 
-        def numberOfNodes: UIO[Int] =
+        val numberOfNodes: UIO[Int] =
           nodeStates.keys.map(_.size).commit
 
         def healthyNodes: UIO[List[(NodeAddress, NodeState)]] =
