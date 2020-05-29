@@ -13,7 +13,7 @@ import zio.ZManaged
 import zio.keeper.discovery._
 import zio.clock._
 
-object SWIM {
+object Swim {
 
   private val internalLayer =
     ZLayer.requires[Config[SwimConfig] with Discovery with Logging with Clock] ++

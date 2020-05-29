@@ -10,7 +10,7 @@ import zio.keeper.ByteCodec
 import zio.keeper.discovery.Discovery
 import zio.keeper.example.TestNode.PingPong.{ Ping, Pong }
 import zio.keeper.ByteCodec
-import zio.keeper.membership.swim.{ SWIM, SwimConfig }
+import zio.keeper.membership.swim.{ Swim, SwimConfig }
 import zio.logging.Logging
 import zio.nio.core.{ InetAddress, SocketAddress }
 import zio.keeper.membership._
@@ -85,7 +85,7 @@ object TestNode {
   private def environment(port: Int, others: Set[Int]) = {
     val config     = Config.fromMap(Map("PORT" -> port.toString), SwimConfig.description).orDie
     val seeds      = discovery(others)
-    val membership = (seeds ++ logging ++ Clock.live ++ config) >>> SWIM.live[PingPong]
+    val membership = (seeds ++ logging ++ Clock.live ++ config) >>> Swim.live[PingPong]
     logging ++ membership
   }
 
