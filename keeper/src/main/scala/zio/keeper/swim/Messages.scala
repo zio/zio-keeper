@@ -1,0 +1,155 @@
+package zio.keeper.swim
+
+import upickle.default.{ macroRW, _ }
+import zio._
+import zio.clock.Clock
+import zio.keeper.swim.Message.WithTimeout
+import zio.keeper.swim.Messages.WithPiggyback
+import zio.keeper.transport.{ Channel, ConnectionLessTransport }
+import zio.keeper.{ ByteCodec, Error, NodeAddress }
+import zio.logging.{ Logging, log }
+import zio.stream.{ Take, ZStream }
+
+/**
+ * Represents main messages loop. responsible for receiving and sending messages.
+ * @param local - local node
+ * @param messages - internal queue used to process incomming messages
+ * @param broadcast - broadcast for messages
+ * @param transport - UDP transport
+ */
+final class Messages(
+  val local: NodeAddress,
+  messages: Queue[Take[Error, Message[Chunk[Byte]]]],
+  broadcast: Broadcast,
+  transport: ConnectionLessTransport.Service
+) {
+
+  /**
+   * Reads message and put into queue.
+   *
+   * @param connection transport connection
+   */
+  def read(connection: Channel): IO[Error, Unit] =
+    Take
+      .fromEffect(
+        connection.read >>= ByteCodec[WithPiggyback].fromChunk
+      )
+      .flatMap {
+        case Take.Value(withPiggyback) =>
+          messages.offer(
+            Take.Value(Message.Direct(withPiggyback.node, withPiggyback.conversationId, withPiggyback.message))
+          ) *>
+            ZIO.foreach(withPiggyback.gossip)(
+              chunk =>
+                messages.offer(Take.Value(Message.Direct(withPiggyback.node, withPiggyback.conversationId, chunk)))
+            )
+        case err: Take.Fail[Error] => messages.offer(err)
+        case Take.End              => messages.offer(Take.End)
+      }
+      .unit
+
+  private def recoverErrors[R, E, A](stream: ZStream[R, E, A]): ZStream[R with Logging, Nothing, Take[E, A]] =
+    stream.either.mapM(
+      _.fold(
+        e => log.error("error during sending", Cause.fail(e)).as(Take.Fail(Cause.fail(e))),
+        v => ZIO.succeedNow(Take.Value(v))
+      )
+    )
+
+  /**
+   * Sends message to target.
+   */
+  def send(msg: Message[Chunk[Byte]]): ZIO[Clock with Logging, Error, Unit] =
+    msg match {
+      case Message.NoResponse => ZIO.unit
+      case Message.Direct(nodeAddress, conversationId, message) =>
+        for {
+          broadcast     <- broadcast.broadcast(message.size)
+          withPiggyback = WithPiggyback(local, conversationId, message, broadcast)
+          chunk         <- ByteCodec[WithPiggyback].toChunk(withPiggyback)
+          nodeAddress   <- nodeAddress.socketAddress
+          _             <- transport.connect(nodeAddress).use(_.send(chunk))
+        } yield ()
+      case msg: Message.Batch[Chunk[Byte]] =>
+        ZIO.foreach_(msg.first :: msg.second :: msg.rest.toList)(send)
+      case msg @ Message.Broadcast(_) =>
+        broadcast.add(msg)
+      case WithTimeout(message, action, timeout) =>
+        send(message) *> action.delay(timeout).flatMap(send).unit
+    }
+
+  private def bind =
+    for {
+      localAddress <- local.socketAddress.toManaged_
+      _            <- log.info("bind to " + localAddress).toManaged_
+      logger       <- ZManaged.environment[Logging]
+      _ <- transport
+            .bind(localAddress) { conn =>
+              read(conn)
+                .catchAll(ex => log.error("fail to read", Cause.fail(ex)).unit.provide(logger))
+            }
+    } yield ()
+
+  def process(protocol: Protocol[Chunk[Byte]]) =
+    ZStream
+      .fromQueue(messages)
+      .collectM {
+        case Take.Value(msg: Message.Direct[Chunk[Byte]]) =>
+          Take.fromEffect(protocol.onMessage(msg))
+      }
+      .mapMPar(10) {
+        case Take.Value(msg) =>
+          send(msg)
+            .catchAll(e => log.error("error during send: " + e))
+        case Take.Fail(cause) =>
+          log.error("error: ", cause)
+        case Take.End => ZIO.unit
+      }
+      .runDrain
+      .fork *>
+      recoverErrors(protocol.produceMessages)
+        .mapMPar(10) {
+          case Take.Value(msg) =>
+            send(msg)
+              .catchAll(e => log.error("error during send: " + e))
+          case Take.Fail(cause) =>
+            log.error("error: ", cause)
+          case Take.End => ZIO.unit
+        }
+        .runDrain
+        .fork
+}
+
+object Messages {
+
+  final case class WithPiggyback(
+    node: NodeAddress,
+    conversationId: Long,
+    message: Chunk[Byte],
+    gossip: List[Chunk[Byte]]
+  )
+
+  implicit val codec: ByteCodec[WithPiggyback] =
+    ByteCodec.fromReadWriter(macroRW[WithPiggyback])
+
+  implicit val chunkRW: ReadWriter[Chunk[Byte]] =
+    implicitly[ReadWriter[Array[Byte]]]
+      .bimap[Chunk[Byte]](
+        ch => ch.toArray,
+        arr => Chunk.fromArray(arr)
+      )
+
+  def make(
+    local: NodeAddress,
+    broadcast: Broadcast,
+    udpTransport: ConnectionLessTransport.Service
+  ) =
+    for {
+      messageQueue <- Queue
+                       .bounded[Take[Error, Message[Chunk[Byte]]]](1000)
+                       .toManaged(_.shutdown)
+      messages = new Messages(local, messageQueue, broadcast, udpTransport)
+      _        <- messages.bind
+    } yield messages
+
+}
