@@ -10,7 +10,7 @@ trait MembershipProtocol {
   object Membership {
 
     trait Service[A] {
-      def broadcast(data: A): UIO[Unit]
+      def broadcast(data: A): IO[SerializationError, Unit]
       def send(data: A, recepient: NodeAddress): UIO[Unit]
       def receive: Stream[Nothing, (NodeAddress, A)]
     }

@@ -148,6 +148,7 @@ object PlumTree {
           override def broadcast(data: A): UIO[Unit] = {
             ByteCodec
               .encode(data)
+              .mapError(SendError.SerializationFailed(_))
               .flatMap { chunk =>
                 makeRandomUUID.flatMap { uuid =>
                   val round = Round.zero

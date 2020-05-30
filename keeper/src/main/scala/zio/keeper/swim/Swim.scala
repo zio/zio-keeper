@@ -1,7 +1,7 @@
 package zio.keeper.swim
 
 import izumi.reflect.Tags.Tag
-import zio.{ Queue, Schedule, UIO, ZLayer }
+import zio.{ Queue, Schedule, IO, UIO, ZLayer }
 import zio.clock.Clock
 import zio.config._
 import zio.duration._
@@ -54,11 +54,11 @@ object Swim {
         _          <- messages0.process(swim).toManaged_
       } yield new Membership.Service[B] {
 
-        override def broadcast(data: B): UIO[Unit] =
+        override def broadcast(data: B): IO[SerializationError, Unit] =
           (for {
             bytes <- ByteCodec.encode[User[B]](User(data))
             _     <- broadcast0.add(Message.Broadcast(bytes))
-          } yield ()).orDie
+          } yield ())
 
         override val receive: Stream[Nothing, (NodeAddress, B)] =
           ZStream.fromQueue(userIn).collect {
