@@ -9,12 +9,10 @@ import zio.duration._
 import zio.keeper.ByteCodec
 import zio.keeper.discovery.Discovery
 import zio.keeper.example.TestNode.UserProtocolExample.{ Ping, Pong }
-import zio.keeper.ByteCodec
-import zio.keeper.membership.swim.{ SWIM, SwimConfig }
-import zio.logging.Logging
+import zio.keeper.swim.SwimConfig
+import zio.logging.{ Logging, _ }
 import zio.nio.core.{ InetAddress, SocketAddress }
-import zio.keeper.membership._
-import zio.logging._
+import zio.keeper.swim._
 
 object Node1 extends zio.App {
 
@@ -51,7 +49,7 @@ object TestNode {
   def dependencies(port: Int, others: Set[Int]) = {
     val config     = Config.fromMap(Map("PORT" -> port.toString), SwimConfig.description).orDie
     val seeds      = discovery(others)
-    val membership = (seeds ++ logging ++ Clock.live ++ config) >>> SWIM.live[UserProtocolExample]
+    val membership = (seeds ++ logging ++ Clock.live ++ config) >>> Swim.live[UserProtocolExample]
     logging ++ membership
   }
 

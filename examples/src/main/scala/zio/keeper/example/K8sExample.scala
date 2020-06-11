@@ -8,10 +8,10 @@ import zio.duration._
 import zio.keeper.ByteCodec
 import zio.keeper.discovery.Discovery
 import zio.keeper.ByteCodec
-import zio.keeper.membership.swim.{ SWIM, SwimConfig }
+import zio.keeper.swim.{ Swim, SwimConfig }
 import zio.logging.Logging
 import zio.nio.core.InetAddress
-import zio.keeper.membership._
+import zio.keeper.swim._
 import zio.logging._
 import zio.console._
 import zio.keeper.example.K8sTestNode.ChaosMonkey.SimulateCpuSpike
@@ -34,7 +34,7 @@ object K8sTestNode extends zio.App {
     val config     = SwimConfig.fromEnv.orDie
     val logging    = Logging.console((_, msg) => msg)
     val seeds      = (logging ++ config) >>> discovery
-    val membership = (seeds ++ logging ++ Clock.live ++ config) >>> SWIM.live[ChaosMonkey]
+    val membership = (seeds ++ logging ++ Clock.live ++ config) >>> Swim.live[ChaosMonkey]
     logging ++ membership
   }
 
