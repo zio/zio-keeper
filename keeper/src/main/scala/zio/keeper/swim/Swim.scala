@@ -16,11 +16,21 @@ import zio.keeper.discovery._
 import zio.clock._
 
 object Swim {
+
+  trait Service[A] extends Membership.Service[A] {
+    def broadcast(data: A): IO[zio.keeper.Error, Unit]
+    def events: Stream[Nothing, MembershipEvent]
+    def localMember: NodeAddress
+    def nodes: UIO[Set[NodeAddress]]
+    def receive: Stream[Nothing, (NodeAddress, A)]
+    def send(data: A, receipt: NodeAddress): UIO[Unit]
+  }
+
   type SwimEnv = Config[SwimConfig] with Discovery with Logging with Clock
 
   final private[this] val QueueSize = 1000
 
-  def live[B: ByteCodec: Tag]: ZLayer[SwimEnv, Error, Membership[B]] = {
+  def live[B: ByteCodec: Tag]: ZLayer[SwimEnv, Error, Swim[B]] = {
     val internalLayer = ZLayer.requires[SwimEnv] ++ ConversationId.live ++ Nodes.live
 
     val managed =
@@ -52,7 +62,7 @@ object Swim {
         broadcast0 <- Broadcast.make(swimConfig.messageSizeLimit, swimConfig.broadcastResent).toManaged_
         messages0  <- Messages.make(localNodeAddress, broadcast0, udpTransport)
         _          <- messages0.process(swim).toManaged_
-      } yield new Membership.Service[B] {
+      } yield new Swim.Service[B] {
 
         override def broadcast(data: B): IO[SerializationError, Unit] =
           (for {
@@ -67,6 +77,14 @@ object Swim {
 
         override def send(data: B, receipt: NodeAddress): UIO[Unit] =
           Message.direct(receipt, data).provide(env).flatMap(userOut.offer(_).unit)
+
+        override def events: Stream[Nothing, MembershipEvent] =
+          env.get[Nodes.Service].events
+
+        override def localMember: NodeAddress = localNodeAddress
+
+        override def nodes: UIO[Set[NodeAddress]] =
+          env.get[Nodes.Service].healthyNodes.map(_.map(_._1).toSet)
       }
 
     internalLayer >>> ZLayer.fromManaged(managed)

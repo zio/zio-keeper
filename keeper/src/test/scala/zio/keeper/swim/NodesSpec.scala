@@ -1,15 +1,16 @@
-package zio.keeper
+package zio.keeper.swim
 
 import zio.ZLayer
 import zio.clock.Clock
-import zio.keeper.swim.Nodes
+import zio.keeper.MembershipEvent
+import zio.keeper.swim.Nodes._
+import zio.keeper.{ KeeperSpec, NodeAddress }
 import zio.logging.Logging
 import zio.stream.Sink
 import zio.test.Assertion._
-import zio.test.{ DefaultRunnableSpec, _ }
-import zio.keeper.swim.Nodes._
+import zio.test._
 
-object NodesSpec extends DefaultRunnableSpec {
+object NodesSpec extends KeeperSpec {
 
   val logger = Logging.console((_, line) => line)
 

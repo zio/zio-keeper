@@ -28,11 +28,6 @@ object Discovery {
    */
   def k8Dns(address: InetAddress, timeout: Duration, port: Int): ZLayer[Logging, Nothing, Discovery] =
     ZLayer.fromFunction { logging =>
-      new K8DnsDiscovery {
-        val log               = logging.get[Logger[String]]
-        val serviceDns        = address
-        val serviceDnsTimeout = timeout
-        val servicePort       = port
-      }
+      new K8DnsDiscovery(logging.get[Logger[String]], address, timeout, port)
     }
 }

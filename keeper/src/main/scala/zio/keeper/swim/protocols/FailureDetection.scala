@@ -28,7 +28,7 @@ object FailureDetection {
   implicit val pingCodec: ByteCodec[Ping.type] =
     ByteCodec.fromReadWriter(macroRW[Ping.type])
 
-  implicit val pingReccodec: ByteCodec[PingReq] =
+  implicit val pingReqCodec: ByteCodec[PingReq] =
     ByteCodec.fromReadWriter(macroRW[PingReq])
 
   implicit val byteCodec: ByteCodec[FailureDetection] =
@@ -94,7 +94,8 @@ object FailureDetection {
                                           changeNodeState(probedNode, NodeState.Suspicion) *>
                                           Message.noResponse
                                       case None =>
-                                        Message.noResponse
+                                        changeNodeState(probedNode, NodeState.Healthy) *>
+                                          Message.noResponse
                                     },
                                     protocolTimeout
                                   )

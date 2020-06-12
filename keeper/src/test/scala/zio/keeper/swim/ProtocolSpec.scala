@@ -1,13 +1,13 @@
-package zio.keeper
+package zio.keeper.swim
 
 import zio.ZIO
-import zio.keeper.PingPong.{ Ping, Pong }
-import zio.keeper.swim.{ ConversationId, Message, Protocol }
+import zio.keeper.swim.PingPong.{ Ping, Pong }
+import zio.keeper.{ ByteCodec, KeeperSpec, NodeAddress }
 import zio.stream.ZStream
 import zio.test.Assertion._
 import zio.test._
 
-object ProtocolSpec extends DefaultRunnableSpec {
+object ProtocolSpec extends KeeperSpec {
 
   val protocolDefinition = Protocol[PingPong].make(
     {

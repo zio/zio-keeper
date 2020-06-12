@@ -19,7 +19,7 @@ package object hyparview {
 
   type Enqueue[-A] = ZQueue[Any, Nothing, Any, Nothing, A, Any]
 
-  def broadcast(data: Chunk[Byte]): ZIO[Membership[Chunk[Byte]], SerializationError, Unit] =
+  def broadcast(data: Chunk[Byte]): ZIO[Membership[Chunk[Byte]], zio.keeper.Error, Unit] =
     ZIO.accessM(_.get.broadcast(data))
 
   def receive: ZStream[Membership[Chunk[Byte]], Error, (NodeAddress, Chunk[Byte])] =
