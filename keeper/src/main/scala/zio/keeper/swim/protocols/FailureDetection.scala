@@ -3,7 +3,7 @@ package zio.keeper.swim.protocols
 import upickle.default._
 import zio.duration._
 import zio.keeper.swim.Nodes.{ NodeState, _ }
-import zio.keeper.swim.{ LocalHealthAwareness, Message, Nodes, Protocol }
+import zio.keeper.swim.{ LocalHealthMultiplier, Message, Nodes, Protocol }
 import zio.keeper.{ ByteCodec, NodeAddress }
 import zio.logging._
 import zio.stm.{ STM, TMap }
@@ -59,7 +59,7 @@ object FailureDetection {
                         ZIO.succeedNow(Message.Direct(node, originalAckId, Ack))
                       case _ =>
                         Message.noResponse
-                    } <* LocalHealthAwareness.decrease
+                    } <* LocalHealthMultiplier.decrease
               case Message.Direct(sender, conversationId, Ping) =>
                 ZIO.succeedNow(Message.Direct(sender, conversationId, Ack))
 
@@ -90,14 +90,14 @@ object FailureDetection {
             ZStream
               .repeatEffectWith(
                 nextNode,
-                Schedule.forever.addDelayM(_ => LocalHealthAwareness.scaleTimeout(protocolPeriod))
+                Schedule.forever.addDelayM(_ => LocalHealthMultiplier.scaleTimeout(protocolPeriod))
               )
               .collectM {
                 case Some(probedNode) =>
                   Message
                     .direct(probedNode, Ping)
                     .tap(msg => pendingAcks.put(msg.conversationId, None).commit)
-                    .zip(LocalHealthAwareness.scaleTimeout(protocolTimeout))
+                    .zip(LocalHealthMultiplier.scaleTimeout(protocolTimeout))
                     .flatMap {
                       case (msg, timeout) =>
                         Message.withTimeout(
@@ -116,7 +116,7 @@ object FailureDetection {
     pendingNacks: TMap[Long, Unit],
     protocolTimeout: Duration,
     probedNode: NodeAddress
-  ): ZIO[LocalHealthAwareness with Nodes with Logging, keeper.Error, Message[PingReq]] =
+  ): ZIO[LocalHealthMultiplier with Nodes with Logging, keeper.Error, Message[PingReq]] =
     pendingAcks
       .get(msg.conversationId)
       .commit
@@ -124,11 +124,11 @@ object FailureDetection {
         case Some(_) =>
           log.warn(s"node: $probedNode missed ack with id ${msg.conversationId}") *>
             changeNodeState(probedNode, NodeState.Unreachable) *>
-            LocalHealthAwareness.increase *>
+            LocalHealthMultiplier.increase *>
             nextNode.flatMap {
               case Some(next) =>
                 pendingNacks.put(msg.conversationId, ()).commit *>
-                  LocalHealthAwareness
+                  LocalHealthMultiplier
                     .scaleTimeout(protocolTimeout)
                     .flatMap(
                       timeout =>
@@ -161,7 +161,7 @@ object FailureDetection {
       .flatMap {
         case Some(_) =>
           pendingAcks.delete(msg.conversationId).commit *>
-            (LocalHealthAwareness.increase *>
+            (LocalHealthMultiplier.increase *>
               pendingNacks
                 .delete(msg.conversationId)
                 .commit)

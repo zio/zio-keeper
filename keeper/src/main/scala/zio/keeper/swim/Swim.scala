@@ -31,7 +31,7 @@ object Swim {
   final private[this] val QueueSize = 1000
 
   def live[B: ByteCodec: Tag]: ZLayer[SwimEnv, Error, Swim[B]] = {
-    val internalLayer = ZLayer.requires[SwimEnv] ++ ConversationId.live ++ Nodes.live ++ LocalHealthAwareness.live(9)
+    val internalLayer = ZLayer.requires[SwimEnv] ++ ConversationId.live ++ Nodes.live ++ LocalHealthMultiplier.live(9)
 
     val managed =
       for {
