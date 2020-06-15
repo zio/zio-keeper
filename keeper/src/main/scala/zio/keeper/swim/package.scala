@@ -6,9 +6,9 @@ import zio.stream.ZStream
 import zio.{ Has, ZIO }
 
 package object swim {
-  type ConversationId = Has[ConversationId.Service]
-  type Nodes          = Has[Nodes.Service]
-  type Swim[A]        = Has[Swim.Service[A]]
+  type ConversationId       = Has[ConversationId.Service]
+  type Nodes                = Has[Nodes.Service]
+  type Swim[A]              = Has[Swim.Service[A]]
   type LocalHealthAwareness = Has[LocalHealthAwareness.Service]
 
   def broadcast[A: Tag](data: A): ZIO[Swim[A], Error, Unit] =

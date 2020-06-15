@@ -4,15 +4,15 @@ import zio._
 import zio.clock.Clock
 import zio.console.Console
 import zio.duration._
-import zio.keeper.{KeeperSpec, NodeAddress}
-import zio.keeper.swim.Nodes.{nodeState, _}
+import zio.keeper.{ KeeperSpec, NodeAddress }
+import zio.keeper.swim.Nodes.{ nodeState, _ }
 import zio.keeper.swim.ProtocolRecorder.ProtocolRecorder
 import zio.keeper.swim.protocols.FailureDetection
-import zio.keeper.swim.protocols.FailureDetection.{Ack, Ping, PingReq}
+import zio.keeper.swim.protocols.FailureDetection.{ Ack, Ping, PingReq }
 import zio.logging.Logging
 import zio.test.Assertion._
 import zio.test.environment.TestClock
-import zio.test.{assert, _}
+import zio.test.{ assert, _ }
 
 object FailureDetectionSpec extends KeeperSpec {
 

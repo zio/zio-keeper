@@ -2,7 +2,7 @@ package zio.keeper.swim
 
 import zio.duration.Duration
 import zio.stm.TRef
-import zio.{UIO, ULayer, URIO, ZIO, ZLayer}
+import zio.{ UIO, ULayer, URIO, ZIO, ZLayer }
 
 object LocalHealthAwareness {
 
@@ -14,7 +14,7 @@ object LocalHealthAwareness {
 
   def increase: URIO[LocalHealthAwareness, Unit] =
     ZIO.accessM[LocalHealthAwareness](_.get.increase)
-  
+
   def decrease: URIO[LocalHealthAwareness, Unit] =
     ZIO.accessM[LocalHealthAwareness](_.get.decrease)
 

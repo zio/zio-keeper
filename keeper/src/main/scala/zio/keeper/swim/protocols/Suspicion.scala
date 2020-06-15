@@ -4,9 +4,9 @@ import upickle.default.macroRW
 import zio.ZIO
 import zio.duration.Duration
 import zio.keeper.swim.Nodes._
-import zio.keeper.{ByteCodec, NodeAddress}
-import zio.keeper.swim.{LocalHealthAwareness, Message, Protocol}
-import zio.keeper.{ByteCodec, NodeAddress}
+import zio.keeper.{ ByteCodec, NodeAddress }
+import zio.keeper.swim.{ LocalHealthAwareness, Message, Protocol }
+import zio.keeper.{ ByteCodec, NodeAddress }
 
 sealed trait Suspicion
 

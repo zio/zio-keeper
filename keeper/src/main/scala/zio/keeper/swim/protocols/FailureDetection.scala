@@ -3,12 +3,12 @@ package zio.keeper.swim.protocols
 import upickle.default._
 import zio.duration._
 import zio.keeper.swim.Nodes.{ NodeState, _ }
-import zio.keeper.swim.{ LocalHealthAwareness, Message, Protocol }
+import zio.keeper.swim.{ LocalHealthAwareness, Message, Nodes, Protocol }
 import zio.keeper.{ ByteCodec, NodeAddress }
 import zio.logging._
 import zio.stm.{ STM, TMap }
 import zio.stream.ZStream
-import zio.{ Schedule, ZIO }
+import zio.{ Schedule, ZIO, keeper }
 
 sealed trait FailureDetection
 
@@ -101,55 +101,77 @@ object FailureDetection {
                     .flatMap {
                       case (msg, timeout) =>
                         Message.withTimeout(
-                          msg,
-                          pendingAcks
-                            .get(msg.conversationId)
-                            .commit
-                            .flatMap {
-                              case Some(_) =>
-                                log.warn(s"node: $probedNode missed ack with id ${msg.conversationId}") *>
-                                  changeNodeState(probedNode, NodeState.Unreachable) *>
-                                  LocalHealthAwareness.increase *>
-                                  nextNode.flatMap {
-                                    case Some(next) =>
-                                      pendingNacks.put(msg.conversationId, ()).commit *>
-                                        LocalHealthAwareness
-                                          .scaleTimeout(protocolTimeout)
-                                          .flatMap(
-                                            timeout =>
-                                              Message.withTimeout(
-                                                Message.Direct(next, msg.conversationId, PingReq(probedNode)),
-                                                pendingAcks
-                                                  .get(msg.conversationId)
-                                                  .commit
-                                                  .flatMap {
-                                                    case Some(_) =>
-                                                      pendingAcks.delete(msg.conversationId).commit *>
-                                                        (LocalHealthAwareness.increase *> pendingNacks
-                                                          .delete(msg.conversationId)
-                                                          .commit)
-                                                          .whenM(pendingNacks.contains(msg.conversationId).commit)
-                                                      changeNodeState(probedNode, NodeState.Suspicion) *>
-                                                        Message.noResponse
-                                                    case None =>
-                                                      changeNodeState(probedNode, NodeState.Healthy) *>
-                                                        Message.noResponse
-                                                  },
-                                                timeout
-                                              )
-                                          )
-
-                                    case None =>
-                                      changeNodeState(probedNode, NodeState.Dead) *>
-                                        Message.noResponse
-                                  }
-                              case None =>
-                                Message.noResponse
-                            },
-                          timeout
+                          message = msg,
+                          action = pingTimeoutAction(msg, pendingAcks, pendingNacks, protocolTimeout, probedNode),
+                          timeout = timeout
                         )
                     }
               }
           )
       }
+
+  private def pingTimeoutAction(
+    msg: Message.Direct[FailureDetection.Ping.type],
+    pendingAcks: TMap[Long, Option[(NodeAddress, Long)]],
+    pendingNacks: TMap[Long, Unit],
+    protocolTimeout: Duration,
+    probedNode: NodeAddress
+  ): ZIO[LocalHealthAwareness with Nodes with Logging, keeper.Error, Message[PingReq]] =
+    pendingAcks
+      .get(msg.conversationId)
+      .commit
+      .flatMap {
+        case Some(_) =>
+          log.warn(s"node: $probedNode missed ack with id ${msg.conversationId}") *>
+            changeNodeState(probedNode, NodeState.Unreachable) *>
+            LocalHealthAwareness.increase *>
+            nextNode.flatMap {
+              case Some(next) =>
+                pendingNacks.put(msg.conversationId, ()).commit *>
+                  LocalHealthAwareness
+                    .scaleTimeout(protocolTimeout)
+                    .flatMap(
+                      timeout =>
+                        Message.withTimeout(
+                          message = Message.Direct(next, msg.conversationId, PingReq(probedNode)),
+                          action = pingReqTimeoutAction(msg, pendingAcks, pendingNacks, probedNode),
+                          timeout = timeout
+                        )
+                    )
+
+              case None =>
+                // we don't know any other node to ask
+                changeNodeState(probedNode, NodeState.Dead) *>
+                  Message.noResponse
+            }
+        case None =>
+          // Ping was ack already
+          Message.noResponse
+      }
+
+  private def pingReqTimeoutAction(
+    msg: Message.Direct[FailureDetection.Ping.type],
+    pendingAcks: TMap[Long, Option[(NodeAddress, Long)]],
+    pendingNacks: TMap[Long, Unit],
+    probedNode: NodeAddress
+  ): ZIO[Nodes, keeper.Error, Message.NoResponse.type] =
+    pendingAcks
+      .get(msg.conversationId)
+      .commit
+      .flatMap {
+        case Some(_) =>
+          pendingAcks.delete(msg.conversationId).commit *>
+            (LocalHealthAwareness.increase *>
+              pendingNacks
+                .delete(msg.conversationId)
+                .commit)
+              .whenM(pendingNacks.contains(msg.conversationId).commit)
+          changeNodeState(probedNode, NodeState.Suspicion) *>
+            Message.noResponse
+        case None =>
+          // PingReq acked already
+          changeNodeState(probedNode, NodeState.Healthy) *>
+            Message.noResponse
+      }
+
 }
