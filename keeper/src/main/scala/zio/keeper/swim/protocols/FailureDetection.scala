@@ -14,10 +14,13 @@ sealed trait FailureDetection
 
 object FailureDetection {
 
-  final case object Ping                        extends FailureDetection
-  final case object Ack                         extends FailureDetection
-  final case object Nack                        extends FailureDetection
-  final case class PingReq(target: NodeAddress) extends FailureDetection
+  final case object Ping                                           extends FailureDetection
+  final case object Ack                                            extends FailureDetection
+  final case object Nack                                           extends FailureDetection
+  final case class PingReq(target: NodeAddress)                    extends FailureDetection
+  final case class Suspect(from: NodeAddress, nodeId: NodeAddress) extends FailureDetection
+  final case class Alive(nodeId: NodeAddress)                      extends FailureDetection
+  final case class Dead(nodeId: NodeAddress)                       extends FailureDetection
 
   implicit val ackCodec: ByteCodec[Ack.type] =
     ByteCodec.fromReadWriter(macroRW[Ack.type])
@@ -31,15 +34,27 @@ object FailureDetection {
   implicit val pingReqCodec: ByteCodec[PingReq] =
     ByteCodec.fromReadWriter(macroRW[PingReq])
 
+  implicit val suspectCodec: ByteCodec[Suspect] =
+    ByteCodec.fromReadWriter(macroRW[Suspect])
+
+  implicit val aliveCodec: ByteCodec[Alive] =
+    ByteCodec.fromReadWriter(macroRW[Alive])
+
+  implicit val deadCodec: ByteCodec[Dead] =
+    ByteCodec.fromReadWriter(macroRW[Dead])
+
   implicit val byteCodec: ByteCodec[FailureDetection] =
     ByteCodec.tagged[FailureDetection][
       Ack.type,
       Ping.type,
       PingReq,
-      Nack.type
+      Nack.type,
+      Suspect,
+      Alive,
+      Dead
     ]
 
-  def protocol(protocolPeriod: Duration, protocolTimeout: Duration) =
+  def protocol(protocolPeriod: Duration, protocolTimeout: Duration, localNode: NodeAddress) =
     TMap
       .empty[Long, Option[(NodeAddress, Long)]]
       .zip(TMap.empty[Long, Unit])
@@ -86,6 +101,42 @@ object FailureDetection {
               case Message.Direct(_, conversationId, Nack) =>
                 pendingNacks.delete(conversationId).commit *>
                   Message.noResponse
+              case Message.Direct(sender, _, Suspect(_, `localNode`)) =>
+                Message
+                  .direct(sender, Alive(localNode))
+                  .map(
+                    Message.Batch(
+                      _,
+                      Message.Broadcast(Alive(localNode))
+                    )
+                  ) <* LocalHealthMultiplier.increase
+
+              case Message.Direct(_, _, Suspect(_, node)) =>
+                nodeState(node)
+                  .orElseSucceed(NodeState.Dead)
+                  .flatMap {
+                    case NodeState.Dead | NodeState.Suspicion =>
+                      Message.noResponse
+                    case _ =>
+                      changeNodeState(node, NodeState.Suspicion).ignore *>
+                        Message.noResponse //it will trigger broadcast by events
+                  }
+
+              case Message.Direct(sender, _, msg @ Dead(nodeAddress)) if sender == nodeAddress =>
+                changeNodeState(nodeAddress, NodeState.Left).ignore
+                  .as(Message.Broadcast(msg))
+
+              case Message.Direct(_, _, msg @ Dead(nodeAddress)) =>
+                nodeState(nodeAddress).orElseSucceed(NodeState.Dead).flatMap {
+                  case NodeState.Dead => Message.noResponse
+                  case _ =>
+                    changeNodeState(nodeAddress, NodeState.Dead).ignore
+                      .as(Message.Broadcast(msg))
+                }
+
+              case Message.Direct(_, _, msg @ Alive(nodeAddress)) =>
+                changeNodeState(nodeAddress, NodeState.Healthy).ignore
+                  .as(Message.Broadcast(msg))
             },
             ZStream
               .repeatEffectWith(
@@ -101,9 +152,16 @@ object FailureDetection {
                     .flatMap {
                       case (msg, timeout) =>
                         Message.withTimeout(
-                          message = msg,
-                          action = pingTimeoutAction(msg, pendingAcks, pendingNacks, protocolTimeout, probedNode),
-                          timeout = timeout
+                          msg,
+                          pingTimeoutAction(
+                            msg,
+                            pendingAcks,
+                            pendingNacks,
+                            protocolTimeout,
+                            probedNode,
+                            localNode
+                          ),
+                          timeout
                         )
                     }
               }
@@ -115,8 +173,9 @@ object FailureDetection {
     pendingAcks: TMap[Long, Option[(NodeAddress, Long)]],
     pendingNacks: TMap[Long, Unit],
     protocolTimeout: Duration,
-    probedNode: NodeAddress
-  ): ZIO[LocalHealthMultiplier with Nodes with Logging, keeper.Error, Message[PingReq]] =
+    probedNode: NodeAddress,
+    localNode: NodeAddress
+  ): ZIO[LocalHealthMultiplier with Nodes with Logging, keeper.Error, Message[FailureDetection]] =
     pendingAcks
       .get(msg.conversationId)
       .commit
@@ -133,9 +192,9 @@ object FailureDetection {
                     .flatMap(
                       timeout =>
                         Message.withTimeout(
-                          message = Message.Direct(next, msg.conversationId, PingReq(probedNode)),
-                          action = pingReqTimeoutAction(msg, pendingAcks, pendingNacks, probedNode),
-                          timeout = timeout
+                          Message.Direct(next, msg.conversationId, PingReq(probedNode)),
+                          pingReqTimeoutAction(msg, pendingAcks, pendingNacks, protocolTimeout, probedNode, localNode),
+                          timeout
                         )
                     )
 
@@ -153,8 +212,10 @@ object FailureDetection {
     msg: Message.Direct[FailureDetection.Ping.type],
     pendingAcks: TMap[Long, Option[(NodeAddress, Long)]],
     pendingNacks: TMap[Long, Unit],
-    probedNode: NodeAddress
-  ): ZIO[Nodes, keeper.Error, Message.NoResponse.type] =
+    protocolTimeout: Duration,
+    probedNode: NodeAddress,
+    localNode: NodeAddress
+  ): ZIO[Nodes, keeper.Error, Message[FailureDetection]] =
     pendingAcks
       .get(msg.conversationId)
       .commit
@@ -167,7 +228,15 @@ object FailureDetection {
                 .commit)
               .whenM(pendingNacks.contains(msg.conversationId).commit)
           changeNodeState(probedNode, NodeState.Suspicion) *>
-            Message.noResponse
+            Message.withTimeout(
+              Message.Broadcast(Suspect(localNode, probedNode)),
+              ZIO.ifM(nodeState(probedNode).map(_ == NodeState.Suspicion).orElseSucceed(false))(
+                changeNodeState(probedNode, NodeState.Dead)
+                  .as(Message.Broadcast(Dead(probedNode))),
+                Message.noResponse
+              ),
+              protocolTimeout
+            )
         case None =>
           // PingReq acked already
           changeNodeState(probedNode, NodeState.Healthy) *>

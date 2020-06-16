@@ -24,7 +24,7 @@ object FailureDetectionSpec extends KeeperSpec {
       ProtocolRecorder
         .make(
           FailureDetection
-            .protocol(1.second, 500.milliseconds)
+            .protocol(1.second, 500.milliseconds, NodeAddress(Array[Byte](1, 1, 1, 1), 1111))
             .flatMap(_.debug)
         )
         .orDie

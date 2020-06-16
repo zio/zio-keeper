@@ -10,7 +10,8 @@ case class SwimConfig(
   protocolTimeout: Duration,
   suspicionTimeout: Duration,
   messageSizeLimit: Int,
-  broadcastResent: Int
+  broadcastResent: Int,
+  localHealthMaxMultiplier: Int
 )
 
 object SwimConfig {
@@ -21,7 +22,8 @@ object SwimConfig {
       zioDuration("PROTOCOL_TIMEOUT").default(1.seconds) |@|
       zioDuration("SUSPICION_TIMEOUT").default(3.seconds) |@|
       int("MESSAGE_SIZE_LIMIT").default(64000) |@|
-      int("BROADCAST_RESENT").default(10))(SwimConfig.apply, SwimConfig.unapply)
+      int("BROADCAST_RESENT").default(10) |@|
+      int("LOCAL_HEALTH_MAX_MULTIPLIER").default(9))(SwimConfig.apply, SwimConfig.unapply)
 
   val fromEnv = Config.fromSystemEnv(description)
 }

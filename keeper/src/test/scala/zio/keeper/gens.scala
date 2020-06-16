@@ -7,9 +7,8 @@ import zio.keeper.hyparview.ActiveProtocol._
 import zio.keeper.hyparview.InitialProtocol._
 import zio.keeper.hyparview.NeighborReply._
 import zio.keeper.hyparview._
-import zio.keeper.swim.protocols.{ FailureDetection, Initial, Suspicion }
-import zio.keeper.swim.protocols.FailureDetection.{ Ack, Nack, Ping, PingReq }
-import zio.keeper.swim.protocols.Suspicion.{ Alive, Dead, Suspect }
+import zio.keeper.swim.protocols.{ FailureDetection, Initial }
+import zio.keeper.swim.protocols.FailureDetection.{ Ack, Alive, Dead, Nack, Ping, PingReq, Suspect }
 import zio.random.Random
 import zio.test._
 
@@ -124,9 +123,6 @@ object gens {
   val pingReq: Gen[Random with Sized, PingReq] =
     nodeAddress.map(PingReq(_))
 
-  val failureDetectionProtocol: Gen[Random with Sized, FailureDetection] =
-    Gen.oneOf(ping, ack, nack, pingReq)
-
   val suspect: Gen[Random with Sized, Suspect] =
     nodeAddress.zip(nodeAddress).map { case (from, to) => Suspect(from, to) }
 
@@ -136,8 +132,8 @@ object gens {
   val dead: Gen[Random with Sized, Dead] =
     nodeAddress.map(Dead)
 
-  val suspicionProtocol: Gen[Random with Sized, Suspicion] =
-    Gen.oneOf(suspect, alive, dead)
+  val failureDetectionProtocol: Gen[Random with Sized, FailureDetection] =
+    Gen.oneOf(ping, ack, nack, pingReq, suspect, alive, dead)
 
   val swimJoin: Gen[Random with Sized, Initial.Join] =
     nodeAddress.map(Initial.Join)

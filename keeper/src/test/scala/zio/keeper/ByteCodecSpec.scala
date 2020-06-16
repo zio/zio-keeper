@@ -7,9 +7,8 @@ import zio.keeper.hyparview.InitialProtocol._
 import zio.keeper.hyparview.JoinReply
 import zio.keeper.hyparview.NeighborReply
 import zio.keeper.hyparview.NeighborReply._
-import zio.keeper.swim.protocols.{ FailureDetection, Initial, Suspicion }
-import zio.keeper.swim.protocols.FailureDetection.{ Ack, Nack, Ping, PingReq }
-import zio.keeper.swim.protocols.Suspicion.{ Alive, Dead, Suspect }
+import zio.keeper.swim.protocols.{ FailureDetection, Initial }
+import zio.keeper.swim.protocols.FailureDetection.{ Ack, Alive, Dead, Nack, Ping, PingReq, Suspect }
 import zio.test._
 
 object ByteCodecSpec extends DefaultRunnableSpec {
@@ -48,7 +47,6 @@ object ByteCodecSpec extends DefaultRunnableSpec {
       ByteCodecLaws[Suspect](gens.suspect),
       ByteCodecLaws[Alive](gens.alive),
       ByteCodecLaws[Dead](gens.dead),
-      ByteCodecLaws[Suspicion](gens.suspicionProtocol),
       //swim initial
       ByteCodecLaws[Initial.Join](gens.swimJoin),
       ByteCodecLaws[Initial.Accept.type](gens.swimAccept),
