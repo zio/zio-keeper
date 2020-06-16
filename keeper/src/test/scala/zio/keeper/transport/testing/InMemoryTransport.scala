@@ -95,7 +95,7 @@ object InMemoryTransport {
           receiveEnd <- Promise.make[Nothing, Option[TransportError]]
         } yield new ChunkConnection {
 
-          override def send(data: Chunk[Byte]): ZIO[Any, TransportError, Unit] =
+          override def send(data: Chunk[Byte]): IO[TransportError, Unit] =
             sendLock.withPermit {
               isConnected.flatMap {
                 case false =>

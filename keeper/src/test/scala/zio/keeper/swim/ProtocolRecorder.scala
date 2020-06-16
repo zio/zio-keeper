@@ -15,7 +15,9 @@ object ProtocolRecorder {
     def send(msg: Message.Direct[A]): IO[zio.keeper.Error, Message[A]]
   }
 
-  def apply[A: Tag](pf: PartialFunction[Message.Direct[A], Message[A]] = PartialFunction.empty) =
+  def apply[A: Tag](
+    pf: PartialFunction[Message.Direct[A], Message[A]] = PartialFunction.empty
+  ): ZIO[ProtocolRecorder[A], Nothing, Service[A]] =
     ZIO.accessM[ProtocolRecorder[A]](recorder => recorder.get.withBehavior(pf))
 
   def make[R, E, A: Tag](

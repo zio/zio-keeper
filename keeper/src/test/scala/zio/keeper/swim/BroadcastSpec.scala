@@ -7,7 +7,7 @@ import zio.{ Chunk, ZIO }
 
 object BroadcastSpec extends KeeperSpec {
 
-  def generateMessage(size: Int) =
+  def generateMessage(size: Int): Chunk[Byte] =
     Chunk.fromArray(Array.fill[Byte](size)(1))
 
   val spec = suite("broadcast")(

@@ -36,7 +36,7 @@ object NodeAddress {
       .map(addr => NodeAddress(addr.address, port))
       .orDie
 
-  implicit val nodeAddressRw = macroRW[NodeAddress]
+  implicit val nodeAddressRw: ReadWriter[NodeAddress] = macroRW[NodeAddress]
 
   implicit val byteCodec: ByteCodec[NodeAddress] =
     ByteCodec.fromReadWriter(nodeAddressRw)

@@ -40,14 +40,14 @@ class TestTransport(in: Queue[WithPiggyback], out: Queue[WithPiggyback]) extends
       )
     )
 
-  def incommingMessage(msg: WithPiggyback) = in.offer(msg)
-  def outgoingMessages                     = ZStream.fromQueue(out)
+  def incommingMessage(msg: WithPiggyback): UIO[Boolean] = in.offer(msg)
+  def outgoingMessages: Stream[Nothing, WithPiggyback]   = ZStream.fromQueue(out)
 
 }
 
 object TestTransport {
 
-  def make =
+  def make: UManaged[TestTransport] =
     for {
       in  <- Queue.bounded[WithPiggyback](100).toManaged(_.shutdown)
       out <- Queue.bounded[WithPiggyback](100).toManaged(_.shutdown)

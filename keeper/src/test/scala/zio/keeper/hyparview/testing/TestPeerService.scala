@@ -89,12 +89,12 @@ object TestPeerService {
           } yield ()
       },
       new PeerService.Service {
-        override val identity: ZIO[Any, Nothing, NodeAddress] = ZIO.succeed(identifier)
+        override val identity: UIO[NodeAddress] = ZIO.succeed(identifier)
 
-        override val getPeers: ZIO[Any, Nothing, Set[NodeAddress]] =
+        override val getPeers: UIO[Set[NodeAddress]] =
           ref.get.commit
 
-        override def send(to: NodeAddress, message: PlumTreeProtocol): ZIO[Any, SendError, Unit] =
+        override def send(to: NodeAddress, message: PlumTreeProtocol): IO[SendError, Unit] =
           ref.get.map(_.contains(to)).commit.flatMap {
             case false => ZIO.fail(SendError.NotConnected)
             case true =>
