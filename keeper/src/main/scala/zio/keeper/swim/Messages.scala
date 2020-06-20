@@ -6,7 +6,7 @@ import zio.clock.Clock
 import zio.keeper.swim.Message.WithTimeout
 import zio.keeper.swim.Messages.WithPiggyback
 import zio.keeper.transport.{ Channel, ConnectionLessTransport }
-import zio.keeper.{ ByteCodec, Error, NodeAddress }
+import zio.keeper.{ ByteCodec, Error, NodeAddress, TransportError }
 import zio.logging.{ Logging, log }
 import zio.stream.{ Take, ZStream }
 
@@ -82,7 +82,7 @@ final class Messages(
         send(message) *> action.delay(timeout).flatMap(send).unit
     }
 
-  private def bind =
+  private def bind: ZManaged[Logging, TransportError, Unit] =
     for {
       localAddress <- local.socketAddress.toManaged_
       _            <- log.info("bind to " + localAddress).toManaged_
@@ -94,7 +94,7 @@ final class Messages(
             }
     } yield ()
 
-  def process(protocol: Protocol[Chunk[Byte]]) =
+  def process(protocol: Protocol[Chunk[Byte]]): ZIO[Clock with Logging, Nothing, Fiber.Runtime[Nothing, Unit]] =
     ZStream
       .fromQueue(messages)
       .collectM {
@@ -147,7 +147,7 @@ object Messages {
     local: NodeAddress,
     broadcast: Broadcast,
     udpTransport: ConnectionLessTransport.Service
-  ) =
+  ): ZManaged[Logging, TransportError, Messages] =
     for {
       messageQueue <- Queue
                        .bounded[Take[Error, Message[Chunk[Byte]]]](1000)

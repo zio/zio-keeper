@@ -1,8 +1,9 @@
 package zio.keeper.swim
 
+import zio.Layer
+import zio.config.{ Config, ConfigDescriptor, ReadError }
 import zio.config.ConfigDescriptor._
 import zio.duration.{ Duration, _ }
-import zio.config.Config
 
 case class SwimConfig(
   port: Int,
@@ -15,7 +16,7 @@ case class SwimConfig(
 
 object SwimConfig {
 
-  val description =
+  val description: ConfigDescriptor[SwimConfig] =
     (int("PORT").default(5557) |@|
       zioDuration("PROTOCOL_INTERVAL").default(3.seconds) |@|
       zioDuration("PROTOCOL_TIMEOUT").default(1.seconds) |@|
@@ -23,5 +24,5 @@ object SwimConfig {
       int("MESSAGE_SIZE_LIMIT").default(64000) |@|
       int("BROADCAST_RESENT").default(10))(SwimConfig.apply, SwimConfig.unapply)
 
-  val fromEnv = Config.fromSystemEnv(description)
+  val fromEnv: Layer[ReadError[String], Config[SwimConfig]] = Config.fromSystemEnv(description)
 }

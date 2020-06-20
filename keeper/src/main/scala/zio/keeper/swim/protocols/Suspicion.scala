@@ -1,11 +1,10 @@
 package zio.keeper.swim.protocols
 
 import upickle.default.macroRW
-import zio.ZIO
+import zio.{ ZIO, keeper }
 import zio.duration.Duration
 import zio.keeper.swim.Nodes._
-import zio.keeper.{ ByteCodec, NodeAddress }
-import zio.keeper.swim.{ Message, Protocol }
+import zio.keeper.swim.{ ConversationId, Message, Nodes, Protocol }
 import zio.keeper.{ ByteCodec, NodeAddress }
 
 sealed trait Suspicion
@@ -32,7 +31,9 @@ object Suspicion {
       Dead
     ]
 
-  def protocol(local: NodeAddress, timeout: Duration) =
+  type Env = ConversationId with Nodes
+
+  def protocol(local: NodeAddress, timeout: Duration): ZIO[Env, keeper.Error, Protocol[Suspicion]] =
     Protocol[Suspicion].make(
       {
         case Message.Direct(sender, _, Suspect(_, `local`)) =>

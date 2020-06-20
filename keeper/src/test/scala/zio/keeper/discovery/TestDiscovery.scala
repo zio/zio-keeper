@@ -1,9 +1,10 @@
 package zio.keeper.discovery
 
 import zio._
-import zio.keeper.NodeAddress
+import zio.keeper.{ NodeAddress, TransportError }
 import zio.logging.Logging
 import zio.logging._
+import zio.nio.core.InetSocketAddress
 import zio.random._
 
 object TestDiscovery {
@@ -39,17 +40,17 @@ object TestDiscovery {
 
   private class Test(ref: Ref[Set[NodeAddress]], port: Ref[Int], logger: Logger[String]) extends Service {
 
-    val discoverNodes =
+    val discoverNodes: IO[TransportError, Set[InetSocketAddress]] =
       for {
         members <- ref.get
         addrs   <- IO.collectAll(members.map(_.socketAddress))
       } yield addrs.toSet
 
-    def addMember(m: NodeAddress) =
+    def addMember(m: NodeAddress): UIO[Unit] =
       logger.info("adding node: " + m) *>
         ref.update(_ + m).unit
 
-    def removeMember(m: NodeAddress) =
+    def removeMember(m: NodeAddress): UIO[Unit] =
       logger.info("removing node: " + m) *>
         ref.update(_ - m).unit
 
