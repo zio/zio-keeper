@@ -1,14 +1,15 @@
 package zio.keeper.swim.protocols
 
 import upickle.default._
+import zio.clock.Clock
 import zio.duration._
 import zio.keeper.{ ByteCodec, NodeAddress }
 import zio.keeper.swim.Nodes.{ NodeState, _ }
-import zio.keeper.swim.{ Message, Protocol }
+import zio.keeper.swim.{ ConversationId, Message, Nodes, Protocol }
 import zio.logging._
 import zio.stm.TMap
 import zio.stream.ZStream
-import zio.{ Schedule, ZIO }
+import zio.{ Schedule, ZIO, keeper }
 
 sealed trait FailureDetection
 
@@ -39,7 +40,12 @@ object FailureDetection {
       Nack.type
     ]
 
-  def protocol(protocolPeriod: Duration, protocolTimeout: Duration) =
+  type Env = Logging with ConversationId with Nodes with Clock
+
+  def protocol(
+    protocolPeriod: Duration,
+    protocolTimeout: Duration
+  ): ZIO[Env, keeper.Error, Protocol[FailureDetection]] =
     for {
       pendingAcks <- TMap.empty[Long, Option[(NodeAddress, Long)]].commit
       protocol <- {

@@ -3,6 +3,7 @@ package zio.keeper.transport
 import zio._
 import zio.console.{ Console, _ }
 import zio.duration._
+import zio.keeper.TransportError
 import zio.logging.Logging
 import zio.nio.core.SocketAddress
 import zio.test.Assertion._
@@ -18,7 +19,7 @@ object TransportSpec extends DefaultRunnableSpec {
     addr: SocketAddress,
     startServer: Promise[Nothing, SocketAddress],
     handler: Channel => UIO[Unit] = _ => ZIO.unit
-  ) =
+  ): ZIO[ConnectionLessTransport, TransportError, Chunk[Byte]] =
     for {
       q <- Queue.bounded[Chunk[Byte]](10)
       h = (out: Channel) => {

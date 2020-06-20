@@ -1,10 +1,11 @@
 package zio.keeper.swim.protocols
 
 import upickle.default._
+import zio.{ ZIO, keeper }
 import zio.keeper.discovery._
 import zio.keeper.{ ByteCodec, NodeAddress }
 import zio.keeper.swim.Nodes.{ NodeState, _ }
-import zio.keeper.swim.{ Message, Protocol }
+import zio.keeper.swim.{ ConversationId, Message, Nodes, Protocol }
 import zio.logging._
 import zio.stream.ZStream
 
@@ -32,7 +33,9 @@ object Initial {
       Reject
     ]
 
-  def protocol(local: NodeAddress) =
+  type Env = ConversationId with Nodes with Logging with Discovery
+
+  def protocol(local: NodeAddress): ZIO[Env, keeper.Error, Protocol[Initial]] =
     Protocol[Initial].make(
       {
         case Message.Direct(_, _, Join(addr)) if addr == local =>

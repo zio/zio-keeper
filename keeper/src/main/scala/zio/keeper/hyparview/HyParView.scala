@@ -63,10 +63,10 @@ object HyParView {
               .fork
         _ <- ZIO.foreach_(seedNodes)(sendInitial0(_, InitialProtocol.Join(localAddr))).toManaged_
       } yield new PeerService.Service {
-        override val identity: ZIO[Any, Nothing, NodeAddress] =
+        override val identity: UIO[NodeAddress] =
           ZIO.succeed(localAddr)
 
-        override val getPeers: IO[Nothing, Set[NodeAddress]] =
+        override val getPeers: UIO[Set[NodeAddress]] =
           Views.activeView.commit.provide(env)
 
         override def send(to: NodeAddress, message: PlumTreeProtocol): IO[SendError, Unit] =
