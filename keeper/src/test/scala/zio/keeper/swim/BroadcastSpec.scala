@@ -1,11 +1,16 @@
 package zio.keeper.swim
 
-import zio.keeper.KeeperSpec
+import zio.clock.Clock
+import zio.keeper.{ KeeperSpec, NodeAddress }
+import zio.logging.Logging
 import zio.test.Assertion._
 import zio.test._
-import zio.{ Chunk, ZIO }
+import zio.{ Chunk, ZIO, ZLayer }
 
 object BroadcastSpec extends KeeperSpec {
+
+  val logger    = Logging.console((_, line) => line)
+  val testLayer = ((ZLayer.requires[Clock] ++ logger) >>> Nodes.live)
 
   def generateMessage(size: Int) =
     Chunk.fromArray(Array.fill[Byte](size)(1))
@@ -14,6 +19,8 @@ object BroadcastSpec extends KeeperSpec {
     testM("add and retrieve from broadcast") {
       for {
         broadcast <- Broadcast.make(500, 2)
+        _         <- Nodes.addNode(NodeAddress(Array(1, 1, 1, 1), 1111))
+        _         <- Nodes.addNode(NodeAddress(Array(2, 2, 2, 2), 1111))
         _         <- broadcast.add(Message.Broadcast(generateMessage(100)))
         _         <- broadcast.add(Message.Broadcast(generateMessage(50)))
         _         <- broadcast.add(Message.Broadcast(generateMessage(200)))
@@ -23,6 +30,8 @@ object BroadcastSpec extends KeeperSpec {
     testM("resent message") {
       for {
         broadcast <- Broadcast.make(500, 2)
+        _         <- Nodes.addNode(NodeAddress(Array(1, 1, 1, 1), 1111))
+        _         <- Nodes.addNode(NodeAddress(Array(2, 2, 2, 2), 1111))
         _         <- broadcast.add(Message.Broadcast(generateMessage(100)))
         result <- ZIO.reduceAll(
                    ZIO.succeedNow(List.empty[Chunk[Byte]]),
@@ -30,5 +39,5 @@ object BroadcastSpec extends KeeperSpec {
                  )(_ ++ _)
       } yield assert(result.size)(equalTo(2))
     }
-  )
+  ).provideCustomLayer(testLayer)
 }
