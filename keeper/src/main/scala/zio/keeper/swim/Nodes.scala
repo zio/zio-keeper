@@ -43,9 +43,9 @@ object Nodes {
     val internalEvents: Stream[Nothing, NodeStateChanged]
 
     /**
-     * Returns next Healthy node.
+     * Returns next node.
      */
-    val next: UIO[Option[NodeAddress]]
+    def next(exclude: Option[NodeAddress]): UIO[Option[(NodeAddress, NodeState)]]
 
     /**
      * Node state for given NodeId.
@@ -68,8 +68,8 @@ object Nodes {
   def addNode(node: NodeAddress): ZIO[Nodes, Nothing, Unit] =
     ZIO.accessM[Nodes](_.get.addNode(node))
 
-  val nextNode: URIO[Nodes, Option[NodeAddress]] =
-    ZIO.accessM[Nodes](_.get.next)
+  def nextNode(exclude: Option[NodeAddress] = None): URIO[Nodes, Option[(NodeAddress, NodeState)]] =
+    ZIO.accessM[Nodes](_.get.next(exclude))
 
   def nodeState(id: NodeAddress): ZIO[Nodes, Error, NodeState] =
     ZIO.accessM[Nodes](_.get.nodeState(id))
@@ -92,12 +92,11 @@ object Nodes {
   sealed trait NodeState
 
   object NodeState {
-    case object Init        extends NodeState
-    case object Healthy     extends NodeState
-    case object Unreachable extends NodeState
-    case object Suspicion   extends NodeState
-    case object Dead        extends NodeState
-    case object Left        extends NodeState
+    case object Init      extends NodeState
+    case object Healthy   extends NodeState
+    case object Suspicion extends NodeState
+    case object Dead      extends NodeState
+    case object Left      extends NodeState
   }
 
   final case class NodeStateChanged(node: NodeAddress, oldState: NodeState, newState: NodeState)
@@ -148,12 +147,22 @@ object Nodes {
         val internalEvents: Stream[Nothing, NodeStateChanged] =
           ZStream.fromQueue(internalEventsQueue)
 
-        val next: UIO[Option[NodeAddress]] /*(exclude: List[NodeId] = Nil)*/ =
+        def next(
+          exclude: Option[NodeAddress]
+        ): UIO[Option[(NodeAddress, NodeState)]] /*(exclude: List[NodeId] = Nil)*/ =
           for {
-            list      <- healthyNodes
+            list <- nodeStates.toList
+                     .map(
+                       _.filter(
+                         entry =>
+                           (entry._2 == NodeState.Healthy || entry._2 == NodeState.Suspicion) && !exclude
+                             .contains(entry._1)
+                       )
+                     )
+                     .commit
             nextIndex <- roundRobinOffset.updateAndGet(old => if (old < list.size - 1) old + 1 else 0)
             _         <- nodeStates.removeIf((_, v) => v == NodeState.Dead).when(nextIndex == 0).commit
-          } yield list.drop(nextIndex).headOption.map(_._1)
+          } yield list.drop(nextIndex).headOption
 
         def nodeState(id: NodeAddress): IO[Error, NodeState] =
           nodeStates.get(id).commit.get.orElseFail(UnknownNode(id))

@@ -3,7 +3,7 @@ package zio.keeper.swim.protocols
 import upickle.default._
 import zio.duration._
 import zio.keeper.swim.Nodes.{ NodeState, _ }
-import zio.keeper.swim.{ LocalHealthMultiplier, Message, Nodes, Protocol }
+import zio.keeper.swim.{ ConversationId, LocalHealthMultiplier, Message, Nodes, Protocol }
 import zio.keeper.{ ByteCodec, NodeAddress }
 import zio.logging._
 import zio.stm.{ STM, TMap }
@@ -140,21 +140,67 @@ object FailureDetection {
             },
             ZStream
               .repeatEffectWith(
-                nextNode,
+                nextNode().zip(ConversationId.next),
                 Schedule.forever.addDelayM(_ => LocalHealthMultiplier.scaleTimeout(protocolPeriod))
               )
               .collectM {
-                case Some(probedNode) =>
-                  Message
-                    .direct(probedNode, Ping)
-                    .tap(msg => pendingAcks.put(msg.conversationId, None).commit)
-                    .zip(LocalHealthMultiplier.scaleTimeout(protocolTimeout))
-                    .flatMap {
-                      case (msg, timeout) =>
+                case (Some((probedNode, state)), conversationId) =>
+                  pendingAcks.put(conversationId, None).commit *>
+                    LocalHealthMultiplier
+                      .scaleTimeout(protocolTimeout)
+                      .flatMap(
+                        timeout =>
+                          Message.withTimeout(
+                            if (state != NodeState.Healthy)
+                              Message.Batch(
+                                Message.Direct(probedNode, conversationId, Ping),
+                                //this is part of buddy system
+                                Message.Direct(probedNode, conversationId, Suspect(localNode, probedNode))
+                              )
+                            else
+                              Message.Direct(probedNode, conversationId, Ping),
+                            pingTimeoutAction(
+                              conversationId,
+                              pendingAcks,
+                              pendingNacks,
+                              protocolTimeout,
+                              probedNode,
+                              localNode
+                            ),
+                            timeout
+                          )
+                      )
+
+              }
+          )
+      }
+
+  private def pingTimeoutAction(
+    conversationId: Long,
+    pendingAcks: TMap[Long, Option[(NodeAddress, Long)]],
+    pendingNacks: TMap[Long, Unit],
+    protocolTimeout: Duration,
+    probedNode: NodeAddress,
+    localNode: NodeAddress
+  ): ZIO[LocalHealthMultiplier with Nodes with Logging, keeper.Error, Message[FailureDetection]] =
+    pendingAcks
+      .get(conversationId)
+      .commit
+      .flatMap {
+        case Some(_) =>
+          log.warn(s"node: $probedNode missed ack with id ${conversationId}") *>
+            LocalHealthMultiplier.increase *>
+            nextNode(Some(probedNode)).flatMap {
+              case Some((next, _)) =>
+                pendingNacks.put(conversationId, ()).commit *>
+                  LocalHealthMultiplier
+                    .scaleTimeout(protocolTimeout)
+                    .flatMap(
+                      timeout =>
                         Message.withTimeout(
-                          msg,
-                          pingTimeoutAction(
-                            msg,
+                          Message.Direct(next, conversationId, PingReq(probedNode)),
+                          pingReqTimeoutAction(
+                            conversationId,
                             pendingAcks,
                             pendingNacks,
                             protocolTimeout,
@@ -163,41 +209,7 @@ object FailureDetection {
                           ),
                           timeout
                         )
-                    }
-              }
-          )
-      }
-
-  private def pingTimeoutAction(
-    msg: Message.Direct[FailureDetection.Ping.type],
-    pendingAcks: TMap[Long, Option[(NodeAddress, Long)]],
-    pendingNacks: TMap[Long, Unit],
-    protocolTimeout: Duration,
-    probedNode: NodeAddress,
-    localNode: NodeAddress
-  ): ZIO[LocalHealthMultiplier with Nodes with Logging, keeper.Error, Message[FailureDetection]] =
-    pendingAcks
-      .get(msg.conversationId)
-      .commit
-      .flatMap {
-        case Some(_) =>
-          log.warn(s"node: $probedNode missed ack with id ${msg.conversationId}") *>
-            changeNodeState(probedNode, NodeState.Unreachable) *>
-            LocalHealthMultiplier.increase *>
-            nextNode.flatMap {
-              case Some(next) =>
-                pendingNacks.put(msg.conversationId, ()).commit *>
-                  LocalHealthMultiplier
-                    .scaleTimeout(protocolTimeout)
-                    .flatMap(
-                      timeout =>
-                        Message.withTimeout(
-                          Message.Direct(next, msg.conversationId, PingReq(probedNode)),
-                          pingReqTimeoutAction(msg, pendingAcks, pendingNacks, protocolTimeout, probedNode, localNode),
-                          timeout
-                        )
                     )
-
               case None =>
                 // we don't know any other node to ask
                 changeNodeState(probedNode, NodeState.Dead) *>
@@ -209,25 +221,25 @@ object FailureDetection {
       }
 
   private def pingReqTimeoutAction(
-    msg: Message.Direct[FailureDetection.Ping.type],
+    conversationId: Long,
     pendingAcks: TMap[Long, Option[(NodeAddress, Long)]],
     pendingNacks: TMap[Long, Unit],
     protocolTimeout: Duration,
     probedNode: NodeAddress,
     localNode: NodeAddress
-  ): ZIO[Nodes, keeper.Error, Message[FailureDetection]] =
+  ): ZIO[Nodes with LocalHealthMultiplier, keeper.Error, Message[FailureDetection]] =
     pendingAcks
-      .get(msg.conversationId)
+      .get(conversationId)
       .commit
       .flatMap {
         case Some(_) =>
-          pendingAcks.delete(msg.conversationId).commit *>
+          pendingAcks.delete(conversationId).commit *>
             (LocalHealthMultiplier.increase *>
               pendingNacks
-                .delete(msg.conversationId)
+                .delete(conversationId)
                 .commit)
-              .whenM(pendingNacks.contains(msg.conversationId).commit)
-          changeNodeState(probedNode, NodeState.Suspicion) *>
+              .whenM(pendingNacks.contains(conversationId).commit) *>
+            changeNodeState(probedNode, NodeState.Suspicion) *>
             Message.withTimeout(
               Message.Broadcast(Suspect(localNode, probedNode)),
               ZIO.ifM(nodeState(probedNode).map(_ == NodeState.Suspicion).orElseSucceed(false))(
