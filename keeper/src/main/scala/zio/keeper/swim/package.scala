@@ -8,6 +8,7 @@ import zio.{ Has, ZIO }
 package object swim {
   type ConversationId        = Has[ConversationId.Service]
   type Nodes                 = Has[Nodes.Service]
+  type MessageAcknowledge    = Has[MessageAcknowledge.Service]
   type Swim[A]               = Has[Swim.Service[A]]
   type LocalHealthMultiplier = Has[LocalHealthMultiplier.Service]
 

@@ -20,7 +20,8 @@ object FailureDetectionSpec extends KeeperSpec {
   val nodesLayer = (ZLayer.requires[Clock] ++ logger) >>> Nodes.live
 
   val recorder: ZLayer[Clock with Console, Nothing, ProtocolRecorder[FailureDetection]] =
-    (ZLayer.requires[Clock] ++ nodesLayer ++ logger ++ ConversationId.live ++ LocalHealthMultiplier.live(9)) >>>
+    (ZLayer.requires[Clock] ++ nodesLayer ++ logger ++ ConversationId.live ++ MessageAcknowledge.live ++ LocalHealthMultiplier
+      .live(9)) >>>
       ProtocolRecorder
         .make(
           FailureDetection

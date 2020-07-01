@@ -49,6 +49,12 @@ object Message {
       env <- ZIO.environment[R]
     } yield WithTimeout(message, action.provide(env), timeout)
 
+  def withScaledTimeout[R, A](message: Message[A], action: ZIO[R, keeper.Error, Message[A]], timeout: Duration) =
+    for {
+      env    <- ZIO.environment[R]
+      scaled <- LocalHealthMultiplier.scaleTimeout(timeout)
+    } yield WithTimeout(message, action.provide(env), scaled)
+
   def withTimeoutM[R, R1, A](
     message: ZIO[R1, keeper.Error, Message[A]],
     action: ZIO[R, keeper.Error, Message[A]],

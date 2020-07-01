@@ -29,6 +29,7 @@ object Swim {
     val internalLayer = ZLayer.requires[SwimEnv] ++
       ConversationId.live ++
       Nodes.live ++
+      MessageAcknowledge.live ++
       (ZLayer.requires[SwimEnv] >>>
         ZLayer.fromManaged(
           ZManaged.accessManaged[Config[SwimConfig]](
