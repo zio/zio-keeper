@@ -37,12 +37,6 @@ object Nodes {
     def events: Stream[Nothing, MembershipEvent]
 
     /**
-     *  Stream of Membership Events for internal purpose.
-     *  This exists only because I cannot find the way to duplicates events from one queue
-     */
-    val internalEvents: Stream[Nothing, NodeStateChanged]
-
-    /**
      * Returns next node.
      */
     def next(exclude: Option[NodeAddress]): UIO[Option[(NodeAddress, NodeState)]]
@@ -79,9 +73,6 @@ object Nodes {
 
   def disconnect(id: NodeAddress): ZIO[Nodes, Error, Unit] =
     ZIO.accessM[Nodes](_.get.disconnect(id))
-
-  val internalEvents: ZStream[Nodes, Nothing, NodeStateChanged] =
-    ZStream.accessStream[Nodes](_.get.internalEvents)
 
   val prettyPrint: URIO[Nodes, String] =
     ZIO.accessM[Nodes](_.get.prettyPrint)
@@ -143,9 +134,6 @@ object Nodes {
 
         def events: Stream[Nothing, MembershipEvent] =
           ZStream.fromQueue(eventsQueue)
-
-        val internalEvents: Stream[Nothing, NodeStateChanged] =
-          ZStream.fromQueue(internalEventsQueue)
 
         def next(
           exclude: Option[NodeAddress]
