@@ -3,7 +3,7 @@ package zio.keeper.swim
 import zio.duration.Duration
 import zio.keeper.NodeAddress
 import zio.keeper.swim.Message.{ NoResponse, WithTimeout }
-import zio.{ IO, ZIO, keeper }
+import zio.{ IO, UIO, ZIO, keeper }
 
 sealed trait Message[+A] {
   self =>
@@ -44,7 +44,11 @@ object Message {
   def direct[A](node: NodeAddress, message: A): ZIO[ConversationId, Nothing, Direct[A]] =
     ConversationId.next.map(Direct(node, _, message))
 
-  def withTimeout[R, A](message: Message[A], action: ZIO[R, keeper.Error, Message[A]], timeout: Duration) =
+  def withTimeout[R, A](
+    message: Message[A],
+    action: ZIO[R, keeper.Error, Message[A]],
+    timeout: Duration
+  ): ZIO[R, Nothing, WithTimeout[A]] =
     for {
       env <- ZIO.environment[R]
     } yield WithTimeout(message, action.provide(env), timeout)
@@ -59,12 +63,12 @@ object Message {
     message: ZIO[R1, keeper.Error, Message[A]],
     action: ZIO[R, keeper.Error, Message[A]],
     timeout: Duration
-  ) =
+  ): ZIO[R1 with R, keeper.Error, WithTimeout[A]] =
     for {
       env <- ZIO.environment[R]
       msg <- message
     } yield WithTimeout(msg, action.provide(env), timeout)
 
-  val noResponse = ZIO.succeedNow(NoResponse)
+  val noResponse: UIO[NoResponse.type] = ZIO.succeedNow(NoResponse)
 
 }

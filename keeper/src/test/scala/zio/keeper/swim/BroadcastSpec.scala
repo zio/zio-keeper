@@ -12,7 +12,7 @@ object BroadcastSpec extends KeeperSpec {
   val logger    = Logging.console((_, line) => line)
   val testLayer = ((ZLayer.requires[Clock] ++ logger) >>> Nodes.live)
 
-  def generateMessage(size: Int) =
+  def generateMessage(size: Int): Chunk[Byte] =
     Chunk.fromArray(Array.fill[Byte](size)(1))
 
   val spec = suite("broadcast")(

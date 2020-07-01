@@ -21,7 +21,7 @@ trait Protocol[M] {
   final def binary(implicit codec: ByteCodec[M]): Protocol[Chunk[Byte]] =
     new Protocol[Chunk[Byte]] {
 
-      override val onMessage: Message.Direct[Chunk[Byte]] => ZIO[Any, Error, Message[Chunk[Byte]]] =
+      override val onMessage: Message.Direct[Chunk[Byte]] => IO[Error, Message[Chunk[Byte]]] =
         msg =>
           ByteCodec
             .decode[M](msg.message)

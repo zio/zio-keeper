@@ -78,7 +78,7 @@ package object hyparview {
     connections: Enqueue[(NodeAddress, Chunk[Byte] => IO[TransportError, Unit], Stream[Error, Chunk[Byte]], UIO[_])]
   ): ZIO[Logging with Transport, Error, Unit] =
     log.debug(s"sendInitial $to -> $msg") *> (allocate {
-      def openConnection(to: NodeAddress, msg: InitialProtocol) =
+      def openConnection(to: NodeAddress, msg: InitialProtocol): ZManaged[Transport, Error, ChunkConnection] =
         for {
           con <- Transport.connect(to)
           msg <- ByteCodec
@@ -201,7 +201,7 @@ package object hyparview {
   val neighborProtocol: ZStream[
     Views with Logging with Transport with Views with TRandom,
     Nothing,
-    (NodeAddress, Chunk[Byte] => ZIO[Any, TransportError, Unit], Stream[Error, Chunk[Byte]], UIO[_])
+    (NodeAddress, Chunk[Byte] => IO[TransportError, Unit], Stream[Error, Chunk[Byte]], UIO[_])
   ] =
     ZStream
       .managed(ZManaged.scope)

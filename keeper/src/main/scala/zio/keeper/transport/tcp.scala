@@ -20,7 +20,11 @@ object tcp {
     sendTimeout: Duration,
     retryInterval: Duration = 50.millis
   ): ZLayer[Clock with Logging, Nothing, Transport] = ZLayer.fromFunction { env =>
-    def toConnection(channel: AsynchronousSocketChannel, id: ju.UUID, close0: UIO[Unit]) =
+    def toConnection(
+      channel: AsynchronousSocketChannel,
+      id: ju.UUID,
+      close0: UIO[Unit]
+    ): UIO[Connection[Any, TransportError, Chunk[Byte]]] =
       for {
         writeLock <- Semaphore.make(1)
         readLock  <- Semaphore.make(1)
@@ -61,7 +65,7 @@ object tcp {
       }
 
     new Transport.Service {
-      override def connect(to: NodeAddress) = {
+      override def connect(to: NodeAddress): Managed[TransportError, ChunkConnection] = {
         for {
           id <- uuid.makeRandomUUID.toManaged_
           _  <- log.debug(s"$id: new outbound connection to $to").toManaged_
@@ -87,7 +91,7 @@ object tcp {
         } yield connection
       }.provide(env)
 
-      override def bind(addr: NodeAddress) = {
+      override def bind(addr: NodeAddress): Stream[TransportError, Connection[Any, TransportError, Chunk[Byte]]] = {
 
         val bind = ZStream.managed {
           AsynchronousServerSocketChannel()

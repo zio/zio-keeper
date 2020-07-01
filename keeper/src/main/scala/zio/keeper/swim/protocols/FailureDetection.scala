@@ -1,10 +1,12 @@
 package zio.keeper.swim.protocols
 
 import upickle.default._
+import zio.clock.Clock
 import zio.duration._
 import zio.keeper.swim.Nodes.{ NodeState, _ }
 import zio.keeper.swim.{ ConversationId, LocalHealthMultiplier, Message, MessageAcknowledge, Nodes, Protocol }
-import zio.keeper.{ ByteCodec, NodeAddress }
+import zio.keeper.{ ByteCodec, NodeAddress, swim }
+import zio.keeper.swim.{ ConversationId, Message, Nodes, Protocol }
 import zio.logging._
 import zio.stm.{ STM, TMap }
 import zio.stream.ZStream
@@ -223,8 +225,13 @@ object FailureDetection {
       )
 
   }
+  type Env = LocalHealthMultiplier with ConversationId with Nodes with Logging with MessageAcknowledge with Clock
 
-  def protocol(protocolPeriod: Duration, protocolTimeout: Duration, localNode: NodeAddress) =
+  def protocol(
+    protocolPeriod: Duration,
+    protocolTimeout: Duration,
+    localNode: NodeAddress
+  ): ZIO[Env, keeper.Error, swim.Protocol[FailureDetection]] =
     TMap
       .empty[Long, (NodeAddress, Long)]
       .zip(TMap.empty[Long, Unit])

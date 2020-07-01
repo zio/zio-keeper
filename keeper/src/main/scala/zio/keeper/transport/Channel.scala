@@ -21,7 +21,7 @@ final class Channel(
   val finalizer: IO[TransportError, Unit]
 ) {
 
-  final val read: IO[TransportError, Chunk[Byte]] =
+  val read: IO[TransportError, Chunk[Byte]] =
     for {
       length <- read0(4)
                  .flatMap(
@@ -33,14 +33,14 @@ final class Channel(
       data <- read0(length)
     } yield data
 
-  final def send(data: Chunk[Byte]): IO[TransportError, Unit] = {
+  def send(data: Chunk[Byte]): IO[TransportError, Unit] = {
     val size = data.size
     write0(
       Chunk((size >>> 24).toByte, (size >>> 16).toByte, (size >>> 8).toByte, size.toByte) ++ data
     )
   }
 
-  final val close: IO[TransportError, Unit] =
+  val close: IO[TransportError, Unit] =
     finalizer.ignore
 }
 
@@ -54,7 +54,7 @@ object Channel {
     write: Chunk[Byte] => IO[TransportError, Unit],
     isOpen: IO[TransportError, Boolean],
     finalizer: IO[TransportError, Unit]
-  ) =
+  ): UIO[Channel] =
     for {
       writeLock <- Semaphore.make(1)
       readLock  <- Semaphore.make(1)

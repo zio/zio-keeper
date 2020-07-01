@@ -57,7 +57,7 @@ object ByteCodec {
 
   final class TaggedBuilder[A] {
 
-    def apply[A1 <: A: ByteCodec: ClassTag] =
+    def apply[A1 <: A: ByteCodec: ClassTag]: ByteCodec[A] =
       taggedInstance[A](
         {
           case _: A1 => 0
@@ -66,7 +66,7 @@ object ByteCodec {
         }
       )
 
-    def apply[A1 <: A: ByteCodec: ClassTag, A2 <: A: ByteCodec: ClassTag] =
+    def apply[A1 <: A: ByteCodec: ClassTag, A2 <: A: ByteCodec: ClassTag]: ByteCodec[A] =
       taggedInstance[A](
         {
           case _: A1 => 0
@@ -77,7 +77,11 @@ object ByteCodec {
         }
       )
 
-    def apply[A1 <: A: ByteCodec: ClassTag, A2 <: A: ByteCodec: ClassTag, A3 <: A: ByteCodec: ClassTag] =
+    def apply[
+      A1 <: A: ByteCodec: ClassTag,
+      A2 <: A: ByteCodec: ClassTag,
+      A3 <: A: ByteCodec: ClassTag
+    ]: ByteCodec[A] =
       taggedInstance[A](
         {
           case _: A1 => 0
@@ -95,7 +99,7 @@ object ByteCodec {
       A2 <: A: ByteCodec: ClassTag,
       A3 <: A: ByteCodec: ClassTag,
       A4 <: A: ByteCodec: ClassTag
-    ] =
+    ]: ByteCodec[A] =
       taggedInstance[A](
         {
           case _: A1 => 0
@@ -116,7 +120,7 @@ object ByteCodec {
       A3 <: A: ByteCodec: ClassTag,
       A4 <: A: ByteCodec: ClassTag,
       A5 <: A: ByteCodec: ClassTag
-    ] =
+    ]: ByteCodec[A] =
       taggedInstance[A](
         {
           case _: A1 => 0
@@ -140,7 +144,7 @@ object ByteCodec {
       A4 <: A: ByteCodec: ClassTag,
       A5 <: A: ByteCodec: ClassTag,
       A6 <: A: ByteCodec: ClassTag
-    ] =
+    ]: ByteCodec[A] =
       taggedInstance[A](
         {
           case _: A1 => 0
@@ -167,7 +171,7 @@ object ByteCodec {
       A5 <: A: ByteCodec: ClassTag,
       A6 <: A: ByteCodec: ClassTag,
       A7 <: A: ByteCodec: ClassTag
-    ] =
+    ]: ByteCodec[A] =
       taggedInstance[A](
         {
           case _: A1 => 0
@@ -197,7 +201,7 @@ object ByteCodec {
       A6 <: A: ByteCodec: ClassTag,
       A7 <: A: ByteCodec: ClassTag,
       A8 <: A: ByteCodec: ClassTag
-    ] =
+    ]: ByteCodec[A] =
       taggedInstance[A](
         {
           case _: A1 => 0
@@ -238,11 +242,11 @@ object ByteCodec {
 
   def taggedInstance[A](f: PartialFunction[A, Byte], g: PartialFunction[Byte, ByteCodec[A]]): ByteCodec[A] = {
 
-    def tagOf(a: A) =
+    def tagOf(a: A): IO[Unit, Byte] =
       if (f.isDefinedAt(a)) ZIO.succeed(f(a))
       else ZIO.fail(())
 
-    def codecFor(tag: Byte) =
+    def codecFor(tag: Byte): IO[Unit, ByteCodec[A]] =
       if (g.isDefinedAt(tag)) ZIO.succeed(g(tag))
       else ZIO.fail(())
 
@@ -276,10 +280,10 @@ object ByteCodec {
   def fromReadWriter[A](rw: ReadWriter[A]): ByteCodec[A] =
     new ByteCodec[A] {
 
-      def toChunk(a: A) =
+      def toChunk(a: A): IO[SerializationTypeError, Chunk[Byte]] =
         ZIO.effect(Chunk.fromArray(writeBinary(a)(rw))).mapError(SerializationTypeError(_))
 
-      def fromChunk(chunk: Chunk[Byte]) =
+      def fromChunk(chunk: Chunk[Byte]): IO[DeserializationTypeError, A] =
         ZIO.effect(readBinary[A](chunk.toArray)(rw)).mapError(DeserializationTypeError(_))
     }
 

@@ -1,6 +1,6 @@
 package zio.keeper.hyparview
 
-import zio.{ Layer, UIO, ZLayer }
+import zio.{ UIO, ULayer, ZLayer }
 
 object HyParViewConfig {
 
@@ -17,16 +17,16 @@ object HyParViewConfig {
     concurrentIncomingConnections: Int
   ) {
 
-    val prettyPrint = s"""activeViewCapacity: $activeViewCapacity
-                         |passiveViewCapacity: $passiveViewCapacity
-                         |arwl: $arwl
-                         |prwl: $prwl
-                         |shuffleNActive: $shuffleNActive
-                         |shuffleNPassive: $shuffleNPassive
-                         |shuffleTTL: $shuffleTTL
-                         |connectionBuffer: $connectionBuffer
-                         |userMessagesBuffer: $userMessagesBuffer
-                         |concurrentIncomingConnections: $concurrentIncomingConnections""".stripMargin
+    val prettyPrint: String = s"""activeViewCapacity: $activeViewCapacity
+                                 |passiveViewCapacity: $passiveViewCapacity
+                                 |arwl: $arwl
+                                 |prwl: $prwl
+                                 |shuffleNActive: $shuffleNActive
+                                 |shuffleNPassive: $shuffleNPassive
+                                 |shuffleTTL: $shuffleTTL
+                                 |connectionBuffer: $connectionBuffer
+                                 |userMessagesBuffer: $userMessagesBuffer
+                                 |concurrentIncomingConnections: $concurrentIncomingConnections""".stripMargin
   }
 
   def staticConfig(
@@ -40,7 +40,7 @@ object HyParViewConfig {
     connectionBuffer: Int,
     userMessagesBuffer: Int,
     concurrentIncomingConnections: Int
-  ): Layer[Nothing, HyParViewConfig] =
+  ): ULayer[HyParViewConfig] =
     ZLayer.succeed {
       new Service {
         val getConfig: UIO[Config] =
