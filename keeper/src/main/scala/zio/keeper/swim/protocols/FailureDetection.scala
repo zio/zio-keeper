@@ -104,6 +104,7 @@ object FailureDetection {
         case Message.Direct(_, conversationId, Nack) =>
           pendingNacks.delete(conversationId).commit *>
             Message.noResponse
+
         case Message.Direct(sender, _, Suspect(_, `localNode`)) =>
           Message
             .direct(sender, Alive(localNode))
@@ -220,7 +221,7 @@ object FailureDetection {
                 .as(Message.Broadcast(Dead(probedNode))),
               Message.noResponse
             ),
-            protocolTimeout
+            Duration.Zero
           )
       )
 

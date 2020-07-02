@@ -8,6 +8,7 @@ package object swim {
   type ConversationId        = Has[ConversationId.Service]
   type Nodes                 = Has[Nodes.Service]
   type MessageAcknowledge    = Has[MessageAcknowledge.Service]
+  type SuspicionTimeout = Has[SuspicionTimeout.Service]
   type Swim[A]               = Has[Swim.Service[A]]
   type LocalHealthMultiplier = Has[LocalHealthMultiplier.Service]
 
