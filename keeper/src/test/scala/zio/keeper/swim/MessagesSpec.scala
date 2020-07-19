@@ -81,7 +81,9 @@ object MessagesSpec extends KeeperSpec {
             ping1 <- ByteCodec[PingPong].toChunk(PingPong.Ping(123))
             _     <- testTransport.incommingMessage(WithPiggyback(testNodeAddress, 1, ping1, List.empty))
             m     <- testTransport.outgoingMessages.runHead
-            bytes <- m.fold[IO[SerializationError.SerializationTypeError, Chunk[Byte]]](ZIO.succeedNow(Chunk.empty))(ByteCodec[WithPiggyback].toChunk(_))
+            bytes <- m.fold[IO[SerializationError.SerializationTypeError, Chunk[Byte]]](ZIO.succeedNow(Chunk.empty))(
+                      ByteCodec[WithPiggyback].toChunk(_)
+                    )
           } yield assert(m.map(_.gossip.size))(isSome(equalTo(1453))) && assert(bytes.size)(equalTo(62580))
       }
     }
