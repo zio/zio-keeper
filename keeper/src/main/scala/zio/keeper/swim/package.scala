@@ -1,8 +1,7 @@
 package zio.keeper
 
-import izumi.reflect.Tags.Tag
 import zio.stream.ZStream
-import zio.{ Has, ZIO }
+import zio.{ Has, Tag, ZIO }
 
 package object swim {
   type ConversationId = Has[ConversationId.Service]

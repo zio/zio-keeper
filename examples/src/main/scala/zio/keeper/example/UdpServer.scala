@@ -1,6 +1,6 @@
 package zio.keeper.example
 
-import zio.{ Chunk, Schedule }
+import zio.{ Chunk, ExitCode, Schedule }
 import zio.clock.Clock
 import zio.console.{ Console, putStrLn }
 import zio.keeper.transport.Channel
@@ -37,7 +37,7 @@ object UdpServer extends zio.App {
       _ <- bind(publicAddress)(handler)
             .use(ch => ZIO.never.ensuring(ch.close.ignore))
 
-    } yield ()).ignore.as(0).provideLayer(localEnvironment)
+    } yield ()).ignore.as(ExitCode.success).provideLayer(localEnvironment)
 }
 
 object UdpClient extends zio.App {
@@ -58,5 +58,5 @@ object UdpClient extends zio.App {
       _ <- putStrLn("connect to address: " + publicAddress.toString())
       _ <- connect(publicAddress)
             .use(_.send(Chunk.fromArray("message from client".getBytes)).repeat(Schedule.recurs(100)))
-    } yield ()).ignore.as(0).provideLayer(localEnvironment)
+    } yield ()).ignore.as(ExitCode.success).provideLayer(localEnvironment)
 }

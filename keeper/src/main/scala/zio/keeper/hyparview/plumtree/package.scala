@@ -84,7 +84,7 @@ package object plumtree {
 
   def sendIHave[R <: Logging with PeerService with Clock, E](
     stream: Stream[E, (NodeAddress, UUID, Round)],
-    schedule: Schedule[R, Option[List[UUID]], _],
+    schedule: Schedule[R, Chunk[ActiveProtocol.IHave], _],
     maxMessageSize: Long = 12
   ): ZStream[R, E, Unit] =
     stream.groupByKey(_._1) {
@@ -93,19 +93,18 @@ package object plumtree {
           group
             .map { case (_, uuid, round) => (uuid, round) }
             .aggregateAsyncWithin(
-              ZSink.collectAllN[(UUID, Round)](maxMessageSize),
-              schedule.contramap[Option[List[(UUID, Round)]]](_.map(_.map(_._1)))
+              ZTransducer.collectAllN(maxMessageSize).map(xs => ActiveProtocol.IHave(Chunk.fromIterable(xs))),
+              schedule
             )
-            .foreach {
-              case xs @ ::(_, _) =>
+            .foreach { iHave =>
+              ZIO.when(iHave.messages.nonEmpty) {
                 PeerService
-                  .send(target, ActiveProtocol.IHave(Chunk.fromIterable(xs)))
+                  .send(target, iHave)
                   .foldCauseM(
                     log.error("Failed sending IHave message", _),
                     _ => log.debug("Sent IHave message")
                   )
-              case _ =>
-                ZIO.unit
+              }
             }
         }
     }

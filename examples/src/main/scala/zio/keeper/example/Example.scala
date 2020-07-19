@@ -76,7 +76,7 @@ object TestNode {
   def run(port: Int, otherPorts: Set[Int]) =
     program
       .provideCustomLayer(dependencies(port, otherPorts))
-      .catchAll(ex => putStrLn("error: " + ex).as(1))
+      .catchAll(ex => putStrLn("error: " + ex).as(ExitCode.failure))
 
   val program =
 //   Fiber.dumpAll.flatMap(ZIO.foreach(_)(_.prettyPrintM.flatMap(putStrLn(_).provideLayer(ZEnv.live)))).delay(10.seconds).uninterruptible.fork.toManaged_ *>
@@ -92,6 +92,6 @@ object TestNode {
                   case Pong(i) => send[UserProtocolExample](Pong(i + 1), sender).ignore
                 }
           }
-    } yield 0
+    } yield ExitCode.success
 
 }

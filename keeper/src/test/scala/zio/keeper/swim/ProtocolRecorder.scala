@@ -1,10 +1,9 @@
 package zio.keeper.swim
 
-import izumi.reflect.Tags.Tag
 import zio._
 import zio.clock.Clock
 import zio.logging.Logging
-import zio.stream.{ Sink, ZStream }
+import zio.stream.ZStream
 
 object ProtocolRecorder {
   type ProtocolRecorder[A] = Has[ProtocolRecorder.Service[A]]
@@ -36,7 +35,7 @@ object ProtocolRecorder {
           behaviorRef.set(pf).as(this)
 
         override def collectN[B](n: Long)(pf: PartialFunction[Message[A], B]): UIO[List[B]] =
-          stream.collect(pf).run(Sink.collectAllN[B](n))
+          stream.collect(pf).take(n).runCollect.map(_.toList)
 
         override def send(msg: Message.Direct[A]): IO[zio.keeper.Error, Message[A]] =
           protocol.onMessage(msg)
