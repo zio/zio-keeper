@@ -3,7 +3,7 @@ package zio.keeper.swim
 import zio._
 import zio.clock.Clock
 import zio.logging.Logging
-import zio.stream.{ Sink, ZStream }
+import zio.stream.ZStream
 
 object ProtocolRecorder {
   type ProtocolRecorder[A] = Has[ProtocolRecorder.Service[A]]
