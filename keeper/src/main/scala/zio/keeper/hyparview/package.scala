@@ -202,7 +202,8 @@ package object hyparview {
                               .addShuffledNodes(msg.sentOriginally.toSet, msg.passiveNodes.toSet)
                               .commit
                               .as(None)
-                        }.map(_.map((_, msgs.tail)))
+                        }
+                        .map(_.map((_, msgs.tail)))
                     }
                 )
               continue.map(_.map {
@@ -261,8 +262,9 @@ package object hyparview {
                     _ <- log.error(s"Failed neighbor protocol with remote $node", e)
                     _ <- Views.removeFromPassiveView(node).commit
                   } yield None, {
-                  case (release, None)                        => release(Exit.unit).as(None)
-                  case (release, Some((addr, send, receive))) => ZIO.succeed(Some((addr, send, receive, release(Exit.unit))))
+                  case (release, None) => release(Exit.unit).as(None)
+                  case (release, Some((addr, send, receive))) =>
+                    ZIO.succeed(Some((addr, send, receive, release(Exit.unit))))
                 }
               )
           }

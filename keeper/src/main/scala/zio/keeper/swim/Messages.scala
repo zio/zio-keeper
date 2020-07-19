@@ -99,17 +99,17 @@ final class Messages(
     } yield ()
 
   def process(protocol: Protocol[Chunk[Byte]]): ZIO[Clock with Logging, Nothing, Fiber.Runtime[Nothing, Unit]] = {
-    def processTake(take: Take[Error, Message[Chunk[Byte]]]) = 
+    def processTake(take: Take[Error, Message[Chunk[Byte]]]) =
       take.foldM(
         ZIO.unit,
         log.error("error: ", _),
-        ZIO.foreach_(_)(send(_).catchAll(e => log.error("error during send: " + e))) 
+        ZIO.foreach_(_)(send(_).catchAll(e => log.error("error during send: " + e)))
       )
     ZStream
       .fromQueue(messages)
       .collectM {
         case Take(Exit.Success(msgs)) =>
-          ZIO.foreach(msgs) { 
+          ZIO.foreach(msgs) {
             case msg: Message.Direct[Chunk[Byte]] =>
               Take.fromEffect(protocol.onMessage(msg))
             case _ =>
