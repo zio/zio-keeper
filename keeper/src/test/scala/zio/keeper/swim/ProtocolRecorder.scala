@@ -35,7 +35,7 @@ object ProtocolRecorder {
           behaviorRef.set(pf).as(this)
 
         override def collectN[B](n: Long)(pf: PartialFunction[Message[A], B]): UIO[List[B]] =
-          stream.collect(pf).run(Sink.collectAllN[B](n))
+          stream.collect(pf).take(n).runCollect.map(_.toList)
 
         override def send(msg: Message.Direct[A]): IO[zio.keeper.Error, Message[A]] =
           protocol.onMessage(msg)
