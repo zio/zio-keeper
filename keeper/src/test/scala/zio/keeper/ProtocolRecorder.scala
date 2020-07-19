@@ -1,6 +1,5 @@
 package zio.keeper
 
-import izumi.reflect.Tags.Tag
 import zio._
 import zio.clock.Clock
 import zio.keeper.swim.{ Message, Nodes, Protocol }
