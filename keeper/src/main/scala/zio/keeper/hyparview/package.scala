@@ -40,7 +40,7 @@ package object hyparview {
     stream.process.mapM { pull =>
       type Continue = Option[(NodeAddress, Chunk[RawMessage])]
 
-      val continue: ZIO[R, E, Continue] =
+      lazy val continue: ZIO[R, E, Continue] =
         pull.foldM[R, E, Continue](
           _.fold[ZIO[R, E, Continue]](ZIO.succeedNow(None))(ZIO.fail(_)),
           msgs =>
@@ -69,7 +69,7 @@ package object hyparview {
     stream.process.mapM { pull =>
       type Continue = (Boolean, Chunk[RawMessage])
 
-      val continue: ZIO[R, E, Continue] =
+      lazy val continue: ZIO[R, E, Continue] =
         pull.foldM[R, E, Continue](
           _.fold[ZIO[R, E, Continue]](ZIO.succeedNow(false -> Chunk.empty))(ZIO.fail(_)),
           msgs =>
@@ -144,7 +144,7 @@ package object hyparview {
           allocate {
             type Continue = Option[(NodeAddress, Chunk[Byte] => IO[TransportError, Unit], Stream[Error, Chunk[Byte]])]
             con.receive.process.mapM[R, E, Continue] { pull =>
-              val continue: ZIO[R, E, Option[(NodeAddress, Chunk[RawMessage])]] =
+              lazy val continue: ZIO[R, E, Option[(NodeAddress, Chunk[RawMessage])]] =
                 pull.foldM(
                   _.fold[ZIO[R, E, None.type]](ZIO.succeedNow(None))(ZIO.fail(_)),
                   msgs =>
