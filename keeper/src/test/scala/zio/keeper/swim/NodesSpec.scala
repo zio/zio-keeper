@@ -6,7 +6,7 @@ import zio.keeper.MembershipEvent
 import zio.keeper.swim.Nodes._
 import zio.keeper.{ KeeperSpec, NodeAddress }
 import zio.logging.Logging
-import zio.stream.{ Sink, ZTransducer }
+import zio.stream.ZTransducer
 import zio.test.Assertion._
 import zio.test._
 
