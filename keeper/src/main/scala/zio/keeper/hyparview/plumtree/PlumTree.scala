@@ -19,7 +19,7 @@ import scala.Function.untupled
 
 object PlumTree {
 
-  def make[A: Tagged: ByteCodec](
+  def make[A: Tag: ByteCodec](
     initialEagerPeers: Int,
     messagesBuffer: Int,
     gossipBuffer: Int,

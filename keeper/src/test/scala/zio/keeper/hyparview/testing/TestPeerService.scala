@@ -106,7 +106,7 @@ object TestPeerService {
           }
 
         override val receive: ZStream[Any, Error, (NodeAddress, PlumTreeProtocol)] =
-          ZStream.fromQueue(msgsQueue).unTake
+          ZStream.fromQueue(msgsQueue).flattenTake
 
         override val events: ZStream[Any, Nothing, PeerEvent] =
           ZStream.fromEffect(eventsQueue.take.commit)

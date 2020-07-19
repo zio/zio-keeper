@@ -35,24 +35,28 @@ final class Messages(
         connection.read >>= ByteCodec[WithPiggyback].fromChunk
       )
       .flatMap {
-        case Take.Value(withPiggyback) =>
-          messages.offer(
-            Take.Value(Message.Direct(withPiggyback.node, withPiggyback.conversationId, withPiggyback.message))
-          ) *>
-            ZIO.foreach(withPiggyback.gossip)(
-              chunk =>
-                messages.offer(Take.Value(Message.Direct(withPiggyback.node, withPiggyback.conversationId, chunk)))
-            )
-        case err: Take.Fail[Error] => messages.offer(err)
-        case Take.End              => messages.offer(Take.End)
+        _.foldM(
+          messages.offer(Take.end),
+          cause => messages.offer(Take.halt(cause)),
+          values =>
+            ZIO.foreach_(values) { withPiggyback =>
+              val take =
+                Take.single(Message.Direct(withPiggyback.node, withPiggyback.conversationId, withPiggyback.message))
+
+              messages.offer(take) *>
+                ZIO.foreach_(withPiggyback.gossip) { chunk =>
+                  messages.offer(Take.single(Message.Direct(withPiggyback.node, withPiggyback.conversationId, chunk)))
+                }
+            }
+        )
       }
       .unit
 
   private def recoverErrors[R, E, A](stream: ZStream[R, E, A]): ZStream[R with Logging, Nothing, Take[E, A]] =
     stream.either.mapM(
       _.fold(
-        e => log.error("error during sending", Cause.fail(e)).as(Take.Fail(Cause.fail(e))),
-        v => ZIO.succeedNow(Take.Value(v))
+        e => log.error("error during sending", Cause.fail(e)).as(Take.halt(Cause.fail(e))),
+        v => ZIO.succeedNow(Take.single(v))
       )
     )
 
@@ -94,34 +98,34 @@ final class Messages(
             }
     } yield ()
 
-  def process(protocol: Protocol[Chunk[Byte]]): ZIO[Clock with Logging, Nothing, Fiber.Runtime[Nothing, Unit]] =
+  def process(protocol: Protocol[Chunk[Byte]]): ZIO[Clock with Logging, Nothing, Fiber.Runtime[Nothing, Unit]] = {
+    def processTake(take: Take[Error, Message[Chunk[Byte]]]) =
+      take.foldM(
+        ZIO.unit,
+        log.error("error: ", _),
+        ZIO.foreach_(_)(send(_).catchAll(e => log.error("error during send: " + e)))
+      )
     ZStream
       .fromQueue(messages)
       .collectM {
-        case Take.Value(msg: Message.Direct[Chunk[Byte]]) =>
-          Take.fromEffect(protocol.onMessage(msg))
+        case Take(Exit.Success(msgs)) =>
+          ZIO.foreach(msgs) {
+            case msg: Message.Direct[Chunk[Byte]] =>
+              Take.fromEffect(protocol.onMessage(msg))
+            case _ =>
+              ZIO.dieMessage("Something went horribly wrong.")
+          }
       }
-      .mapMPar(10) {
-        case Take.Value(msg) =>
-          send(msg)
-            .catchAll(e => log.error("error during send: " + e))
-        case Take.Fail(cause) =>
-          log.error("error: ", cause)
-        case Take.End => ZIO.unit
+      .mapMPar(10) { msgs =>
+        ZIO.foreach_(msgs)(processTake)
       }
       .runDrain
       .fork *>
       recoverErrors(protocol.produceMessages)
-        .mapMPar(10) {
-          case Take.Value(msg) =>
-            send(msg)
-              .catchAll(e => log.error("error during send: " + e))
-          case Take.Fail(cause) =>
-            log.error("error: ", cause)
-          case Take.End => ZIO.unit
-        }
+        .mapMPar(10)(processTake)
         .runDrain
         .fork
+  }
 }
 
 object Messages {

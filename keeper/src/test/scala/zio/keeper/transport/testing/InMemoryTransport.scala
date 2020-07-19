@@ -114,7 +114,7 @@ object InMemoryTransport {
                   .flatMap(
                     _.fold(
                       e => receiveEnd.succeed(e) *> e.fold[Pull[Any, TransportError, Nothing]](Pull.end)(Pull.fail(_)),
-                      Pull.emit(_)
+                      bytes => Pull.emit(Chunk.single(bytes))
                     )
                   )
               }

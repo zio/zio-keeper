@@ -58,19 +58,12 @@ object Initial {
             Message.noResponse
       },
       ZStream
-        .fromIterator(
-          discoverNodes
-            .tap(otherNodes => log.info("Discovered other nodes: " + otherNodes))
-            .map(_.iterator)
-        )
-        .mapM(
-          node =>
-            NodeAddress
-              .fromSocketAddress(node)
-              .flatMap(
-                nodeAddress => Message.direct(nodeAddress, Join(local))
-              )
-        )
+        .fromIterableM(discoverNodes.tap(otherNodes => log.info("Discovered other nodes: " + otherNodes)))
+        .mapM { node =>
+          NodeAddress
+            .fromSocketAddress(node)
+            .flatMap(nodeAddress => Message.direct(nodeAddress, Join(local)))
+        }
     )
 
 }
