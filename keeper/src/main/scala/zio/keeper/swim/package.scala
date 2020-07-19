@@ -1,6 +1,6 @@
 package zio.keeper
 
-import izumi.reflect.Tags.Tag
+import izumi.reflect.Tag
 import zio.stream.ZStream
 import zio.{ Has, ZIO }
 

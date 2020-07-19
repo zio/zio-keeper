@@ -1,6 +1,6 @@
 package zio.keeper.swim
 
-import izumi.reflect.Tags.Tag
+import izumi.reflect.Tag
 import zio.{ IO, Queue, Schedule, UIO, ZLayer }
 import zio.clock.Clock
 import zio.config._

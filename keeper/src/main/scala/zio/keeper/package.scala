@@ -1,6 +1,6 @@
 package zio
 
-import izumi.reflect.Tags.Tag
+import izumi.reflect.Tag
 import zio.stream._
 
 package object keeper extends MembershipProtocol with ConsensusProtocol {
