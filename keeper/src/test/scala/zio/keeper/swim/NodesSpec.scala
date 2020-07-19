@@ -6,7 +6,6 @@ import zio.keeper.MembershipEvent
 import zio.keeper.swim.Nodes._
 import zio.keeper.{ KeeperSpec, NodeAddress }
 import zio.logging.Logging
-import zio.stream.ZTransducer
 import zio.test.Assertion._
 import zio.test._
 
@@ -42,12 +41,12 @@ object NodesSpec extends KeeperSpec {
         _       <- changeNodeState(testNodeAddress1, NodeState.Healthy)
         _       <- changeNodeState(testNodeAddress1, NodeState.Suspicion)
         _       <- changeNodeState(testNodeAddress1, NodeState.Dead)
-        events1 <- Nodes.events.transduce(ZTransducer.collectAllN(2)).runCollect
+        events1 <- Nodes.events.take(2).runCollect
         _       <- addNode(testNodeAddress2)
         _       <- changeNodeState(testNodeAddress2, NodeState.Healthy)
         _       <- changeNodeState(testNodeAddress2, NodeState.Suspicion)
         _       <- changeNodeState(testNodeAddress2, NodeState.Dead)
-        events2 <- Nodes.events.transduce(ZTransducer.collectAllN(2)).runCollect
+        events2 <- Nodes.events.take(2).runCollect
       } yield assert(events1)(
         hasSameElements(
           List(
