@@ -11,6 +11,7 @@ import zio.keeper.swim.protocols.FailureDetection
 import zio.keeper.swim.protocols.FailureDetection.{ Ack, Ping, PingReq }
 import zio.logging.Logging
 import zio.test.Assertion._
+import zio.test.TestAspect.flaky
 import zio.test.environment.TestClock
 import zio.test.{ assert, _ }
 
@@ -62,7 +63,7 @@ object FailureDetectionSpec extends KeeperSpec {
         nodeState <- nodeState(nodeAddress1).orElseSucceed(NodeState.Dead) // in case it was cleaned up already
       } yield assert(messages)(equalTo(List(Message.Direct(nodeAddress1, 1, Ping), Message.NoResponse))) &&
         assert(nodeState)(equalTo(NodeState.Dead))
-    }.provideCustomLayer(testLayer),
+    }.provideCustomLayer(testLayer) @@ flaky,
     testM("should send PingReq to other node") {
       for {
         recorder <- ProtocolRecorder[FailureDetection] {
