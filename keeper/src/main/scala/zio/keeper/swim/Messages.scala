@@ -108,9 +108,12 @@ final class Messages(
     ZStream
       .fromQueue(messages)
       .collectM {
-        case Take(Exit.Success(msgs: Chunk[Message.Direct[Chunk[Byte]]])) =>
-          ZIO.foreach(msgs) { msg =>
-            Take.fromEffect(protocol.onMessage(msg))
+        case Take(Exit.Success(msgs)) =>
+          ZIO.foreach(msgs) { 
+            case msg: Message.Direct[Chunk[Byte]] =>
+              Take.fromEffect(protocol.onMessage(msg))
+            case _ =>
+              ZIO.dieMessage("Something went horribly wrong.")
           }
       }
       .mapMPar(10) { msgs =>
