@@ -81,7 +81,7 @@ object tcp {
                                close.unit
                              )
                          }
-                         .retry[Clock, TransportError, Int](Schedule.spaced(retryInterval))
+                         .retry(Schedule.spaced(retryInterval))
                          .timeout(connectionTimeout)
                          .flatMap(
                            _.fold[Managed[TransportError, ChunkConnection]](
@@ -112,11 +112,11 @@ object tcp {
                   allocate(lock.withPermitManaged *> server.accept.mapError(TransportError.ExceptionWrapper(_)))
                 )
                 .mapM {
-                  case (channel, close) =>
+                  case (close, channel) =>
                     for {
                       id         <- uuid.makeRandomUUID
                       _          <- log.debug(s"$id: new inbound connection")
-                      connection <- toConnection(channel, id, close.unit)
+                      connection <- toConnection(channel, id, close(Exit.unit).unit)
                     } yield connection
                 }
             }
