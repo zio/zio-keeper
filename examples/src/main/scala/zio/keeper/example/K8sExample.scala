@@ -41,7 +41,7 @@ object K8sTestNode extends zio.App {
   def run(args: List[String]) =
     program
       .provideCustomLayer(dependencies)
-      .catchAll(ex => putStrLn("error: " + ex).as(1))
+      .catchAll(ex => putStrLn("error: " + ex).as(ExitCode.success))
 
   sealed trait ChaosMonkey
 
@@ -67,6 +67,6 @@ object K8sTestNode extends zio.App {
               case SimulateCpuSpike => log.info("simulating cpu spike")
             }
       }
-      .as(0)
+      .as(ExitCode.failure)
 
 }

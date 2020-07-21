@@ -9,6 +9,7 @@ import zio.logging.Logging
 import zio.stream.ZStream
 import zio.test.Assertion._
 import zio.test._
+import zio.keeper.SerializationError
 
 object MessagesSpec extends KeeperSpec {
 
@@ -80,11 +81,11 @@ object MessagesSpec extends KeeperSpec {
             _     <- messages.process(dl.binary)
             ping1 <- ByteCodec[PingPong].toChunk(PingPong.Ping(123))
             _     <- testTransport.incommingMessage(WithPiggyback(testNodeAddress, 1, ping1, List.empty))
-            m :: Nil <- testTransport.outgoingMessages
-                         .take(1)
-                         .runCollect
-            bytes <- ByteCodec[WithPiggyback].toChunk(m)
-          } yield assert(m.gossip.size)(equalTo(1453)) && assert(bytes.size)(equalTo(62580))
+            m     <- testTransport.outgoingMessages.runHead
+            bytes <- m.fold[IO[SerializationError.SerializationTypeError, Chunk[Byte]]](ZIO.succeedNow(Chunk.empty))(
+                      ByteCodec[WithPiggyback].toChunk(_)
+                    )
+          } yield assert(m.map(_.gossip.size))(isSome(equalTo(1453))) && assert(bytes.size)(equalTo(62580))
       }
     }
   ).provideCustomLayer(logger ++ ConversationId.live ++ ((ZLayer.requires[Clock] ++ logger) >>> Nodes.live))

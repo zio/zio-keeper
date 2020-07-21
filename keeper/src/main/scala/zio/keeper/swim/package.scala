@@ -1,14 +1,13 @@
 package zio.keeper
 
-import izumi.reflect.Tags.Tag
 import zio.stream.ZStream
-import zio.{ Has, ZIO }
+import zio.{ Has, Tag, ZIO }
 
 package object swim {
   type ConversationId        = Has[ConversationId.Service]
   type Nodes                 = Has[Nodes.Service]
   type MessageAcknowledge    = Has[MessageAcknowledge.Service]
-  type SuspicionTimeout = Has[SuspicionTimeout.Service]
+  type SuspicionTimeout      = Has[SuspicionTimeout.Service]
   type Swim[A]               = Has[Swim.Service[A]]
   type LocalHealthMultiplier = Has[LocalHealthMultiplier.Service]
 

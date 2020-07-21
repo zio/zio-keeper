@@ -224,8 +224,8 @@ object FailureDetection {
             Duration.Zero
           )
       )
-
   }
+
   type Env = LocalHealthMultiplier with ConversationId with Nodes with Logging with MessageAcknowledge with Clock
 
   def protocol(

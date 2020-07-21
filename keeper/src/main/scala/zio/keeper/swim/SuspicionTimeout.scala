@@ -3,8 +3,8 @@ package zio.keeper.swim
 import zio.clock.Clock
 import zio.duration.Duration
 import zio.keeper.NodeAddress
-import zio.stm.{STM, TMap, TQueue}
-import zio.{UIO, URIO, ZIO, ZLayer}
+import zio.stm.{ STM, TMap, TQueue }
+import zio.{ UIO, URIO, ZIO, ZLayer }
 
 object SuspicionTimeout {
 

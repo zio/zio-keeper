@@ -32,7 +32,7 @@ object TcpTransportSpec extends KeeperSpec {
         .fold(_ => false, _ => true)
 
     val nextRandomPort: URIO[Random, Int] =
-      random.nextInt(portRange + 1).map(_ + minPort)
+      random.nextIntBounded(portRange + 1).map(_ + minPort)
 
     def go(counter: Int = 0): URIO[Random, Int] =
       if (counter > portRange) ZIO.dieMessage("No port found in range")

@@ -32,7 +32,7 @@ object PeerState {
   def removePeer(peer: NodeAddress): ZSTM[PeerState, Nothing, Unit] =
     ZSTM.accessM(_.get.removePeer(peer))
 
-  def live[A: Tagged](
+  def live[A: Tag](
     initialEagerPeers: Int
   ): ZLayer[TRandom with PeerService with Logging, Nothing, PeerState] =
     ZLayer.fromEffect {

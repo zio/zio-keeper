@@ -73,7 +73,7 @@ object HyParView {
           Views.send(to, message).provide(env)
 
         override val receive: ZStream[Any, Error, (NodeAddress, PlumTreeProtocol)] =
-          ZStream.fromQueue(plumTreeMessages).unTake
+          ZStream.fromQueue(plumTreeMessages).flattenTake
 
         override val events: ZStream[Any, Nothing, PeerEvent] =
           ZStream.fromQueue(peerEvents)
