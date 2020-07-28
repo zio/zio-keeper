@@ -182,19 +182,15 @@ object FailureDetection {
           nextNode(Some(probedNode)).flatMap {
             case Some((next, _)) =>
               pendingNacks.put(conversationId, ()).commit *>
-                LocalHealthMultiplier
-                  .scaleTimeout(protocolTimeout)
-                  .flatMap(
-                    timeout =>
-                      Message.withTimeout(
-                        Message.Direct(next, conversationId, PingReq(probedNode)),
-                        pingReqTimeoutAction(
-                          conversationId,
-                          probedNode
-                        ),
-                        timeout
-                      )
-                  )
+                Message.withScaledTimeout(
+                  Message.Direct(next, conversationId, PingReq(probedNode)),
+                  pingReqTimeoutAction(
+                    conversationId,
+                    probedNode
+                  ),
+                  protocolTimeout
+                )
+
             case None =>
               // we don't know any other node to ask
               changeNodeState(probedNode, NodeState.Dead) *>
