@@ -70,7 +70,7 @@ object PeerStateSpec extends KeeperSpec {
       },
       testM("addToEagerPeers adds to eager peers") {
         checkM(Gen.listOf(gens.nodeAddress).map(_.toSet)) { peers =>
-          assertM((ZSTM.foreach(peers)(PeerState.addToEagerPeers) *> PeerState.eagerPushPeers).commit)(
+          assertM((ZSTM.foreach_(peers)(PeerState.addToEagerPeers) *> PeerState.eagerPushPeers).commit)(
             hasSameElements(peers)
           ).provideCustomLayer(environment)
         }
