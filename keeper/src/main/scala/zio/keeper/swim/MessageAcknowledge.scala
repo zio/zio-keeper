@@ -20,7 +20,7 @@ object MessageAcknowledge {
   def isCompleted(conversationId: Long): URIO[MessageAcknowledge, Boolean] =
     ZIO.accessM[MessageAcknowledge](_.get.isCompleted(conversationId))
 
-  val live: ULayer[Has[Service]] =
+  val live: ULayer[MessageAcknowledge] =
     ZLayer.fromEffect(
       TSet
         .empty[Long]

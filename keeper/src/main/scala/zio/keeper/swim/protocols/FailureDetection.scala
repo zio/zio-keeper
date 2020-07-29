@@ -4,9 +4,16 @@ import upickle.default._
 import zio.clock.Clock
 import zio.duration._
 import zio.keeper.swim.Nodes.{ NodeState, _ }
-import zio.keeper.swim.{ ConversationId, LocalHealthMultiplier, Message, MessageAcknowledge, Nodes, Protocol }
+import zio.keeper.swim.{
+  ConversationId,
+  LocalHealthMultiplier,
+  Message,
+  MessageAcknowledge,
+  Nodes,
+  Protocol,
+  SuspicionTimeout
+}
 import zio.keeper.{ ByteCodec, NodeAddress, swim }
-import zio.keeper.swim.{ ConversationId, Message, Nodes, Protocol }
 import zio.logging._
 import zio.stm.{ STM, TMap }
 import zio.stream.ZStream
@@ -115,12 +122,13 @@ object FailureDetection {
               )
             ) <* LocalHealthMultiplier.increase
 
-        case Message.Direct(_, _, Suspect(_, node)) =>
+        case Message.Direct(from, _, Suspect(_, node)) =>
           nodeState(node)
             .orElseSucceed(NodeState.Dead)
             .flatMap {
               case NodeState.Dead | NodeState.Suspicion =>
-                Message.noResponse
+                SuspicionTimeout.incomingSuspect(node, from) *>
+                  Message.noResponse
               case _ =>
                 changeNodeState(node, NodeState.Suspicion).ignore *>
                   Message.noResponse
@@ -139,8 +147,9 @@ object FailureDetection {
           }
 
         case Message.Direct(_, _, msg @ Alive(nodeAddress)) =>
-          changeNodeState(nodeAddress, NodeState.Healthy).ignore
-            .as(Message.Broadcast(msg))
+          SuspicionTimeout.cancelTimeout(nodeAddress) *>
+            changeNodeState(nodeAddress, NodeState.Healthy).ignore
+              .as(Message.Broadcast(msg))
       },
       ZStream
         .repeatEffectWith(
@@ -172,9 +181,13 @@ object FailureDetection {
     private def pingTimeoutAction(
       conversationId: Long,
       probedNode: NodeAddress
-    ): ZIO[LocalHealthMultiplier with Nodes with Logging with MessageAcknowledge, keeper.Error, Message[
-      FailureDetection
-    ]] =
+    ): ZIO[
+      LocalHealthMultiplier with Nodes with Logging with MessageAcknowledge with SuspicionTimeout,
+      keeper.Error,
+      Message[
+        FailureDetection
+      ]
+    ] =
       ZIO.ifM(MessageAcknowledge.isCompleted(conversationId))(
         Message.noResponse,
         log.warn(s"node: $probedNode missed ack with id ${conversationId}") *>
@@ -201,7 +214,9 @@ object FailureDetection {
     private def pingReqTimeoutAction(
       conversationId: Long,
       probedNode: NodeAddress
-    ): ZIO[Nodes with LocalHealthMultiplier with MessageAcknowledge, keeper.Error, Message[FailureDetection]] =
+    ): ZIO[Nodes with LocalHealthMultiplier with MessageAcknowledge with SuspicionTimeout, keeper.Error, Message[
+      FailureDetection
+    ]] =
       ZIO.ifM(MessageAcknowledge.isCompleted(conversationId))(
         Message.noResponse,
         MessageAcknowledge.ack(conversationId) *> (LocalHealthMultiplier.increase *>
@@ -212,17 +227,27 @@ object FailureDetection {
           changeNodeState(probedNode, NodeState.Suspicion) *>
           Message.withTimeout(
             Message.Broadcast(Suspect(localNode, probedNode)),
-            ZIO.ifM(nodeState(probedNode).map(_ == NodeState.Suspicion).orElseSucceed(false))(
-              changeNodeState(probedNode, NodeState.Dead)
-                .as(Message.Broadcast(Dead(probedNode))),
-              Message.noResponse
-            ),
+            SuspicionTimeout
+              .registerTimeout(probedNode) {
+                ZIO.ifM(nodeState(probedNode).map(_ == NodeState.Suspicion).orElseSucceed(false))(
+                  changeNodeState(probedNode, NodeState.Dead)
+                    .as(Message.Broadcast(Dead(probedNode))),
+                  Message.noResponse
+                )
+              }
+              .orElse(Message.noResponse),
             Duration.Zero
           )
       )
   }
 
-  type Env = LocalHealthMultiplier with ConversationId with Nodes with Logging with MessageAcknowledge with Clock
+  type Env = LocalHealthMultiplier
+    with ConversationId
+    with Nodes
+    with Logging
+    with MessageAcknowledge
+    with Clock
+    with SuspicionTimeout
 
   def protocol(
     protocolPeriod: Duration,

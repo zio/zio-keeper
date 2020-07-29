@@ -26,16 +26,23 @@ object Swim {
   final private[this] val QueueSize = 1000
 
   def live[B: ByteCodec: Tag]: ZLayer[SwimEnv, Error, Swim[B]] = {
-    val internalLayer = ZLayer.requires[SwimEnv] ++
-      ConversationId.live ++
-      Nodes.live ++
-      MessageAcknowledge.live ++
-      (ZLayer.requires[SwimEnv] >>>
-        ZLayer.fromManaged(
-          ZManaged.accessManaged[Config[SwimConfig]](
-            config => LocalHealthMultiplier.live(config.get.localHealthMaxMultiplier).build.map(_.get)
-          )
-        ))
+
+    val internalLayer =
+      (ZLayer.requires[SwimEnv] ++
+        ConversationId.live ++
+        Nodes.live ++
+        MessageAcknowledge.live) >+> ZLayer.fromManagedMany(
+        for {
+          swimConfig <- config[SwimConfig].toManaged_
+          layer <- (LocalHealthMultiplier.live(swimConfig.localHealthMaxMultiplier) ++
+                    SuspicionTimeout.live(
+                      swimConfig.protocolInterval,
+                      swimConfig.suspicionAlpha,
+                      swimConfig.suspicionBeta,
+                      swimConfig.suspicionRequiredConfirmations
+                    )).build
+        } yield Has.allOf(layer.get[SuspicionTimeout.Service], layer.get[LocalHealthMultiplier.Service])
+      )
 
     val managed =
       for {

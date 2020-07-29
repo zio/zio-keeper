@@ -2,26 +2,30 @@ package zio.keeper.swim
 
 import java.util.concurrent.TimeUnit
 
-import zio.clock.Clock
+import zio.clock.{ Clock, _ }
 import zio.duration.Duration
-import zio.keeper.NodeAddress
+import zio.keeper.SwimError.SuspicionTimeoutCancelled
+import zio.keeper.{ Error, NodeAddress }
+import zio.logging.{ Logger, Logging }
 import zio.stm.{ STM, TMap, TQueue }
 import zio.{ UIO, URIO, ZIO, ZLayer }
-import zio.clock._
 
 object SuspicionTimeout {
 
   trait Service {
-    def registerTimeout[R, A](node: NodeAddress)(action: URIO[R, A]): ZIO[R, Unit, A]
+    def registerTimeout[R, A](node: NodeAddress)(action: ZIO[R, Error, A]): ZIO[R, Error, A]
     def cancelTimeout(node: NodeAddress): UIO[Unit]
     def incomingSuspect(node: NodeAddress, from: NodeAddress): UIO[Unit]
   }
 
-  def registerTimeout[R, A](node: NodeAddress)(action: URIO[R, A]): ZIO[R with SuspicionTimeout, Unit, A] =
+  def registerTimeout[R, A](node: NodeAddress)(action: ZIO[R, Error, A]): ZIO[R with SuspicionTimeout, Error, A] =
     ZIO.accessM[SuspicionTimeout with R](_.get.registerTimeout(node)(action))
 
   def incomingSuspect(node: NodeAddress, from: NodeAddress): URIO[SuspicionTimeout, Unit] =
     ZIO.accessM[SuspicionTimeout](_.get.incomingSuspect(node, from))
+
+  def cancelTimeout(node: NodeAddress): URIO[SuspicionTimeout, Unit] =
+    ZIO.accessM[SuspicionTimeout](_.get.cancelTimeout(node))
 
   private case class SuspicionTimeoutEntry(
     start: Long,
@@ -31,19 +35,22 @@ object SuspicionTimeout {
     queue: TQueue[Boolean]
   )
 
-  val live = ZLayer.fromEffect(
+  def live(
+    protocolInterval: Duration,
+    suspicionAlpha: Int,
+    suspicionBeta: Int,
+    suspicionRequiredConfirmations: Int
+  ): ZLayer[Clock with Nodes with Logging, Nothing, SuspicionTimeout] = ZLayer.fromEffect(
     TMap
       .empty[NodeAddress, SuspicionTimeoutEntry]
       .commit
-      .zip(ZIO.environment[Clock with Nodes])
+      .zip(ZIO.environment[Clock with Nodes with Logging])
       .map {
         case (store, env) =>
-          val nodes                      = env.get[Nodes.Service]
-          val clock                      = env.get[Clock.Service]
-          val probeInterval: Duration    = Duration.Zero
-          val suspicionAlpha: Int        = 0
-          val suspicionBeta: Int         = 0
-          val requiredConfirmations: Int = 0
+          val nodes  = env.get[Nodes.Service]
+          val clock  = env.get[Clock.Service]
+          val logger = env.get[Logger[String]]
+
           new Service {
 
             override def cancelTimeout(node: NodeAddress): UIO[Unit] =
@@ -57,7 +64,7 @@ object SuspicionTimeout {
                 .commit
                 .unit
 
-            override def registerTimeout[R, A](node: NodeAddress)(action: URIO[R, A]): ZIO[R, Unit, A] =
+            override def registerTimeout[R, A](node: NodeAddress)(action: ZIO[R, Error, A]): ZIO[R, Error, A] =
               for {
                 queue <- TQueue
                           .bounded[Boolean](1)
@@ -65,13 +72,13 @@ object SuspicionTimeout {
                 numberOfNodes <- nodes.numberOfNodes
                 currentTime   <- clock.currentTime(TimeUnit.MILLISECONDS)
                 nodeScale     = math.max(1.0, math.log10(math.max(1.0, numberOfNodes.toDouble)))
-                min           = probeInterval * suspicionAlpha.toDouble * nodeScale
+                min           = protocolInterval * suspicionAlpha.toDouble * nodeScale
                 max           = min * suspicionBeta.toDouble
                 _             <- store.put(node, SuspicionTimeoutEntry(currentTime, min, max, Set.empty, queue)).commit
                 result        <- scheduleAction(node)(action)
               } yield result
 
-            private def scheduleAction[R, A](node: NodeAddress)(action: URIO[R, A]): ZIO[R, Unit, A] =
+            private def scheduleAction[R, A](node: NodeAddress)(action: ZIO[R, Error, A]): ZIO[R, Error, A] =
               for {
                 maybeEntry <- store.get(node).commit
                 result <- maybeEntry match {
@@ -80,16 +87,24 @@ object SuspicionTimeout {
                                entry.start,
                                entry.max,
                                entry.min,
-                               entry.confirmations.size,
-                               requiredConfirmations
+                               suspicionRequiredConfirmations,
+                               entry.confirmations.size
                              ).provide(env)
+                               .tap(
+                                 timeout =>
+                                   logger.info(s"schedule suspicious for $node with timeout: ${timeout.toMillis} ms")
+                               )
                                .flatMap(timeout => clock.sleep(timeout) *> action <* store.delete(node).commit)
-                               .race(
-                                 ZIO.ifM(entry.queue.take.commit)(scheduleAction(node)(action), ZIO.fail(()))
+                               .raceFirst(
+                                 ZIO.ifM(entry.queue.take.commit)(
+                                   scheduleAction(node)(action),
+                                   logger.info(s"suspicious timeout for $node has been cancelled") *>
+                                     ZIO.fail(SuspicionTimeoutCancelled(node))
+                                 )
                                )
                            case None =>
                              //this mean that already cancelled
-                             ZIO.fail(())
+                             ZIO.fail(SuspicionTimeoutCancelled(node))
                          }
               } yield result
 
@@ -124,7 +139,6 @@ object SuspicionTimeout {
       } else {
         Duration(timeout - elapsed, TimeUnit.MILLISECONDS)
       }
-
     })
 
 }

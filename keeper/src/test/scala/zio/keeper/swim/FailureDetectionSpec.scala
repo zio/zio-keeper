@@ -4,11 +4,10 @@ import zio._
 import zio.clock.Clock
 import zio.console.Console
 import zio.duration._
-import zio.keeper.{ KeeperSpec, NodeAddress }
 import zio.keeper.swim.Nodes.{ nodeState, _ }
-import zio.keeper.swim.ProtocolRecorder.ProtocolRecorder
 import zio.keeper.swim.protocols.FailureDetection
 import zio.keeper.swim.protocols.FailureDetection.{ Ack, Ping, PingReq }
+import zio.keeper.{ KeeperSpec, NodeAddress }
 import zio.logging.Logging
 import zio.test.Assertion._
 import zio.test.TestAspect._
@@ -17,21 +16,30 @@ import zio.test.{ assert, _ }
 
 object FailureDetectionSpec extends KeeperSpec {
 
-  val logger     = Logging.console((_, line) => line)
-  val nodesLayer = (ZLayer.requires[Clock] ++ logger) >>> Nodes.live
+  private val protocolPeriod: Duration  = 1.second
+  private val protocolTimeout: Duration = 500.milliseconds
 
-  val recorder: ZLayer[Clock with Console, Nothing, ProtocolRecorder[FailureDetection]] =
-    (ZLayer.requires[Clock] ++ nodesLayer ++ logger ++ ConversationId.live ++ MessageAcknowledge.live ++ LocalHealthMultiplier
-      .live(9)) >>>
-      ProtocolRecorder
-        .make(
-          FailureDetection
-            .protocol(1.second, 500.milliseconds, NodeAddress(Array[Byte](1, 1, 1, 1), 1111))
-            .flatMap(_.debug)
-        )
-        .orDie
+  val logger = Logging.console((_, line) => line)
 
-  val testLayer = ConversationId.live ++ logger ++ nodesLayer ++ recorder ++ LocalHealthMultiplier.live(9)
+  val nodesLayer = (
+    ZLayer.requires[Console] ++
+      ZLayer.requires[Clock] ++
+      logger ++
+      ConversationId.live ++
+      MessageAcknowledge.live ++
+      LocalHealthMultiplier.live(9)
+  ) >+> Nodes.live >+> SuspicionTimeout.live(protocolPeriod, 3, 5, 3)
+
+  val recorder =
+    ProtocolRecorder
+      .make(
+        FailureDetection
+          .protocol(protocolPeriod, protocolTimeout, NodeAddress(Array[Byte](1, 1, 1, 1), 1111))
+          .flatMap(_.debug)
+      )
+      .orDie
+
+  val testLayer = nodesLayer >+> recorder
 
   val nodeAddress1 = NodeAddress(Array(1, 2, 3, 4), 1111)
   val nodeAddress2 = NodeAddress(Array(11, 22, 33, 44), 1111)
