@@ -245,7 +245,7 @@ object Views {
         for {
           list    <- passiveView0.toList
           dropped <- tRandom.selectOne(list)
-          _       <- STM.foreach(dropped)(passiveView0.delete(_))
+          _       <- STM.foreach_(dropped)(passiveView0.delete(_))
         } yield ()
     }
 }
