@@ -76,3 +76,9 @@ object TransportError {
   final case class ResolutionFailed(address: Address) extends TransportError(s"Resolution failed for $address")
 
 }
+
+object SwimError {
+
+  final case class SuspicionTimeoutCancelled(nodeAddress: NodeAddress)
+      extends Error(s"Suspicion timeout for node: $nodeAddress has been cancelled")
+}

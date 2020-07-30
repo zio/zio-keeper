@@ -1,6 +1,7 @@
 package zio.keeper.swim
 
 import zio._
+import zio.clock.Clock
 import zio.keeper.{ ByteCodec, KeeperSpec, NodeAddress }
 import zio.keeper.swim.Messages.WithPiggyback
 import zio.keeper.swim.PingPong.{ Ping, Pong }
@@ -87,5 +88,5 @@ object MessagesSpec extends KeeperSpec {
           } yield assert(m.map(_.gossip.size))(isSome(equalTo(1453))) && assert(bytes.size)(equalTo(62580))
       }
     }
-  ).provideCustomLayer(logger ++ ConversationId.live)
+  ).provideCustomLayer(logger ++ ConversationId.live ++ ((ZLayer.requires[Clock] ++ logger) >>> Nodes.live))
 }

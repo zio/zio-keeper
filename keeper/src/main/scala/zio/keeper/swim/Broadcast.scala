@@ -2,29 +2,34 @@ package zio.keeper.swim
 
 import zio.keeper.swim.Broadcast._
 import zio.stm.{ STM, TRef }
-import zio.{ Chunk, UIO }
+import zio.{ Chunk, UIO, URIO, ZIO }
 
 import scala.collection.immutable.TreeSet
 
 final class Broadcast(
+  nodes: Nodes.Service,
   ref: TRef[TreeSet[Item]],
   sequenceId: TRef[Int],
   messageOverhead: Int,
   messageLimit: Int,
-  resent: Int
+  resentMultiplier: Int
 ) {
 
   def add(message: Message.Broadcast[Chunk[Byte]]): UIO[Unit] =
-    sequenceId
-      .getAndUpdate(_ + 1)
-      .flatMap[Any, Nothing, Unit](
-        seqId =>
-          ref.update(
-            items =>
-              items ++ TreeSet(Item(seqId, resent /* this should calculated based of num of nodes */, message.message))
-          )
+    nodes.numberOfNodes
+      .map(numberOfNodes => (math.log(numberOfNodes + 1.0) * resentMultiplier).toInt)
+      .flatMap(
+        resent =>
+          sequenceId
+            .getAndUpdate(_ + 1)
+            .flatMap[Any, Nothing, Unit](
+              seqId =>
+                ref.update(
+                  items => items ++ TreeSet(Item(seqId, resent, message.message))
+                )
+            )
+            .commit
       )
-      .commit
 
   def broadcast(currentMessageSize: Int): UIO[List[Chunk[Byte]]] =
     ref.modify { items =>
@@ -48,8 +53,13 @@ final class Broadcast(
 
 object Broadcast {
 
-  def make(mtu: Int, resent: Int): UIO[Broadcast] =
-    STM.mapN(TRef.make(TreeSet.empty[Item]), TRef.make(0))(new Broadcast(_, _, 3, mtu, resent)).commit
+  def make(mtu: Int, resentMultiplier: Int): URIO[Nodes, Broadcast] =
+    ZIO.accessM[Nodes](
+      nodes =>
+        STM
+          .mapN(TRef.make(TreeSet.empty[Item]), TRef.make(0))(new Broadcast(nodes.get, _, _, 3, mtu, resentMultiplier))
+          .commit
+    )
 
   final case class Item(seqId: Int, resend: Int, chunk: Chunk[Byte])
   implicit val ordering: Ordering[Item] = Ordering.by[Item, Int](_.seqId)
