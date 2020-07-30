@@ -15,7 +15,7 @@ import zio.keeper.swim.{
 }
 import zio.keeper.{ ByteCodec, NodeAddress, swim }
 import zio.logging._
-import zio.stm.{ STM, TMap }
+import zio.stm.{ STM, TMap, TSet }
 import zio.stream.ZStream
 import zio.{ Schedule, ZIO, keeper }
 
@@ -23,9 +23,9 @@ sealed trait FailureDetection
 
 object FailureDetection {
 
-  final case object Ping                                           extends FailureDetection
-  final case object Ack                                            extends FailureDetection
-  final case object Nack                                           extends FailureDetection
+  case object Ping                                                 extends FailureDetection
+  case object Ack                                                  extends FailureDetection
+  case object Nack                                                 extends FailureDetection
   final case class PingReq(target: NodeAddress)                    extends FailureDetection
   final case class Suspect(from: NodeAddress, nodeId: NodeAddress) extends FailureDetection
   final case class Alive(nodeId: NodeAddress)                      extends FailureDetection
@@ -65,7 +65,7 @@ object FailureDetection {
 
   private class Protocol(
     pingReqs: TMap[Long, (NodeAddress, Long)],
-    pendingNacks: TMap[Long, Unit],
+    pendingNacks: TSet[Long],
     protocolPeriod: Duration,
     protocolTimeout: Duration,
     localNode: NodeAddress
@@ -194,7 +194,7 @@ object FailureDetection {
           LocalHealthMultiplier.increase *>
           nextNode(Some(probedNode)).flatMap {
             case Some((next, _)) =>
-              pendingNacks.put(conversationId, ()).commit *>
+              pendingNacks.put(conversationId).commit *>
                 Message.withScaledTimeout(
                   Message.Direct(next, conversationId, PingReq(probedNode)),
                   pingReqTimeoutAction(
@@ -256,7 +256,7 @@ object FailureDetection {
   ): ZIO[Env, keeper.Error, swim.Protocol[FailureDetection]] =
     TMap
       .empty[Long, (NodeAddress, Long)]
-      .zip(TMap.empty[Long, Unit])
+      .zip(TSet.empty[Long])
       .commit
       .flatMap {
         case (pendingAcks, pendingNacks) =>
