@@ -17,17 +17,18 @@ object HyParViewConfig {
     concurrentIncomingConnections: Int
   ) {
 
-    val prettyPrint: String = s"""activeViewCapacity: $activeViewCapacity
-                                 |passiveViewCapacity: $passiveViewCapacity
-                                 |arwl: $arwl
-                                 |prwl: $prwl
-                                 |shuffleNActive: $shuffleNActive
-                                 |shuffleNPassive: $shuffleNPassive
-                                 |shuffleTTL: $shuffleTTL
-                                 |connectionBuffer: $connectionBuffer
-                                 |userMessagesBuffer: $userMessagesBuffer
-                                 |concurrentIncomingConnections: $concurrentIncomingConnections""".stripMargin
-  }
+    val prettyPrint: String =
+      s"""activeViewCapacity: $activeViewCapacity
+         |passiveViewCapacity: $passiveViewCapacity
+         |arwl: $arwl
+         |prwl: $prwl
+         |shuffleNActive: $shuffleNActive
+         |shuffleNPassive: $shuffleNPassive
+         |shuffleTTL: $shuffleTTL
+         |connectionBuffer: $connectionBuffer
+         |userMessagesBuffer: $userMessagesBuffer
+         |concurrentIncomingConnections: $concurrentIncomingConnections""".stripMargin
+}
 
   def staticConfig(
     activeViewCapacity: Int,

@@ -36,6 +36,9 @@ trait Protocol[-R, +E, -I, +O] { self =>
         f(in).flatMap(self.step(_).map { case (out, next) => (out, next.map(_.contraMapM(f))) })
     }
 
+  def forever: Protocol[R, E, I, O] =
+    self andThen self.forever
+
   def map[O1](f: O => O1): Protocol[R, E, I, O1] =
     new Protocol[R, E, I, O1] {
       def step(in: I): ZIO[R,E,(Chunk[O1], Option[Protocol[R,E,I,O1]])] =
@@ -51,6 +54,9 @@ trait Protocol[-R, +E, -I, +O] { self =>
 }
 
 object Protocol {
+
+  val end: Protocol[Any, Nothing, Any, Nothing] =
+    fromFunction(_ => (Chunk.empty, None))
 
   def fromEffect[R, E, I, O](f: I => ZIO[R, E, (Chunk[O], Option[Protocol[R, E, I, O]])]): Protocol[R, E, I, O] =
     new Protocol[R, E, I, O] {

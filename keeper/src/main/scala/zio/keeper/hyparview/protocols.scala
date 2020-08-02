@@ -2,8 +2,7 @@ package zio.keeper.hyparview
 
 import zio._
 import zio.stm._
-import zio.keeper.{NodeAddress, Protocol}
-import zio.keeper.{Error, ProtocolError}
+import zio.keeper._
 
 object protocols {
 
@@ -52,5 +51,5 @@ object protocols {
         ZIO.fail(ProtocolError(s"illegal message for initial protocol: ${msg.toString}"))
     }
 
-  def activeProtocol(remoteAddr: NodeAddress): Protocol[Views, Nothing, Any, Nothing] = ???
+  def activeProtocol(remoteAddr: NodeAddress): Protocol[Any, Nothing, Any, Nothing] = ???
 }
