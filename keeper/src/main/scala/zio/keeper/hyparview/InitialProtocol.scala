@@ -60,4 +60,41 @@ object InitialProtocol {
     implicit val codec: ByteCodec[ShuffleReply] =
       ByteCodec.fromReadWriter(macroRW[ShuffleReply])
   }
+
+  sealed abstract class Reply
+
+  object Reply {
+
+    final case class JoinReply(
+      remote: NodeAddress
+    ) extends Reply
+
+    object JoinReply {
+
+      implicit val codec: ByteCodec[JoinReply] =
+        ByteCodec.fromReadWriter(macroRW[JoinReply])
+
+    }
+
+    case object NeighborReject extends Reply {
+
+      implicit val codec: ByteCodec[NeighborReject.type] =
+        ByteCodec.fromReadWriter(macroRW[NeighborReject.type])
+
+    }
+
+    case object NeighborAccept extends Reply {
+
+      implicit val codec: ByteCodec[NeighborAccept.type] =
+        ByteCodec.fromReadWriter(macroRW[NeighborAccept.type])
+
+    }
+
+    implicit val codec: ByteCodec[Reply] =
+      ByteCodec.tagged[Reply][
+        JoinReply,
+        NeighborReject.type,
+        NeighborAccept.type
+      ]
+  }
 }

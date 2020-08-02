@@ -24,12 +24,12 @@ object tcp {
       channel: AsynchronousSocketChannel,
       id: ju.UUID,
       close0: UIO[Unit]
-    ): UIO[Connection[Any, TransportError, Chunk[Byte]]] =
+    ): UIO[ChunkConnection] =
       for {
         writeLock <- Semaphore.make(1)
         readLock  <- Semaphore.make(1)
       } yield {
-        new Connection[Any, TransportError, Chunk[Byte]] {
+        new Connection[Any, TransportError, Chunk[Byte], Chunk[Byte]] {
           override def send(dataChunk: Chunk[Byte]): IO[TransportError, Unit] = {
             val size      = dataChunk.size
             val sizeChunk = Chunk.fromArray(intToByteArray(size))
@@ -91,7 +91,7 @@ object tcp {
         } yield connection
       }.provide(env)
 
-      override def bind(addr: NodeAddress): Stream[TransportError, Connection[Any, TransportError, Chunk[Byte]]] = {
+      override def bind(addr: NodeAddress): Stream[TransportError, ChunkConnection] = {
 
         val bind = ZStream.managed {
           AsynchronousServerSocketChannel()

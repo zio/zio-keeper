@@ -34,6 +34,8 @@ object SerializationError {
 
 }
 
+final case class ProtocolError(override val msg: String) extends Error
+
 final case class ServiceDiscoveryError(override val msg: String) extends Error
 
 sealed abstract class ClusterError(msg: String = "") extends Error(msg = msg)
