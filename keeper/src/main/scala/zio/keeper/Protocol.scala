@@ -7,9 +7,6 @@ trait Protocol[-R, +E, -I, +O, +A] { self =>
 
   def step(in: I): ZIO[R, E, (Chunk[O], Either[A, Protocol[R, E, I, O, A]])]
 
-  def onEnd[R1 <: R, E1 >: E](f: A => ZIO[R1, E1, _]): Protocol[R1, E1, I, O, A] =
-    mapResultM(a => f(a).as(a))
-
   def flatMap[R1 <: R, E1 >: E, I1 <: I, O1 >: O, A1](
     f: A => Protocol[R1, E1, I1, O1, A1]
   ): Protocol[R1, E1, I1, O1, A1] =
@@ -31,6 +28,41 @@ trait Protocol[-R, +E, -I, +O, +A] { self =>
         self.step(in).flatMap {
           case (out, next) =>
             next.fold(a => f(a).map(Right(_)), p => ZIO.succeedNow(Right(p.flatMapM(f)))).map((out, _))
+        }
+    }
+
+  def cont[R1 <: R, E1 >: E, I1 <: I, O1 >: O, A1 >: A](
+    f: A => Option[Protocol[R1, E1, I1, O1, A1]]
+  ): Protocol[R1, E1, I1, O1, A1] =
+    new Protocol[R1, E1, I1, O1, A1] {
+
+      def step(in: I1): ZIO[R1, E1, (Chunk[O1], Either[A1, Protocol[R1, E1, I1, O1, A1]])] =
+        self.step(in).map {
+          case (out, next) =>
+            (
+              out,
+              next.fold(
+                a => f(a).fold[Either[A1, Protocol[R1, E1, I1, O1, A1]]](Left(a))(Right(_)),
+                p => Right(p.cont(f))
+              )
+            )
+        }
+    }
+
+  def contM[R1 <: R, E1 >: E, I1 <: I, O1 >: O, A1 >: A](
+    f: A => ZIO[R1, E1, Option[Protocol[R1, E1, I1, O1, A1]]]
+  ): Protocol[R1, E1, I1, O1, A1] =
+    new Protocol[R1, E1, I1, O1, A1] {
+
+      def step(in: I1): ZIO[R1, E1, (Chunk[O1], Either[A1, Protocol[R1, E1, I1, O1, A1]])] =
+        self.step(in).flatMap {
+          case (out, next) =>
+            next
+              .fold(
+                a => f(a).map(_.fold[Either[A1, Protocol[R1, E1, I1, O1, A1]]](Left(a))(Right(_))),
+                p => ZIO.succeedNow(Right(p.contM(f)))
+              )
+              .map((out, _))
         }
     }
 
@@ -113,6 +145,9 @@ trait Protocol[-R, +E, -I, +O, +A] { self =>
             next.fold(a => f(a).map(Left(_)), proto => ZIO.succeedNow(Right(proto.mapResultM(f)))).map((out, _))
         }
     }
+
+  def onEnd[R1 <: R, E1 >: E](f: A => ZIO[R1, E1, _]): Protocol[R1, E1, I, O, A] =
+    mapResultM(a => f(a).as(a))
 
   lazy val unit: Protocol[R, E, I, O, Unit] =
     mapResult(_ => ())

@@ -15,10 +15,11 @@ object protocols {
     withActiveProtocol(con) { activeProtocol =>
       val protocol =
         initialProtocol
-          .flatMapM(
-            _.fold[ZIO[R, Error, Protocol[R, Error, Message, Message, Unit]]](ZIO.succeedNow(Protocol.end))(
-              activeProtocol(_).map(_.unit)
-            )
+          .contM[R, Error, Message, Message, Any](
+            _.fold[ZIO[R, Error, Option[Protocol[R, Error, Message, Message, Unit]]]](ZIO.succeedNow(None)) {
+              remoteAddr =>
+                activeProtocol(remoteAddr).map(protocol => Some(protocol.unit))
+            }
           )
       Protocol.run(con, protocol).unit
     }
