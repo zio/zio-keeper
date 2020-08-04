@@ -114,6 +114,9 @@ trait Protocol[-R, +E, -I, +O, +A] { self =>
         }
     }
 
+  lazy val unit: Protocol[R, E, I, O, Unit] =
+    mapResult(_ => ())
+
 }
 
 object Protocol {
