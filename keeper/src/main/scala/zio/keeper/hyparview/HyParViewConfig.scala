@@ -28,7 +28,7 @@ object HyParViewConfig {
          |connectionBuffer: $connectionBuffer
          |userMessagesBuffer: $userMessagesBuffer
          |concurrentIncomingConnections: $concurrentIncomingConnections""".stripMargin
-}
+  }
 
   def staticConfig(
     activeViewCapacity: Int,

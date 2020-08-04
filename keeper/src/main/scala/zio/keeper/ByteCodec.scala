@@ -273,15 +273,15 @@ object ByteCodec {
     ]: ByteCodec[A] =
       taggedInstance[A](
         {
-          case _: A1 => 0
-          case _: A2 => 1
-          case _: A3 => 2
-          case _: A4 => 3
-          case _: A5 => 4
-          case _: A6 => 5
-          case _: A7 => 6
-          case _: A8 => 7
-          case _: A9 => 8
+          case _: A1  => 0
+          case _: A2  => 1
+          case _: A3  => 2
+          case _: A4  => 3
+          case _: A5  => 4
+          case _: A6  => 5
+          case _: A7  => 6
+          case _: A8  => 7
+          case _: A9  => 8
           case _: A10 => 9
         }, {
           case 0 => ByteCodec[A1].unsafeWiden[A]
@@ -312,28 +312,28 @@ object ByteCodec {
     ]: ByteCodec[A] =
       taggedInstance[A](
         {
-          case _: A1 => 0
-          case _: A2 => 1
-          case _: A3 => 2
-          case _: A4 => 3
-          case _: A5 => 4
-          case _: A6 => 5
-          case _: A7 => 6
-          case _: A8 => 7
-          case _: A9 => 8
+          case _: A1  => 0
+          case _: A2  => 1
+          case _: A3  => 2
+          case _: A4  => 3
+          case _: A5  => 4
+          case _: A6  => 5
+          case _: A7  => 6
+          case _: A8  => 7
+          case _: A9  => 8
           case _: A10 => 9
           case _: A11 => 10
         }, {
-          case 0 => ByteCodec[A1].unsafeWiden[A]
-          case 1 => ByteCodec[A2].unsafeWiden[A]
-          case 2 => ByteCodec[A3].unsafeWiden[A]
-          case 3 => ByteCodec[A4].unsafeWiden[A]
-          case 4 => ByteCodec[A5].unsafeWiden[A]
-          case 5 => ByteCodec[A6].unsafeWiden[A]
-          case 6 => ByteCodec[A7].unsafeWiden[A]
-          case 7 => ByteCodec[A8].unsafeWiden[A]
-          case 8 => ByteCodec[A9].unsafeWiden[A]
-          case 9 => ByteCodec[A10].unsafeWiden[A]
+          case 0  => ByteCodec[A1].unsafeWiden[A]
+          case 1  => ByteCodec[A2].unsafeWiden[A]
+          case 2  => ByteCodec[A3].unsafeWiden[A]
+          case 3  => ByteCodec[A4].unsafeWiden[A]
+          case 4  => ByteCodec[A5].unsafeWiden[A]
+          case 5  => ByteCodec[A6].unsafeWiden[A]
+          case 6  => ByteCodec[A7].unsafeWiden[A]
+          case 7  => ByteCodec[A8].unsafeWiden[A]
+          case 8  => ByteCodec[A9].unsafeWiden[A]
+          case 9  => ByteCodec[A10].unsafeWiden[A]
           case 10 => ByteCodec[A10].unsafeWiden[A]
         }
       )
@@ -354,35 +354,35 @@ object ByteCodec {
     ]: ByteCodec[A] =
       taggedInstance[A](
         {
-          case _: A1 => 0
-          case _: A2 => 1
-          case _: A3 => 2
-          case _: A4 => 3
-          case _: A5 => 4
-          case _: A6 => 5
-          case _: A7 => 6
-          case _: A8 => 7
-          case _: A9 => 8
+          case _: A1  => 0
+          case _: A2  => 1
+          case _: A3  => 2
+          case _: A4  => 3
+          case _: A5  => 4
+          case _: A6  => 5
+          case _: A7  => 6
+          case _: A8  => 7
+          case _: A9  => 8
           case _: A10 => 9
           case _: A11 => 10
           case _: A12 => 11
         }, {
-          case 0 => ByteCodec[A1].unsafeWiden[A]
-          case 1 => ByteCodec[A2].unsafeWiden[A]
-          case 2 => ByteCodec[A3].unsafeWiden[A]
-          case 3 => ByteCodec[A4].unsafeWiden[A]
-          case 4 => ByteCodec[A5].unsafeWiden[A]
-          case 5 => ByteCodec[A6].unsafeWiden[A]
-          case 6 => ByteCodec[A7].unsafeWiden[A]
-          case 7 => ByteCodec[A8].unsafeWiden[A]
-          case 8 => ByteCodec[A9].unsafeWiden[A]
-          case 9 => ByteCodec[A10].unsafeWiden[A]
+          case 0  => ByteCodec[A1].unsafeWiden[A]
+          case 1  => ByteCodec[A2].unsafeWiden[A]
+          case 2  => ByteCodec[A3].unsafeWiden[A]
+          case 3  => ByteCodec[A4].unsafeWiden[A]
+          case 4  => ByteCodec[A5].unsafeWiden[A]
+          case 5  => ByteCodec[A6].unsafeWiden[A]
+          case 6  => ByteCodec[A7].unsafeWiden[A]
+          case 7  => ByteCodec[A8].unsafeWiden[A]
+          case 8  => ByteCodec[A9].unsafeWiden[A]
+          case 9  => ByteCodec[A10].unsafeWiden[A]
           case 10 => ByteCodec[A10].unsafeWiden[A]
           case 11 => ByteCodec[A11].unsafeWiden[A]
         }
       )
 
-      def apply[
+    def apply[
       A1 <: A: ByteCodec: ClassTag,
       A2 <: A: ByteCodec: ClassTag,
       A3 <: A: ByteCodec: ClassTag,
@@ -399,30 +399,30 @@ object ByteCodec {
     ]: ByteCodec[A] =
       taggedInstance[A](
         {
-          case _: A1 => 0
-          case _: A2 => 1
-          case _: A3 => 2
-          case _: A4 => 3
-          case _: A5 => 4
-          case _: A6 => 5
-          case _: A7 => 6
-          case _: A8 => 7
-          case _: A9 => 8
+          case _: A1  => 0
+          case _: A2  => 1
+          case _: A3  => 2
+          case _: A4  => 3
+          case _: A5  => 4
+          case _: A6  => 5
+          case _: A7  => 6
+          case _: A8  => 7
+          case _: A9  => 8
           case _: A10 => 9
           case _: A11 => 10
           case _: A12 => 11
           case _: A13 => 12
         }, {
-          case 0 => ByteCodec[A1].unsafeWiden[A]
-          case 1 => ByteCodec[A2].unsafeWiden[A]
-          case 2 => ByteCodec[A3].unsafeWiden[A]
-          case 3 => ByteCodec[A4].unsafeWiden[A]
-          case 4 => ByteCodec[A5].unsafeWiden[A]
-          case 5 => ByteCodec[A6].unsafeWiden[A]
-          case 6 => ByteCodec[A7].unsafeWiden[A]
-          case 7 => ByteCodec[A8].unsafeWiden[A]
-          case 8 => ByteCodec[A9].unsafeWiden[A]
-          case 9 => ByteCodec[A10].unsafeWiden[A]
+          case 0  => ByteCodec[A1].unsafeWiden[A]
+          case 1  => ByteCodec[A2].unsafeWiden[A]
+          case 2  => ByteCodec[A3].unsafeWiden[A]
+          case 3  => ByteCodec[A4].unsafeWiden[A]
+          case 4  => ByteCodec[A5].unsafeWiden[A]
+          case 5  => ByteCodec[A6].unsafeWiden[A]
+          case 6  => ByteCodec[A7].unsafeWiden[A]
+          case 7  => ByteCodec[A8].unsafeWiden[A]
+          case 8  => ByteCodec[A9].unsafeWiden[A]
+          case 9  => ByteCodec[A10].unsafeWiden[A]
           case 10 => ByteCodec[A10].unsafeWiden[A]
           case 11 => ByteCodec[A11].unsafeWiden[A]
           case 12 => ByteCodec[A12].unsafeWiden[A]

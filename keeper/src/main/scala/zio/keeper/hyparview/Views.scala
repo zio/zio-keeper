@@ -32,6 +32,12 @@ object Views {
       disconnect: UIO[Unit]
     ): STM[Unit, Unit]
 
+    def addToActiveView0(
+      node: NodeAddress,
+      send: Message => STM[Nothing, Unit],
+      disconnect: STM[Nothing, Unit]
+    ): STM[Nothing, Unit] = ???
+
     def addToPassiveView(node: NodeAddress): STM[Nothing, Unit]
     def addAllToPassiveView(nodes: List[NodeAddress]): STM[Nothing, Unit]
 
@@ -85,6 +91,13 @@ object Views {
     disconnect: UIO[Unit]
   ): ZSTM[Views, Unit, Unit] =
     ZSTM.accessM(_.get.addToActiveView(node, send, disconnect))
+
+  def addToActiveView0(
+    node: NodeAddress,
+    send: Message => STM[Nothing, Unit],
+    disconnect: STM[Nothing, Unit]
+  ): ZSTM[Views, Nothing, Unit] =
+    ZSTM.accessM(_.get.addToActiveView0(node, send, disconnect))
 
   def addToPassiveView(node: NodeAddress): ZSTM[Views, Nothing, Unit] =
     ZSTM.accessM(_.get.addToPassiveView(node))
