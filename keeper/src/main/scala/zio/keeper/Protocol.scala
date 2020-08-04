@@ -7,30 +7,6 @@ trait Protocol[-R, +E, -I, +O, +A] { self =>
 
   def step(in: I): ZIO[R, E, (Chunk[O], Either[A, Protocol[R, E, I, O, A]])]
 
-  def flatMap[R1 <: R, E1 >: E, I1 <: I, O1 >: O, A1](
-    f: A => Protocol[R1, E1, I1, O1, A1]
-  ): Protocol[R1, E1, I1, O1, A1] =
-    new Protocol[R1, E1, I1, O1, A1] {
-
-      def step(in: I1): ZIO[R1, E1, (Chunk[O1], Either[A1, Protocol[R1, E1, I1, O1, A1]])] =
-        self.step(in).map {
-          case (out, next) =>
-            (out, next.fold(a => Right(f(a)), p => Right(p.flatMap(f))))
-        }
-    }
-
-  def flatMapM[R1 <: R, E1 >: E, I1 <: I, O1 >: O, A1](
-    f: A => ZIO[R1, E1, Protocol[R1, E1, I1, O1, A1]]
-  ): Protocol[R1, E1, I1, O1, A1] =
-    new Protocol[R1, E1, I1, O1, A1] {
-
-      def step(in: I1): ZIO[R1, E1, (Chunk[O1], Either[A1, Protocol[R1, E1, I1, O1, A1]])] =
-        self.step(in).flatMap {
-          case (out, next) =>
-            next.fold(a => f(a).map(Right(_)), p => ZIO.succeedNow(Right(p.flatMapM(f)))).map((out, _))
-        }
-    }
-
   def cont[R1 <: R, E1 >: E, I1 <: I, O1 >: O, A1 >: A](
     f: A => Option[Protocol[R1, E1, I1, O1, A1]]
   ): Protocol[R1, E1, I1, O1, A1] =
@@ -63,6 +39,30 @@ trait Protocol[-R, +E, -I, +O, +A] { self =>
                 p => ZIO.succeedNow(Right(p.contM(f)))
               )
               .map((out, _))
+        }
+    }
+
+  def flatMap[R1 <: R, E1 >: E, I1 <: I, O1 >: O, A1](
+    f: A => Protocol[R1, E1, I1, O1, A1]
+  ): Protocol[R1, E1, I1, O1, A1] =
+    new Protocol[R1, E1, I1, O1, A1] {
+
+      def step(in: I1): ZIO[R1, E1, (Chunk[O1], Either[A1, Protocol[R1, E1, I1, O1, A1]])] =
+        self.step(in).map {
+          case (out, next) =>
+            (out, next.fold(a => Right(f(a)), p => Right(p.flatMap(f))))
+        }
+    }
+
+  def flatMapM[R1 <: R, E1 >: E, I1 <: I, O1 >: O, A1](
+    f: A => ZIO[R1, E1, Protocol[R1, E1, I1, O1, A1]]
+  ): Protocol[R1, E1, I1, O1, A1] =
+    new Protocol[R1, E1, I1, O1, A1] {
+
+      def step(in: I1): ZIO[R1, E1, (Chunk[O1], Either[A1, Protocol[R1, E1, I1, O1, A1]])] =
+        self.step(in).flatMap {
+          case (out, next) =>
+            next.fold(a => f(a).map(Right(_)), p => ZIO.succeedNow(Right(p.flatMapM(f)))).map((out, _))
         }
     }
 
