@@ -7,6 +7,9 @@ trait Protocol[-R, +E, -I, +O, +A] { self =>
 
   def step(in: I): ZIO[R, E, (Chunk[O], Either[A, Protocol[R, E, I, O, A]])]
 
+  def onEnd[R1 <: R, E1 >: E](f: A => ZIO[R1, E1, _]): Protocol[R1, E1, I, O, A] =
+    mapResultM(a => f(a).as(a))
+
   def flatMap[R1 <: R, E1 >: E, I1 <: I, O1 >: O, A1](
     f: A => Protocol[R1, E1, I1, O1, A1]
   ): Protocol[R1, E1, I1, O1, A1] =
@@ -89,6 +92,26 @@ trait Protocol[-R, +E, -I, +O, +A] { self =>
 
       def step(in: I): ZIO[R1, E1, (Chunk[O1], Either[A, Protocol[R1, E1, I, O1, A]])] =
         self.step(in).flatMap { case (out, next) => ZIO.foreach(out)(f).map((_, next.map(_.mapOutM(f)))) }
+    }
+
+  def mapResult[A1](f: A => A1): Protocol[R, E, I, O, A1] =
+    new Protocol[R, E, I, O, A1] {
+
+      def step(in: I): ZIO[R, E, (Chunk[O], Either[A1, Protocol[R, E, I, O, A1]])] =
+        self.step(in).map {
+          case (out, next) =>
+            (out, next.fold(a => Left(f(a)), proto => Right(proto.mapResult(f))))
+        }
+    }
+
+  def mapResultM[R1 <: R, E1 >: E, A1](f: A => ZIO[R1, E1, A1]): Protocol[R1, E1, I, O, A1] =
+    new Protocol[R1, E1, I, O, A1] {
+
+      def step(in: I): ZIO[R1, E1, (Chunk[O], Either[A1, Protocol[R1, E1, I, O, A1]])] =
+        self.step(in).flatMap {
+          case (out, next) =>
+            next.fold(a => f(a).map(Left(_)), proto => ZIO.succeedNow(Right(proto.mapResultM(f)))).map((out, _))
+        }
     }
 
 }
