@@ -7,9 +7,7 @@ import zio.logging.{Logging, log}
 
 object protocols {
 
-  def initialProtocol[R <: HyParViewConfig with Views with Logging, E >: Error, I <: Message, O >: Message](
-    cont: NodeAddress => ZIO[R, E, Protocol[R, E, I, O]]
-  ): Protocol[R, E, I, O] =
+  val initialProtocol: Protocol[HyParViewConfig with Views with Logging, Error, Message, Message, Option[NodeAddress]] =
       Protocol.fromEffect {
         case Message.Join(sender) =>
           for {
@@ -26,34 +24,31 @@ object protocols {
                             .ForwardJoin(localAddr, sender, TimeToLive(config.arwl))
                         )
                   )
-            protocol <- cont(sender)
-          } yield (Chunk.single(Message.JoinReply(localAddr)), Some(protocol))
+          } yield (Chunk.single(Message.JoinReply(localAddr)), Left(Some(sender)))
         case Message.Neighbor(sender, isHighPriority) =>
           val accept =
-            cont(sender).map(protocol => (Chunk.single(Message.NeighborAccept), Some(protocol)))
+            (Chunk.single(Message.NeighborAccept), Left(Some(sender)))
           val reject =
-            ZIO.succeedNow((Chunk.single(Message.NeighborReject), None))
-          if (isHighPriority) accept
-          else {
+            (Chunk.single(Message.NeighborReject), Left(None))
+          if (isHighPriority) {
+            ZIO.succeedNow(accept)
+          } else {
             ZSTM
               .ifM(Views.isActiveViewFull)(
                 Views.addToPassiveView(sender).as(reject),
                 STM.succeedNow(accept)
               )
               .commit
-              .flatten
           }
         case Message.ShuffleReply(passiveNodes, sentOriginally) =>
           Views
             .addShuffledNodes(sentOriginally.toSet, passiveNodes.toSet)
             .commit
-            .as((Chunk.empty, None))
+            .as((Chunk.empty, Left(None)))
         case Message.ForwardJoinReply(sender) =>
-          cont(sender).map(protocol => (Chunk.empty, Some(protocol)))
+          ZIO.succeedNow((Chunk.empty, Left(Some(sender))))
         case msg =>
-          log.warn(s"Unsupported message for initial protocol: $msg").as((Chunk.empty, Some(go)))
+          log.warn(s"Unsupported message for initial protocol: $msg").as((Chunk.empty, Right(initialProtocol)))
       }
-
-  val makeActiveProtocol: Protocol[Any, Nothing, Any, Nothing] = ???
 
 }
