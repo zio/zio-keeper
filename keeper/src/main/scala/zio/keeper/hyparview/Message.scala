@@ -90,7 +90,6 @@ object Message {
   }
 
   final case class Disconnect(
-    sender: NodeAddress,
     alive: Boolean
   ) extends Message
 

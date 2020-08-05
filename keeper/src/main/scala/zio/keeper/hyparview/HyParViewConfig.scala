@@ -1,6 +1,7 @@
 package zio.keeper.hyparview
 
-import zio.{ UIO, ULayer, ZLayer }
+import zio.{ UIO, ULayer, URIO, ZIO, ZLayer }
+import zio.stm.{ STM, ZSTM }
 
 object HyParViewConfig {
 
@@ -30,6 +31,19 @@ object HyParViewConfig {
          |concurrentIncomingConnections: $concurrentIncomingConnections""".stripMargin
   }
 
+  trait Service {
+    val getConfigSTM: STM[Nothing, Config]
+
+    val getConfig: UIO[Config] =
+      getConfigSTM.commit
+  }
+
+  val getConfig: URIO[HyParViewConfig, Config] =
+    ZIO.accessM(_.get.getConfig)
+
+  val getConfigSTM: ZSTM[HyParViewConfig, Nothing, Config] =
+    ZSTM.accessM(_.get.getConfigSTM)
+
   def staticConfig(
     activeViewCapacity: Int,
     passiveViewCapacity: Int,
@@ -44,8 +58,8 @@ object HyParViewConfig {
   ): ULayer[HyParViewConfig] =
     ZLayer.succeed {
       new Service {
-        val getConfig: UIO[Config] =
-          UIO.succeed {
+        val getConfigSTM: STM[Nothing, Config] =
+          STM.succeed {
             Config(
               activeViewCapacity,
               passiveViewCapacity,
@@ -61,8 +75,4 @@ object HyParViewConfig {
           }
       }
     }
-
-  trait Service {
-    val getConfig: UIO[Config]
-  }
 }

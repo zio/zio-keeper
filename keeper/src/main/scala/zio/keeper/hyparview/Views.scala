@@ -123,6 +123,8 @@ object Views {
   def send(to: NodeAddress, msg: ActiveProtocol): ZIO[Views, SendError, Unit] =
     ZIO.accessM(_.get.send(to, msg))
 
+  def send0(to: NodeAddress, msg: Message): ZSTM[Views, Nothing, Unit] = ???
+
   def fromConfig(
     localAddr: NodeAddress
   ): ZLayer[HyParViewConfig with TRandom, Nothing, Views] =

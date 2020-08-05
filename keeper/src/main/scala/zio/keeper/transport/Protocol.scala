@@ -145,6 +145,15 @@ trait Protocol[-R, +E, -I, +O, +A] { self =>
         }
     }
 
+  def tapIn[R1 <: R, E1 >: E, I1 <: I](f: I1 => ZIO[R1, E1, _]): Protocol[R1, E1, I1, O, A] =
+    mapInM(i => f(i).as(i))
+
+  def tapOut[R1 <: R, E1 >: E](f: O => ZIO[R1, E1, _]): Protocol[R1, E1, I, O, A] =
+    mapOutM(o => f(o).as(o))
+
+  def tapResult[R1 <: R, E1 >: E](f: A => ZIO[R1, E1, _]): Protocol[R1, E1, I, O, A] =
+    mapResultM(a => f(a).as(a))
+
   def onEnd[R1 <: R, E1 >: E](f: A => ZIO[R1, E1, _]): Protocol[R1, E1, I, O, A] =
     mapResultM(a => f(a).as(a))
 
