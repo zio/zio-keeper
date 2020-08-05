@@ -1,14 +1,13 @@
-package zio.keeper
+package zio.keeper.transport
 
 import zio._
-import zio.keeper.transport.Connection
 
 trait Protocol[-R, +E, -I, +O, +A] { self =>
 
   def step(in: I): ZIO[R, E, (Chunk[O], Either[A, Protocol[R, E, I, O, A]])]
 
-  def cont[R1 <: R, E1 >: E, I1 <: I, O1 >: O, A1 >: A](
-    f: A => Option[Protocol[R1, E1, I1, O1, A1]]
+  def cont[R1 <: R, E1 >: E, I1 <: I, O1 >: O, A1](
+    f: A => Either[A1, Protocol[R1, E1, I1, O1, A1]]
   ): Protocol[R1, E1, I1, O1, A1] =
     new Protocol[R1, E1, I1, O1, A1] {
 
@@ -18,15 +17,15 @@ trait Protocol[-R, +E, -I, +O, +A] { self =>
             (
               out,
               next.fold(
-                a => f(a).fold[Either[A1, Protocol[R1, E1, I1, O1, A1]]](Left(a))(Right(_)),
+                f(_),
                 p => Right(p.cont(f))
               )
             )
         }
     }
 
-  def contM[R1 <: R, E1 >: E, I1 <: I, O1 >: O, A1 >: A](
-    f: A => ZIO[R1, E1, Option[Protocol[R1, E1, I1, O1, A1]]]
+  def contM[R1 <: R, E1 >: E, I1 <: I, O1 >: O, A1](
+    f: A => ZIO[R1, E1, Either[A1, Protocol[R1, E1, I1, O1, A1]]]
   ): Protocol[R1, E1, I1, O1, A1] =
     new Protocol[R1, E1, I1, O1, A1] {
 
@@ -35,7 +34,7 @@ trait Protocol[-R, +E, -I, +O, +A] { self =>
           case (out, next) =>
             next
               .fold(
-                a => f(a).map(_.fold[Either[A1, Protocol[R1, E1, I1, O1, A1]]](Left(a))(Right(_))),
+                f(_),
                 p => ZIO.succeedNow(Right(p.contM(f)))
               )
               .map((out, _))

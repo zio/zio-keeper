@@ -5,7 +5,7 @@ import zio.stm._
 import zio.keeper._
 import zio.logging.{ Logging, log }
 import zio.stream.ZStream
-import zio.keeper.transport.Connection
+import zio.keeper.transport.{ Connection, Protocol }
 
 object protocols {
 
@@ -16,9 +16,9 @@ object protocols {
       val protocol =
         initialProtocol
           .contM[R, Error, Message, Message, Any](
-            _.fold[ZIO[R, Error, Option[Protocol[R, Error, Message, Message, Unit]]]](ZIO.succeedNow(None)) {
+            _.fold[ZIO[R, Error, Either[Unit, Protocol[R, Error, Message, Message, Unit]]]](ZIO.succeedNow(Left(()))) {
               remoteAddr =>
-                activeProtocol(remoteAddr).map(protocol => Some(protocol.unit))
+                activeProtocol(remoteAddr).map(protocol => Right(protocol.unit))
             }
           )
       Protocol.run(con, protocol).unit
