@@ -93,12 +93,7 @@ object protocols {
                         }.as(true),
                         STM.succeed(false)
                       )
-                    complete.commit.flatMap {
-                      case true =>
-                        con.send(Message.Disconnect(keep))
-                      case false =>
-                        ZIO.unit
-                    }
+                    con.send(Message.Disconnect(keep)).whenM(complete.commit)
                   }
             } yield ()
             TQueue.bounded[Option[Message]](256).commit.toManaged_.flatMap { queue =>
