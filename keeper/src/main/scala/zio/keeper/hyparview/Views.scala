@@ -24,6 +24,8 @@ object Views {
 
     def isPassiveViewFull: STM[Nothing, Boolean]
 
+    def send0(to: NodeAddress, msg: Message): STM[Nothing, Unit] = ???
+
     def send(to: NodeAddress, msg: ActiveProtocol): IO[SendError, Unit]
 
     def addToActiveView(
@@ -123,7 +125,8 @@ object Views {
   def send(to: NodeAddress, msg: ActiveProtocol): ZIO[Views, SendError, Unit] =
     ZIO.accessM(_.get.send(to, msg))
 
-  def send0(to: NodeAddress, msg: Message): ZSTM[Views, Nothing, Unit] = ???
+  def send0(to: NodeAddress, msg: Message): ZSTM[Views, Nothing, Unit] =
+    ZSTM.accessM(_.get.send0(to, msg))
 
   def fromConfig(
     localAddr: NodeAddress

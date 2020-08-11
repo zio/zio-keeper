@@ -9,15 +9,17 @@ import zio.keeper.transport.{ Connection, Protocol }
 
 object protocols {
 
-  def run[R <: HyParViewConfig with Views with Logging with TRandom](
+  def all[R <: HyParViewConfig with Views with Logging with TRandom](
     con: Connection[R, Nothing, Message, Message]
   ): ZIO[R, Error, Unit] =
-    withActiveProtocol(con) { activeProtocol =>
+    ZManaged.switchable[R, Nothing, Boolean => UIO[Unit]].use { switch =>
       val protocol =
         initialProtocol
           .contM[R, Error, Message, Message, Any] {
             case Some(remoteAddr) =>
-              activeProtocol(remoteAddr).map(protocol => Right(protocol.unit))
+              switch(inActiveView(remoteAddr, con.send)).map { setKeepRef =>
+                Right(activeProtocol(remoteAddr).onEnd(setKeepRef).unit)
+              }
             case None =>
               ZIO.succeedNow(Left(()))
           }
@@ -68,68 +70,6 @@ object protocols {
         log.warn(s"Unsupported message for initial protocol: $msg").as((Chunk.empty, Left(None)))
     }
 
-  // provided function may only be called once. Resources will leak otherwise!
-  def withActiveProtocol[R <: Views with HyParViewConfig with TRandom, A](
-    con: Connection[R, Nothing, Message, Message]
-  )(
-    f: (NodeAddress => URIO[R, Protocol[R, Error, Message, Message, Boolean]]) => ZIO[R, Error, A]
-  ): ZIO[R, Error, A] =
-    TPromise
-      .make[Nothing, Unit]
-      .commit
-      .toManaged_
-      .flatMap { disconnected =>
-        TRef.make[Option[NodeAddress]](None).commit.toManaged_.flatMap { remoteAddressRef =>
-          val awaitDone = remoteAddressRef.get.flatMap[Any, Nothing, Unit](_.fold(STM.unit)(_ => disconnected.await))
-          Ref.makeManaged(false).flatMap { keepRef =>
-            val disconnect = for {
-              keep          <- keepRef.get
-              remoteAddress <- remoteAddressRef.get.commit
-              _ <- remoteAddress.fold[ZIO[R, Nothing, Unit]](ZIO.unit) { remoteAddress =>
-                    val complete =
-                      ZSTM.ifM(disconnected.succeed(()))(
-                        Views.removeFromActiveView(remoteAddress) *> {
-                          if (keep) Views.addToPassiveView(remoteAddress) else STM.unit
-                        }.as(true),
-                        STM.succeed(false)
-                      )
-                    con.send(Message.Disconnect(keep)).whenM(complete.commit)
-                  }
-            } yield ()
-            TQueue.bounded[Option[Message]](256).commit.toManaged_.flatMap { queue =>
-              val signalDisconnect = queue.offer(None) *> awaitDone
-              ZStream
-                .fromTQueue(queue)
-                .foldM(true) {
-                  case (true, Some(message)) =>
-                    con.send(message).as(true)
-                  case (true, None) =>
-                    disconnect.as(false)
-                  case _ =>
-                    ZIO.succeedNow(false)
-                }
-                .toManaged_
-                .fork
-                .mapM { _ =>
-                  f { (remoteAddress: NodeAddress) =>
-                    {
-                      val setup = remoteAddressRef.set(Some(remoteAddress)) *> Views
-                        .addToActiveView0(
-                          remoteAddress,
-                          msg => queue.offer(Some(msg)),
-                          signalDisconnect
-                        )
-                      val protocol = activeProtocol(remoteAddress).onEnd(keepRef.set(_))
-                      setup.commit.as(protocol)
-                    }
-                  }.ensuring(signalDisconnect.commit)
-                }
-            }
-          }
-        }
-      }
-      .use(ZIO.succeedNow(_))
-
   def activeProtocol(
     remoteAddress: NodeAddress
   ): Protocol[Views with HyParViewConfig with TRandom, Nothing, Message, Message, Boolean] =
@@ -137,8 +77,6 @@ object protocols {
       case Message.Disconnect(keep) =>
         ZIO.succeedNow((Chunk.empty, Left(keep)))
       case msg: Message.Shuffle =>
-        def sendInitial(to: NodeAddress, message: Message): UIO[Unit] = ???
-
         Views.activeViewSize
           .map[(Int, Option[TimeToLive])]((_, msg.ttl.step))
           .flatMap {
@@ -152,29 +90,19 @@ object protocols {
                                config.shuffleNActive + config.shuffleNPassive
                              )
                 _ <- Views.addAllToPassiveView(sentNodes)
-              } yield sendInitial(
-                msg.originalSender,
-                Message.ShuffleReply(replyNodes, sentNodes)
-              )
+                _ <- Views.send0(msg.originalSender, Message.ShuffleReply(replyNodes, sentNodes))
+              } yield ()
             case (_, Some(ttl)) =>
               for {
-                active    <- Views.activeView.map(_.filterNot(n => n == msg.sender || n == msg.originalSender).toList)
+                target <- Views.activeView
+                           .map(_.filterNot(n => n == msg.sender || n == msg.originalSender).toList)
+                           .flatMap(TRandom.selectOne)
                 localAddr <- Views.myself
                 forward   = msg.copy(sender = localAddr, ttl = ttl)
-              } yield {
-                def go(candidates: List[NodeAddress]): ZSTM[TRandom with Views, Nothing, Unit] =
-                  TRandom
-                    .selectOne(candidates)
-                    .flatMap(
-                      _.fold[ZSTM[TRandom with Views, Nothing, Unit]](STM.unit)(
-                        c => Views.send0(c, forward).orElse(go(candidates.filterNot(_ == c)))
-                      )
-                    )
-                go(active).commit
-              }
+                _         <- target.fold[ZSTM[Views, Nothing, Unit]](STM.unit)(Views.send0(_, forward))
+              } yield ()
           }
           .commit
-          .flatten
           .as((Chunk.empty, Right(activeProtocol(remoteAddress))))
       case Message.ShuffleReply(passiveNodes, sentOriginally) =>
         Views
@@ -184,5 +112,60 @@ object protocols {
       case _ =>
         ZIO.succeedNow((Chunk.empty, Right(activeProtocol(remoteAddress))))
     }
+
+  def inActiveView[R <: Views](
+    remoteAddress: NodeAddress,
+    send: Message => ZIO[R, Nothing, Unit]
+  ): ZManaged[R, Nothing, Boolean => UIO[Unit]] =
+    TPromise
+      .make[Nothing, Unit]
+      .commit
+      .toManaged_
+      .flatMap { disconnected =>
+        TRef.make[Option[NodeAddress]](None).commit.toManaged_.flatMap { remoteAddressRef =>
+          val awaitDone = remoteAddressRef.get.flatMap[Any, Nothing, Unit](_.fold(STM.unit)(_ => disconnected.await))
+          TRef.make(false).commit.toManaged_.flatMap { keepRef =>
+            val disconnect =
+              keepRef.get
+                .zip(remoteAddressRef.get)
+                .flatMap {
+                  case (_, None) => STM.succeedNow(ZIO.unit)
+                  case (keep, Some(remoteAddress)) =>
+                    ZSTM.ifM(disconnected.succeed(()))(
+                      Views.removeFromActiveView(remoteAddress) *> {
+                        if (keep) Views.addToPassiveView(remoteAddress) else STM.unit
+                      }.as(send(Message.Disconnect(keep))),
+                      STM.succeedNow(ZIO.unit)
+                    )
+                }
+                .commit
+                .flatten
+            TQueue.bounded[Option[Message]](256).commit.toManaged_.flatMap { queue =>
+              val signalDisconnect = queue.offer(None) *> awaitDone
+              ZStream
+                .fromTQueue(queue)
+                .foldM(true) {
+                  case (true, Some(message)) =>
+                    send(message).as(true)
+                  case (true, None) =>
+                    disconnect.as(false)
+                  case _ =>
+                    ZIO.succeedNow(false)
+                }
+                .toManaged_
+                .fork
+                .zipRight {
+                  val setup = remoteAddressRef.set(Some(remoteAddress)) *> Views
+                    .addToActiveView0(
+                      remoteAddress,
+                      msg => queue.offer(Some(msg)),
+                      signalDisconnect
+                    )
+                  ZManaged.make(setup.commit.as((b: Boolean) => keepRef.set(b).commit))(_ => signalDisconnect.commit)
+                }
+            }
+          }
+        }
+      }
 
 }

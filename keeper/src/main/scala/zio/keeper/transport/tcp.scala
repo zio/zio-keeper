@@ -57,7 +57,7 @@ object tcp {
                   } yield data
                 }
               }
-              .catchAll(_ => ZStream.empty)
+              .catchAll(_ => ZStream.empty) // todo: only catch -1
           }.provide(env)
 
           override val close: UIO[Unit] = close0
