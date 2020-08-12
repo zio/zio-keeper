@@ -145,6 +145,9 @@ trait Protocol[-R, +E, -I, +O, +A] { self =>
         }
     }
 
+  def run[R1 <: R, E1 >: E](connection: Connection[R1, E1, O, I]): ZIO[R1, E1, Option[A]] =
+    Protocol.run(connection, self)
+
   def tapIn[R1 <: R, E1 >: E, I1 <: I](f: I1 => ZIO[R1, E1, _]): Protocol[R1, E1, I1, O, A] =
     mapInM(i => f(i).as(i))
 
@@ -166,6 +169,19 @@ object Protocol {
 
   val end: Protocol[Any, Nothing, Any, Nothing, Unit] =
     fromFunction(_ => (Chunk.empty, Left(())))
+
+  def fold[I, O, S](
+    initial: S
+  )(
+    f: (S, I) => (Chunk[O], Option[S])
+  ): Protocol[Any, Nothing, I, O, S] = {
+    def go(state: S): Protocol[Any, Nothing, I, O, S] =
+      fromFunction { i =>
+        val (out, _next) = f(state, i)
+        (out, _next.fold[Either[S, Protocol[Any, Nothing, I, O, S]]](Left(state))(next => Right(go(next))))
+      }
+    go(initial)
+  }
 
   def fromEffect[R, E, I, O, A](
     f: I => ZIO[R, E, (Chunk[O], Either[A, Protocol[R, E, I, O, A]])]
@@ -200,4 +216,13 @@ object Protocol {
         _ => ZIO.succeedNow(None)
       )
 
+  def take[A](n: Int): Protocol[Any, Nothing, A, Nothing, Chunk[A]] = {
+    def go(n: Int, acc: Chunk[A]): Protocol[Any, Nothing, A, Nothing, Chunk[A]] =
+      fromFunction { in =>
+        if (n <= 0) (Chunk.empty, Left(acc))
+        else if (n == 1) (Chunk.empty, Left(acc :+ in))
+        else (Chunk.empty, Right(go(n - 1, acc :+ in)))
+      }
+    go(n, Chunk.empty)
+  }
 }
