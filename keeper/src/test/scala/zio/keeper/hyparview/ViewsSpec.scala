@@ -2,16 +2,13 @@ package zio.keeper.hyparview
 
 import zio._
 import zio.keeper.SendError.TransportFailed
-import zio.keeper.{ NodeAddress, TransportError, gens }
+import zio.keeper.{ KeeperSpec, NodeAddress, TransportError, gens }
 import zio.stm._
 import zio.test.Assertion._
 import zio.test._
 import zio.test.environment.TestRandom
 
-object ViewsSpec extends DefaultRunnableSpec {
-
-  def address(n: Int): NodeAddress =
-    NodeAddress(Array.emptyByteArray, n)
+object ViewsSpec extends KeeperSpec {
 
   def make(
     myself: NodeAddress,

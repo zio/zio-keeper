@@ -5,8 +5,9 @@ import zio.random.Random
 import zio.test.Assertion._
 import zio.test._
 import zio.test.environment.TestRandom
+import zio.keeper.KeeperSpec
 
-object TRandomSpec extends DefaultRunnableSpec {
+object TRandomSpec extends KeeperSpec {
 
   def make(seed: Long): ZManaged[Random with TestRandom, Nothing, TRandom] =
     for {
