@@ -99,32 +99,31 @@ object MockConnection {
     final case class Await[E, I](assertion: I => Option[E])                            extends Script[E, I, Nothing]
     final case class EmitChunk[O](values: Chunk[O])                                    extends Script[Nothing, Any, O]
     final case class Fail[E](value: E)                                                 extends Script[E, Any, Nothing]
-
-    def await[I](assertion: Assertion[I]): Script[AssertResult, I, Nothing] = {
-      def f = (in: I) => {
-        val result = assertion.run(in)
-        if (result.isSuccess) None
-        else Some(result)
-      }
-      Await(f)
-    }
-
-    val awaitFail: Script[AssertResult, Any, Nothing] =
-      await(Assertion.nothing)
-
-    def emit[O](value: O): Script[Nothing, Any, O] =
-      emitChunk(Chunk.single(value))
-
-    def emitAll[O](values: O*): Script[Nothing, Any, O] =
-      emitChunk(Chunk.fromIterable(values))
-
-    def emitChunk[O](values: Chunk[O]): Script[Nothing, Any, O] =
-      EmitChunk(values)
-
-    val fail: Script[AssertResult, Any, Nothing] =
-      Fail(Assertion.nothing.run(()))
-
   }
+
+  def await[I](assertion: Assertion[I]): Script[AssertResult, I, Nothing] = {
+    def f = (in: I) => {
+      val result = assertion.run(in)
+      if (result.isSuccess) None
+      else Some(result)
+    }
+    Script.Await(f)
+  }
+
+  val awaitFail: Script[AssertResult, Any, Nothing] =
+    await(Assertion.nothing)
+
+  def emit[O](value: O): Script[Nothing, Any, O] =
+    emitChunk(Chunk.single(value))
+
+  def emitAll[O](values: O*): Script[Nothing, Any, O] =
+    emitChunk(Chunk.fromIterable(values))
+
+  def emitChunk[O](values: Chunk[O]): Script[Nothing, Any, O] =
+    Script.EmitChunk(values)
+
+  val fail: Script[AssertResult, Any, Nothing] =
+    Script.Fail(Assertion.nothing.run(()))
 
   def make[E, I, O](script: Script[E, I, O]): Managed[Nothing, Connection[Any, E, I, O]] =
     for {

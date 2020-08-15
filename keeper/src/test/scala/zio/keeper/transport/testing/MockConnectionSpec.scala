@@ -12,8 +12,8 @@ object ProtocolSpec extends KeeperSpec {
     suite("MockConnection")(
       testM("emits messages") {
         val makeConnection = {
-          import MockConnection.Script._
-          MockConnection.make(emit(1))
+          import MockConnection._
+          make(emit(1))
         }
         makeConnection.use { con =>
           assertM(Protocol.take(1).run(con))(isSome(hasSameElements(Chunk(1))))
@@ -21,8 +21,8 @@ object ProtocolSpec extends KeeperSpec {
       },
       testM("awaits messages - correct value") {
         val makeConnection = {
-          import MockConnection.Script._
-          MockConnection.make(emit(1) ++ await(equalTo(2)))
+          import MockConnection._
+          make(emit(1) ++ await(equalTo(2)))
         }
         val protocol = Protocol.fromFunction[Any, Nothing, Int, Int, Unit] { i: Int =>
           (Chunk.single(i + 1), Left(()))
@@ -33,8 +33,8 @@ object ProtocolSpec extends KeeperSpec {
       },
       testM("awaits messages - incorrect value") {
         val makeConnection = {
-          import MockConnection.Script._
-          MockConnection.make(emit(1) ++ await(equalTo(2)))
+          import MockConnection._
+          make(emit(1) ++ await(equalTo(2)))
         }
         val protocol = Protocol.fromFunction[Any, Nothing, Int, Int, Unit] { i: Int =>
           (Chunk.single(i), Left(()))
@@ -45,13 +45,13 @@ object ProtocolSpec extends KeeperSpec {
       },
       testM("composes scripts using `++`") {
         val makeConnection = {
-          import MockConnection.Script._
-          MockConnection.make(
-            emit(1) ++
-              await(equalTo(2)) ++
-              emit(3) ++
-              await(equalTo(4)) ++
-              emit(5)
+          import MockConnection._
+          make(
+            emit(1)
+              ++ await(equalTo(2))
+              ++ emit(3)
+              ++ await(equalTo(4))
+              ++ emit(5)
           )
         }
         def protocol: Protocol[Any, Nothing, Int, Int, Int] =
@@ -66,9 +66,11 @@ object ProtocolSpec extends KeeperSpec {
       },
       testM("composes scripts using `<|>`") {
         val makeConnection = {
-          import MockConnection.Script._
-          MockConnection.make(
-            emit(1) ++ ((await(equalTo(3)) ++ emit(4)) <|> (await(equalTo(2)) ++ emit(3)))
+          import MockConnection._
+          make(
+            emit(1)
+              ++ ((await(equalTo(3)) ++ emit(4))
+                <|> (await(equalTo(2)) ++ emit(3)))
           )
         }
         def protocol: Protocol[Any, Nothing, Int, Int, Int] =
@@ -83,9 +85,10 @@ object ProtocolSpec extends KeeperSpec {
       },
       testM("repeats scripts") {
         val makeConnection = {
-          import MockConnection.Script._
-          MockConnection.make(
-            (emit(1) ++ await(equalTo(1))).repeat(3)
+          import MockConnection._
+          make(
+            (emit(1)
+              ++ await(equalTo(1))).repeat(3)
           )
         }
         def protocol: Protocol[Any, Nothing, Int, Int, Int] =
@@ -100,8 +103,8 @@ object ProtocolSpec extends KeeperSpec {
       },
       testM("closes stream when protocol is done") {
         val makeConnection = {
-          import MockConnection.Script._
-          MockConnection.make(emit(1))
+          import MockConnection._
+          make(emit(1))
         }
         makeConnection.use { con =>
           assertM(Protocol.take(2).run(con))(isNone)
@@ -109,8 +112,8 @@ object ProtocolSpec extends KeeperSpec {
       },
       testM("fails stream on fail") {
         val makeConnection = {
-          import MockConnection.Script._
-          MockConnection.make(await(equalTo(1)))
+          import MockConnection._
+          make(await(equalTo(1)))
         }
         makeConnection.use { con =>
           val test =

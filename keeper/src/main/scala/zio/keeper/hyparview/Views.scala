@@ -24,7 +24,10 @@ object Views {
 
     def isPassiveViewFull: STM[Nothing, Boolean]
 
-    def send0(to: NodeAddress, msg: Message): STM[Nothing, Unit] = ???
+    def send(to: NodeAddress, msg: Message): STM[Nothing, Unit] = {
+      val _ = (to, msg)
+      STM.unit // TODO
+    }
 
     def send(to: NodeAddress, msg: ActiveProtocol): IO[SendError, Unit]
 
@@ -34,11 +37,14 @@ object Views {
       disconnect: UIO[Unit]
     ): STM[Unit, Unit]
 
-    def addToActiveView0(
+    def addToActiveView(
       node: NodeAddress,
       send: Message => STM[Nothing, Unit],
       disconnect: STM[Nothing, Unit]
-    ): STM[Nothing, Unit] = ???
+    ): STM[Nothing, Unit] = {
+      val _ = (node, send, disconnect)
+      STM.unit // TODO
+    }
 
     def addToPassiveView(node: NodeAddress): STM[Nothing, Unit]
     def addAllToPassiveView(nodes: List[NodeAddress]): STM[Nothing, Unit]
@@ -94,12 +100,12 @@ object Views {
   ): ZSTM[Views, Unit, Unit] =
     ZSTM.accessM(_.get.addToActiveView(node, send, disconnect))
 
-  def addToActiveView0(
+  def addToActiveView(
     node: NodeAddress,
     send: Message => STM[Nothing, Unit],
     disconnect: STM[Nothing, Unit]
   ): ZSTM[Views, Nothing, Unit] =
-    ZSTM.accessM(_.get.addToActiveView0(node, send, disconnect))
+    ZSTM.accessM(_.get.addToActiveView(node, send, disconnect))
 
   def addToPassiveView(node: NodeAddress): ZSTM[Views, Nothing, Unit] =
     ZSTM.accessM(_.get.addToPassiveView(node))
@@ -125,8 +131,8 @@ object Views {
   def send(to: NodeAddress, msg: ActiveProtocol): ZIO[Views, SendError, Unit] =
     ZIO.accessM(_.get.send(to, msg))
 
-  def send0(to: NodeAddress, msg: Message): ZSTM[Views, Nothing, Unit] =
-    ZSTM.accessM(_.get.send0(to, msg))
+  def send(to: NodeAddress, msg: Message): ZSTM[Views, Nothing, Unit] =
+    ZSTM.accessM(_.get.send(to, msg))
 
   def fromConfig(
     localAddr: NodeAddress

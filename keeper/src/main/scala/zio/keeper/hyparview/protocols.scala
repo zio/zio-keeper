@@ -29,21 +29,22 @@ object protocols {
   val initialProtocol: Protocol[HyParViewConfig with Views with Logging, Error, Message, Message, Option[NodeAddress]] =
     Protocol.fromEffect {
       case Message.Join(sender) =>
-        for {
-          others    <- Views.activeView.map(_.filterNot(_ == sender)).commit
-          localAddr <- Views.myself.commit
-          config    <- getConfig
-          _ <- ZIO
-                .foreachPar_(others)(
-                  node =>
-                    Views
-                      .send(
-                        node,
-                        ActiveProtocol
-                          .ForwardJoin(localAddr, sender, TimeToLive(config.arwl))
-                      )
-                )
-        } yield (Chunk.single(Message.JoinReply(localAddr)), Left(Some(sender)))
+        ZSTM.atomically {
+          for {
+            config    <- getConfigSTM
+            others    <- Views.activeView.map(_.filterNot(_ == sender))
+            localAddr <- Views.myself
+            _ <- ZSTM.foreach(others)(
+                    node =>
+                      Views
+                        .send(
+                          node,
+                          Message
+                            .ForwardJoin(localAddr, sender, TimeToLive(config.arwl))
+                        )
+                  )
+          } yield (Chunk.single(Message.JoinReply(localAddr)), Left(Some(sender)))
+        }
       case Message.Neighbor(sender, isHighPriority) =>
         val accept =
           (Chunk.single(Message.NeighborAccept), Left(Some(sender)))
@@ -90,7 +91,7 @@ object protocols {
                                config.shuffleNActive + config.shuffleNPassive
                              )
                 _ <- Views.addAllToPassiveView(sentNodes)
-                _ <- Views.send0(msg.originalSender, Message.ShuffleReply(replyNodes, sentNodes))
+                _ <- Views.send(msg.originalSender, Message.ShuffleReply(replyNodes, sentNodes))
               } yield ()
             case (_, Some(ttl)) =>
               for {
@@ -99,7 +100,7 @@ object protocols {
                            .flatMap(TRandom.selectOne)
                 localAddr <- Views.myself
                 forward   = msg.copy(sender = localAddr, ttl = ttl)
-                _         <- target.fold[ZSTM[Views, Nothing, Unit]](STM.unit)(Views.send0(_, forward))
+                _         <- target.fold[ZSTM[Views, Nothing, Unit]](STM.unit)(Views.send(_, forward))
               } yield ()
           }
           .commit
@@ -156,9 +157,9 @@ object protocols {
                 .fork
                 .zipRight {
                   val setup = remoteAddressRef.set(Some(remoteAddress)) *> Views
-                    .addToActiveView0(
+                    .addToActiveView(
                       remoteAddress,
-                      msg => queue.offer(Some(msg)),
+                      (msg: Message) => queue.offer(Some(msg)),
                       signalDisconnect
                     )
                   ZManaged.make(setup.commit.as((b: Boolean) => keepRef.set(b).commit))(_ => signalDisconnect.commit)

@@ -30,7 +30,10 @@ package object hyparview {
     ZIO.accessM(_.get.send(data, receipt))
 
   val getConfig: URIO[HyParViewConfig, HyParViewConfig.Config] =
-    URIO.accessM[HyParViewConfig](_.get.getConfig)
+    URIO.accessM(_.get.getConfig)
+
+  val getConfigSTM: ZSTM[HyParViewConfig, Nothing, HyParViewConfig.Config] =
+    ZSTM.accessM(_.get.getConfigSTM)
 
   val makeRandomUUID: UIO[UUID] = ZIO.effectTotal(UUID.randomUUID())
 
@@ -291,7 +294,7 @@ package object hyparview {
               _ <- Views
                     .addToActiveView(
                       remote,
-                      msg =>
+                      (msg: ActiveProtocol) =>
                         (for {
                           chunk <- ByteCodec.encode[ActiveProtocol](msg).mapError(SendError.SerializationFailed)
                           _     <- reply(chunk).mapError(SendError.TransportFailed)
