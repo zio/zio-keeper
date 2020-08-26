@@ -4,12 +4,12 @@ import java.net.InetAddress
 
 import javax.net.ServerSocketFactory
 import zio.clock.Clock
-import zio.keeper.{ KeeperSpec, NodeAddress }
+import zio.keeper.{ ByteCodec, KeeperSpec, NodeAddress }
 import zio.logging.Logging
 import zio.random.Random
 import zio.stream.ZStream
 import zio.test.Assertion.{ equalTo, isInterrupted, isSome }
-import zio.test.TestAspect.{ nonFlaky, timeout }
+import zio.test.TestAspect.{ flaky, sequential, timeout }
 import zio.test.environment.Live
 import zio.test._
 import zio._
@@ -19,20 +19,41 @@ object TcpTransportSpec extends KeeperSpec {
 
   val spec = (suite("TcpTransport")(
     testM("can send and receive messages") {
-      checkM(Gen.listOf(Gen.anyByte)) { bytes =>
+      checkNM(20)(Gen.listOf(Gen.anyByte)) { bytes =>
         val payload = Chunk.fromIterable(bytes)
 
         for {
           addr <- makeAddr
           chunk <- Transport
                     .bind(addr)
-                    .flatMap(c => c.receive.take(1).ensuring(c.close))
+                    .flatMap(c => c.receive.take(1))
                     .take(1)
                     .runHead
                     .fork
-          _      <- Transport.send(addr, payload).retry(Schedule.spaced(10.milliseconds))
+          _      <- Transport.send(addr, payload)
           result <- chunk.join
         } yield assert(result)(isSome(equalTo(payload)))
+      }
+    },
+    testM("can send and receive batched messages") {
+      checkNM(20)(Gen.chunkOf(Gen.anyByte), Gen.chunkOf(Gen.anyByte)) {
+        case (payload1, payload2) =>
+          for {
+            addr <- makeAddr
+            chunk <- Transport
+                      .bind(addr)
+                      .map(_.unbatchOutputM(ByteCodec.decode[Chunk[Chunk[Byte]]]))
+                      .flatMap(c => c.receive.take(2))
+                      .take(2)
+                      .runCollect
+                      .fork
+            result <- Transport
+                       .connect(addr)
+                       .flatMap(_.batchInputM(ByteCodec.encode[Chunk[Chunk[Byte]]]))
+                       .use { con =>
+                         con.send(payload1) *> con.send(payload2) *> chunk.join
+                       }
+          } yield assert(result.toList)(equalTo(List(payload1, payload2)))
       }
     },
     testM("handles interrupts") {
@@ -43,11 +64,11 @@ object TcpTransportSpec extends KeeperSpec {
         addr  <- makeAddr
         fiber <- Transport
                   .bind(addr)
-                  .flatMap(c => c.receive.take(1).tap(_ => latch.succeed(())).ensuring(c.close))
+                  .flatMap(c => c.receive.take(1).tap(_ => latch.succeed(())))
                   .take(2)
                   .runDrain
                   .fork
-        _      <- Transport.send(addr, payload).retry(Schedule.spaced(10.milliseconds))
+        _      <- Transport.send(addr, payload)
         result <- latch.await *> fiber.interrupt
       } yield assert(result)(isInterrupted)
     },
@@ -69,7 +90,7 @@ object TcpTransportSpec extends KeeperSpec {
                .bind(addr)
                .flatMapPar(20) { con =>
                  ZStream.fromEffect(latch0.succeed(())) *>
-                   con.receive.take(1).ensuring(con.close)
+                   con.receive.take(1)
                }
                .runDrain
                .race(latch.await)
@@ -82,10 +103,10 @@ object TcpTransportSpec extends KeeperSpec {
         _      <- ZIO.collectAll((f1 :: f2).map(_.await))
       } yield assert(result)(equalTo(10))
     }
-  ) @@ timeout(15.seconds) @@ nonFlaky).provideCustomLayer(environment)
+  ) @@ timeout(15.seconds) @@ sequential @@ flaky).provideCustomLayer(environment)
 
   private lazy val environment =
-    ((Clock.live ++ Logging.ignore) >>> tcp.make(10, 10.seconds, 10.seconds)) ++ Clock.live
+    ((Clock.live ++ Logging.ignore) >+> tcp.make(10, 10.seconds, 10.seconds))
 
   private def findAvailableTCPPort(minPort: Int, maxPort: Int): URIO[Live, Int] = {
     val portRange = maxPort - minPort

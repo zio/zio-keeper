@@ -35,14 +35,14 @@ object protocols {
             others    <- Views.activeView.map(_.filterNot(_ == sender))
             localAddr <- Views.myself
             _ <- ZSTM.foreach(others)(
-                    node =>
-                      Views
-                        .send(
-                          node,
-                          Message
-                            .ForwardJoin(localAddr, sender, TimeToLive(config.arwl))
-                        )
-                  )
+                  node =>
+                    Views
+                      .send(
+                        node,
+                        Message
+                          .ForwardJoin(localAddr, sender, TimeToLive(config.arwl))
+                      )
+                )
           } yield (Chunk.single(Message.JoinReply(localAddr)), Left(Some(sender)))
         }
       case Message.Neighbor(sender, isHighPriority) =>

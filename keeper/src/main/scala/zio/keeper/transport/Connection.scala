@@ -1,11 +1,56 @@
 package zio.keeper.transport
 
 import zio._
+import zio.clock.Clock
+import zio.duration._
 import zio.stream.ZStream
+import zio.logging.log
+import zio.logging.Logging
 
 trait Connection[-R, +E, -I, +O] { self =>
   def send(data: I): ZIO[R, E, Unit]
   val receive: ZStream[R, E, O]
+
+  def batchInput[R1 <: R with Clock with Logging, I1](
+    f: Chunk[I1] => I,
+    maxItems: Int = 32,
+    batchTimeout: Duration = 100.millis,
+    messageBuffer: Int = 256
+  ): ZManaged[R1, Nothing, Connection[R1, E, I1, O]] =
+    batchInputM(is => ZIO.succeedNow(f(is)), maxItems, batchTimeout, messageBuffer)
+
+  def batchInputM[R1 <: R with Clock with Logging, E1 >: E, I1](
+    f: Chunk[I1] => ZIO[R1, E1, I],
+    maxItems: Int = 32,
+    batchTimeout: Duration = 100.millis,
+    messageBuffer: Int = 256
+  ): ZManaged[R1, Nothing, Connection[R1, E1, I1, O]] =
+    ZQueue.bounded[I1](messageBuffer).toManaged(_.shutdown).flatMap { queue =>
+      ZStream
+        .fromQueue(queue)
+        .groupedWithin(maxItems.toLong, batchTimeout)
+        .mapM(
+          l =>
+            f(Chunk.fromIterable(l))
+              .flatMap(self.send)
+              .catchAll(e => log.error("Failed sending batched message.", Cause.fail(e)))
+        )
+        .runDrain
+        .toManaged_
+        .fork
+        .as {
+          new Connection[R1, E1, I1, O] {
+            def send(data: I1): ZIO[R1, E1, Unit] =
+              queue.offer(data).unit
+
+            val receive: ZStream[R, E, O] =
+              self.receive
+
+            val close: UIO[Unit] =
+              self.close
+          }
+        }
+    }
 
   def biMap[I1, O1](f: I1 => I, g: O => O1): Connection[R, E, I1, O1] =
     new Connection[R, E, I1, O1] {
@@ -13,7 +58,7 @@ trait Connection[-R, +E, -I, +O] { self =>
 
       val receive: ZStream[R, E, O1] = self.receive.map(g)
 
-      val close: zio.UIO[Unit] = self.close
+      val close: UIO[Unit] = self.close
 
     }
 
@@ -23,7 +68,7 @@ trait Connection[-R, +E, -I, +O] { self =>
 
       val receive: ZStream[R1, E1, O1] = self.receive.mapM(g)
 
-      val close: zio.UIO[Unit] = self.close
+      val close: UIO[Unit] = self.close
 
     }
 
@@ -33,7 +78,7 @@ trait Connection[-R, +E, -I, +O] { self =>
 
       val receive: ZStream[R, E, O] = self.receive
 
-      val close: zio.UIO[Unit] = self.close
+      val close: UIO[Unit] = self.close
 
     }
 
@@ -70,7 +115,7 @@ trait Connection[-R, +E, -I, +O] { self =>
       val receive: ZStream[R, E1, O] =
         self.receive.mapError(f)
 
-      val close: zio.UIO[Unit] =
+      val close: UIO[Unit] =
         self.close
 
     }
@@ -89,25 +134,25 @@ trait Connection[-R, +E, -I, +O] { self =>
 
     }
 
-  def recoverErrors[R1 <: R, E1, I1 <: I, O1 >: O](
-    f: (E, I1) => ZIO[R1, E1, Unit],
-    g: E => ZIO[R1, E1, O1]
-  ): Connection[R1, E1, I1, O1] =
-    new Connection[R1, E1, I1, O1] {
+  def tapOut[R1 <: R, E1 >: E](f: O => ZIO[R1, E1, _]): Connection[R1, E1, I, O] =
+    mapM(o => f(o).as(o))
 
-      def send(data: I1): ZIO[R1, E1, Unit] =
-        self.send(data).foldM(f(_, data), ZIO.succeedNow)
+  def tapIn[R1 <: R, E1 >: E, I1 <: I](f: I1 => ZIO[R1, E1, _]): Connection[R1, E1, I1, O] =
+    contraMapM(i => f(i).as(i))
 
-      // TODO: this is a hack. Switch to proper error handling combinators once ZStream supports them.
-      val receive: ZStream[R1, E1, O1] = {
-        def go(stream: ZStream[R, E, O]): ZStream[R1, E1, O1] =
-          stream.catchAll { e =>
-            ZStream.fromEffect(g(e)) ++ go(stream)
-          }
-        go(self.receive)
-      }
+  def unbatchOutput[O1](f: O => Chunk[O1]): Connection[R, E, I, O1] =
+    unbatchOutputM(o => ZIO.succeedNow(f(o)))
 
-      val close: zio.UIO[Unit] =
+  def unbatchOutputM[R1 <: R, E1 >: E, O1](f: O => ZIO[R1, E1, Chunk[O1]]): Connection[R1, E1, I, O1] =
+    new Connection[R1, E1, I, O1] {
+
+      def send(data: I): ZIO[R1, E1, Unit] =
+        self.send(data)
+
+      val receive: ZStream[R1, E1, O1] =
+        self.receive.mapM(f(_)).flattenChunks
+
+      val close: UIO[Unit] =
         self.close
 
     }
