@@ -7,12 +7,12 @@ import zio.clock.Clock
 import zio.keeper.{ ByteCodec, KeeperSpec, NodeAddress }
 import zio.logging.Logging
 import zio.random.Random
-import zio.stream.ZStream
 import zio.test.Assertion.{ equalTo, isInterrupted, isSome }
-import zio.test.TestAspect.{ flaky, sequential, timeout }
+import zio.test.TestAspect.{ sequential, timeout }
 import zio.test.environment.Live
 import zio.test._
 import zio._
+import zio.Schedule
 import zio.duration._
 
 object TcpTransportSpec extends KeeperSpec {
@@ -64,49 +64,57 @@ object TcpTransportSpec extends KeeperSpec {
         addr  <- makeAddr
         fiber <- Transport
                   .bind(addr)
-                  .flatMap(c => c.receive.take(1).tap(_ => latch.succeed(())))
-                  .take(2)
+                  .flatMap(c => c.receive.tap(_ => latch.succeed(())))
                   .runDrain
                   .fork
-        _      <- Transport.send(addr, payload)
-        result <- latch.await *> fiber.interrupt
+        result <- Transport.connect(addr).use { con =>
+                   con.send(payload) *> latch.await *> fiber.interrupt
+                 }
       } yield assert(result)(isInterrupted)
     },
     testM("respects max connections") {
+      val limit   = 10
+      val senders = 15
+      val waiters = 20
       for {
-        ref    <- Ref.make(0)
-        latch  <- Promise.make[Nothing, Unit]
-        latch0 <- Promise.make[Nothing, Unit]
-        addr   <- makeAddr
+        ref     <- Ref.make(0)
+        latch   <- Promise.make[Nothing, Unit]
+        latches <- ZIO.collectAll(List.fill(limit)(Promise.make[Nothing, Unit]))
+        completeOne = ZIO.foldLeft(latches)(true) {
+          case (true, p) =>
+            p.succeed(()).map(!_)
+          case (false, _) =>
+            ZIO.succeedNow(false)
+        }
+        addr <- makeAddr
         connect = Transport
           .connect(addr)
-          .use_ {
-            ref.update(_ + 1) *> ZIO.never
+          .use { con =>
+            con.receive.runHead *>
+              ref.update(_ + 1) *>
+              completeOne *>
+              latch.await
           }
-          .race(latch.await)
           .fork
 
-        f1 <- Transport
-               .bind(addr)
-               .flatMapPar(20) { con =>
-                 ZStream.fromEffect(latch0.succeed(())) *>
-                   con.receive.take(1)
-               }
-               .runDrain
-               .race(latch.await)
-               .fork
-        f2     <- ZIO.collectAll(List.fill(10)(connect))
-        _      <- latch0.await
-        _      <- ZIO.sleep(200.millis)
+        _ <- Transport
+              .bind(addr)
+              .mapMPar(waiters) { con =>
+                con.send(Chunk.empty) *> latch.await
+              }
+              .runDrain
+              .race(latch.await)
+              .fork
+        _      <- ZIO.collectAll_(List.fill(senders)(connect))
+        _      <- ZIO.foreach(latches)(_.await)
         result <- ref.get
         _      <- latch.succeed(())
-        _      <- ZIO.collectAll((f1 :: f2).map(_.await))
-      } yield assert(result)(equalTo(10))
+      } yield assert(result)(equalTo(limit))
     }
-  ) @@ timeout(15.seconds) @@ sequential @@ flaky).provideCustomLayer(environment)
+  ) @@ timeout(15.seconds) @@ sequential).provideCustomLayer(environment)
 
   private lazy val environment =
-    ((Clock.live ++ Logging.ignore) >+> tcp.make(10, 10.seconds, 10.seconds))
+    ((Clock.live ++ Logging.ignore) >+> tcp.make(10, Schedule.spaced(10.millis)))
 
   private def findAvailableTCPPort(minPort: Int, maxPort: Int): URIO[Live, Int] = {
     val portRange = maxPort - minPort
