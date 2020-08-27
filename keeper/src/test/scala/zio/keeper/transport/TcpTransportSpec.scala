@@ -7,7 +7,7 @@ import zio.clock.Clock
 import zio.keeper.{ ByteCodec, KeeperSpec, NodeAddress }
 import zio.logging.Logging
 import zio.random.Random
-import zio.test.Assertion.{ equalTo, isInterrupted, isSome }
+import zio.test.Assertion.{ equalTo, isInterrupted, isSome, succeeds }
 import zio.test.TestAspect.{ sequential, timeout }
 import zio.test.environment.Live
 import zio.test._
@@ -71,6 +71,34 @@ object TcpTransportSpec extends KeeperSpec {
                    con.send(payload) *> latch.await *> fiber.interrupt
                  }
       } yield assert(result)(isInterrupted)
+    },
+    testM("closes stream when the connected stream closes - client") {
+      for {
+        addr <- makeAddr
+        fiber <- Transport
+                  .bind(addr)
+                  .take(1)
+                  .flatMap(_.receive)
+                  .runDrain
+                  .fork
+        _      <- Transport.connect(addr).use_(ZIO.unit)
+        result <- fiber.await
+      } yield assert(result)(succeeds(equalTo(())))
+    },
+    testM("closes stream when the connected stream closes - server") {
+      for {
+        latch <- Promise.make[Nothing, Unit]
+        addr  <- makeAddr
+        f1    <- (latch.await *> Transport.connect(addr).use(_.receive.runDrain)).fork
+        f2 <- Transport
+               .bind(addr)
+               .take(1)
+               .mapM(_.close)
+               .runDrain
+               .fork
+        _      <- latch.succeed(())
+        result <- f1.await <* f2.await
+      } yield assert(result)(succeeds(equalTo(())))
     },
     testM("respects max connections") {
       val limit   = 10
