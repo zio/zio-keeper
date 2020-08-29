@@ -72,6 +72,18 @@ trait Connection[-R, +E, -I, +O] { self =>
 
     }
 
+  def closeOnError: Connection[R, Nothing, I, O] =
+    new Connection[R, Nothing, I, O] {
+      def send(data: I): ZIO[R,Nothing,Unit] =
+        self.send(data) orElse close
+
+      val receive: ZStream[R, Nothing, O] =
+        self.receive orElse (ZStream.fromEffect(close) *> ZStream.empty)
+
+      val close: UIO[Unit] =
+        self.close
+    }
+
   def contraMap[I1](f: I1 => I): Connection[R, E, I1, O] =
     new Connection[R, E, I1, O] {
       def send(data: I1): ZIO[R, E, Unit] = self.send(f(data))

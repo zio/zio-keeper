@@ -3,13 +3,12 @@ package zio.keeper.hyparview
 import zio._
 import zio.stm._
 import zio.keeper._
-import zio.logging.{ Logging, log }
 import zio.stream.ZStream
 import zio.keeper.transport.{ Connection, Protocol }
 
 object protocols {
 
-  def all[R <: HyParViewConfig with Views with Logging with TRandom](
+  def all[R <: HyParViewConfig with Views with TRandom](
     con: Connection[R, Nothing, Message, Message]
   ): ZIO[R, Error, Unit] =
     ZManaged.switchable[R, Nothing, Boolean => UIO[Unit]].use { switch =>
@@ -26,57 +25,53 @@ object protocols {
       Protocol.run(con, protocol).unit
     }
 
-  val initialProtocol: Protocol[HyParViewConfig with Views with Logging, Error, Message, Message, Option[NodeAddress]] =
-    Protocol.fromEffect {
+  val initialProtocol: Protocol[HyParViewConfig with Views, Error, Message, Message, Option[NodeAddress]] =
+    Protocol.fromTransaction {
       case Message.Join(sender) =>
-        ZSTM.atomically {
-          for {
-            config    <- getConfigSTM
-            others    <- Views.activeView.map(_.filterNot(_ == sender))
-            localAddr <- Views.myself
-            _ <- ZSTM.foreach(others)(
-                  node =>
-                    Views
-                      .send(
-                        node,
-                        Message
-                          .ForwardJoin(localAddr, sender, TimeToLive(config.arwl))
-                      )
-                )
-          } yield (Chunk.single(Message.JoinReply(localAddr)), Left(Some(sender)))
-        }
+        for {
+          config    <- HyParViewConfig.getConfigSTM
+          others    <- Views.activeView.map(_.filterNot(_ == sender))
+          localAddr <- Views.myself
+          _ <- ZSTM.foreach(others)(
+                node =>
+                  Views
+                    .send(
+                      node,
+                      Message
+                        .ForwardJoin(sender, TimeToLive(config.arwl))
+                    )
+              )
+        } yield (Chunk.single(Message.JoinReply(localAddr)), Left(Some(sender)))
       case Message.Neighbor(sender, isHighPriority) =>
         val accept =
           (Chunk.single(Message.NeighborAccept), Left(Some(sender)))
         val reject =
           (Chunk.single(Message.NeighborReject), Left(None))
         if (isHighPriority) {
-          ZIO.succeedNow(accept)
+          STM.succeedNow(accept)
         } else {
           ZSTM
             .ifM(Views.isActiveViewFull)(
               Views.addToPassiveView(sender).as(reject),
               STM.succeedNow(accept)
             )
-            .commit
         }
       case Message.ShuffleReply(passiveNodes, sentOriginally) =>
         Views
           .addShuffledNodes(sentOriginally.toSet, passiveNodes.toSet)
-          .commit
           .as((Chunk.empty, Left(None)))
       case Message.ForwardJoinReply(sender) =>
-        ZIO.succeedNow((Chunk.empty, Left(Some(sender))))
-      case msg =>
-        log.warn(s"Unsupported message for initial protocol: $msg").as((Chunk.empty, Left(None)))
+        STM.succeedNow((Chunk.empty, Left(Some(sender))))
+      case _ =>
+        STM.succeedNow((Chunk.empty, Left(None)))
     }
 
   def activeProtocol(
     remoteAddress: NodeAddress
   ): Protocol[Views with HyParViewConfig with TRandom, Nothing, Message, Message, Boolean] =
-    Protocol.fromEffect {
+    Protocol.fromTransaction {
       case Message.Disconnect(keep) =>
-        ZIO.succeedNow((Chunk.empty, Left(keep)))
+        STM.succeedNow((Chunk.empty, Left(keep)))
       case msg: Message.Shuffle =>
         Views.activeViewSize
           .map[(Int, Option[TimeToLive])]((_, msg.ttl.step))
@@ -103,15 +98,28 @@ object protocols {
                 _         <- target.fold[ZSTM[Views, Nothing, Unit]](STM.unit)(Views.send(_, forward))
               } yield ()
           }
-          .commit
           .as((Chunk.empty, Right(activeProtocol(remoteAddress))))
       case Message.ShuffleReply(passiveNodes, sentOriginally) =>
         Views
           .addShuffledNodes(sentOriginally.toSet, passiveNodes.toSet)
-          .commit
           .as((Chunk.empty, Right(activeProtocol(remoteAddress))))
+      case Message.ForwardJoin(originalSender, ttl) =>
+        HyParViewConfig.getConfigSTM.flatMap { config =>
+          Views.activeView.map(av => (av.filter(_ != remoteAddress), ttl.step)).flatMap {
+            case (_, None) =>
+              STM.unit // TODO: connect
+            case (activeView, _) if activeView.size == 0 =>
+              STM.unit // TODO: connect
+            case (activeView, Some(newTtl)) =>
+              for {
+                _        <- Views.addToPassiveView(originalSender).when(newTtl.count == config.prwl)
+                nextNode <- TRandom.selectOne(activeView.toList)
+                _        <- nextNode.fold[ZSTM[Views, Nothing, Unit]](STM.unit)(Views.send(_, Message.ForwardJoin(originalSender, newTtl)))
+              } yield ()
+          }
+        }.as((Chunk.empty, Right(activeProtocol(remoteAddress))))
       case _ =>
-        ZIO.succeedNow((Chunk.empty, Right(activeProtocol(remoteAddress))))
+        STM.succeedNow((Chunk.empty, Right(activeProtocol(remoteAddress))))
     }
 
   def inActiveView[R <: Views](

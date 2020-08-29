@@ -9,8 +9,7 @@ import zio.logging.log
 import zio.logging.Logging
 import zio.stream._
 import zio.keeper.NodeAddress
-import zio.keeper.hyparview.ActiveProtocol.Prune
-import zio.keeper.hyparview.ActiveProtocol.Graft
+import zio.keeper.hyparview.Message.PeerMessage.{Prune, Graft, IHave}
 
 package object plumtree {
 
@@ -42,7 +41,7 @@ package object plumtree {
                     next =>
                       PeerState.addToEagerPeers(next).commit *>
                         PeerService
-                          .send(next, ActiveProtocol.Graft(uuid))
+                          .send(next, Graft(uuid))
                           .foldCauseM(
                             log.error(s"Failed to send Graft message for $uuid to $next", _),
                             _ => log.debug(s"Sent Graft message for $uuid to $next")
@@ -84,7 +83,7 @@ package object plumtree {
 
   def sendIHave[R <: Logging with PeerService with Clock, E](
     stream: Stream[E, (NodeAddress, UUID, Round)],
-    schedule: Schedule[R, Chunk[ActiveProtocol.IHave], _],
+    schedule: Schedule[R, Chunk[IHave], _],
     maxMessageSize: Long = 12
   ): ZStream[R, E, Unit] =
     stream.groupByKey(_._1) {
@@ -93,7 +92,7 @@ package object plumtree {
           group
             .map { case (_, uuid, round) => (uuid, round) }
             .aggregateAsyncWithin(
-              ZTransducer.collectAllN(maxMessageSize).map(xs => ActiveProtocol.IHave(Chunk.fromIterable(xs))),
+              ZTransducer.collectAllN(maxMessageSize).map(xs => IHave(Chunk.fromIterable(xs))),
               schedule
             )
             .foreach { iHave =>

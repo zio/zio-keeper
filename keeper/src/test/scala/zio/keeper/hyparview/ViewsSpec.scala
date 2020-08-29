@@ -1,8 +1,7 @@
 package zio.keeper.hyparview
 
 import zio._
-import zio.keeper.SendError.TransportFailed
-import zio.keeper.{ KeeperSpec, NodeAddress, TransportError, gens }
+import zio.keeper.{ KeeperSpec, NodeAddress, gens }
 import zio.stm._
 import zio.test.Assertion._
 import zio.test._
@@ -29,8 +28,8 @@ object ViewsSpec extends KeeperSpec {
             val result = make(address(0), 2, 2).use { views =>
               STM.atomically {
                 for {
-                  _ <- views.get.addToActiveView(x, _ => UIO.unit, UIO.unit)
-                  _ <- views.get.addToActiveView(x, _ => UIO.unit, UIO.unit)
+                  _ <- views.get.addToActiveView(x, _ => STM.unit, STM.unit)
+                  _ <- views.get.addToActiveView(x, _ => STM.unit, STM.unit)
                 } yield ()
               }
             }
@@ -48,9 +47,9 @@ object ViewsSpec extends KeeperSpec {
             val result = make(address(0), 2, 2).use { views =>
               STM.atomically {
                 for {
-                  _ <- views.get.addToActiveView(x1, _ => UIO.unit, UIO.unit)
-                  _ <- views.get.addToActiveView(x2, _ => UIO.unit, UIO.unit)
-                  _ <- views.get.addToActiveView(x3, _ => UIO.unit, UIO.unit)
+                  _ <- views.get.addToActiveView(x1, _ => STM.unit, STM.unit)
+                  _ <- views.get.addToActiveView(x2, _ => STM.unit, STM.unit)
+                  _ <- views.get.addToActiveView(x3, _ => STM.unit, STM.unit)
                 } yield ()
               }
             }
@@ -88,26 +87,6 @@ object ViewsSpec extends KeeperSpec {
                   _     <- views.get.addToPassiveView(x3)
                   size2 <- views.get.passiveViewSize
                 } yield assert(size1)(equalTo(2)) && assert(size2)(equalTo(2))
-              }
-            }
-        }
-      },
-      testM("failing send with a TransportFailed calls disconnect on the node") {
-        checkM(gens.nodeAddress) {
-          case x =>
-            Ref.make(0).flatMap { ref =>
-              make(address(0), 2, 2).use { views =>
-                for {
-                  _ <- views.get
-                        .addToActiveView(
-                          x,
-                          _ => ZIO.fail(TransportFailed(TransportError.ExceptionWrapper(new RuntimeException()))),
-                          ref.update(_ + 1).unit
-                        )
-                        .commit
-                  _      <- views.get.send(x, ActiveProtocol.Disconnect(address(1), false)).ignore
-                  result <- assertM(ref.get)(equalTo(1))
-                } yield result
               }
             }
         }

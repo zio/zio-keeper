@@ -1,11 +1,13 @@
 package zio.keeper.hyparview
 
 import zio.{ UIO, ULayer, URIO, ZIO, ZLayer }
+import zio.keeper.NodeAddress
 import zio.stm.{ STM, ZSTM }
 
 object HyParViewConfig {
 
   final private[hyparview] case class Config(
+    address: NodeAddress,
     activeViewCapacity: Int,
     passiveViewCapacity: Int,
     arwl: Int,
@@ -19,7 +21,8 @@ object HyParViewConfig {
   ) {
 
     val prettyPrint: String =
-      s"""activeViewCapacity: $activeViewCapacity
+      s"""address: $address
+         |activeViewCapacity: $activeViewCapacity
          |passiveViewCapacity: $passiveViewCapacity
          |arwl: $arwl
          |prwl: $prwl
@@ -45,6 +48,7 @@ object HyParViewConfig {
     ZSTM.accessM(_.get.getConfigSTM)
 
   def staticConfig(
+    address: NodeAddress,
     activeViewCapacity: Int,
     passiveViewCapacity: Int,
     arwl: Int,
@@ -61,6 +65,7 @@ object HyParViewConfig {
         val getConfigSTM: STM[Nothing, Config] =
           STM.succeed {
             Config(
+              address,
               activeViewCapacity,
               passiveViewCapacity,
               arwl,

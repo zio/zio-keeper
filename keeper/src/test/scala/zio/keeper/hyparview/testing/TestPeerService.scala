@@ -5,13 +5,14 @@ import java.nio.ByteBuffer
 
 import zio._
 import zio.keeper.SerializationError.{ DeserializationTypeError, SerializationTypeError }
-import zio.keeper.hyparview.ActiveProtocol._
 import zio.keeper.hyparview.PeerEvent._
-import zio.keeper.hyparview.{ ActiveProtocol, PeerEvent, PeerService }
+import zio.keeper.hyparview.{ PeerEvent, PeerService }
 import zio.keeper.transport.Transport
 import zio.keeper.{ ByteCodec, Error, NodeAddress, SendError }
 import zio.stm.{ STM, TQueue, TRef, ZSTM }
 import zio.stream.{ Take, ZStream }
+import zio.keeper.hyparview.Message.PeerMessage
+import zio.keeper.hyparview.Message
 
 object TestPeerService {
 
@@ -21,7 +22,7 @@ object TestPeerService {
 
   final case class Envelope(
     sender: NodeAddress,
-    msg: ActiveProtocol.PlumTreeProtocol
+    msg: PeerMessage
   )
 
   object Envelope {
@@ -35,17 +36,17 @@ object TestPeerService {
                         .effect(new BigInteger(chunk.take(4).toArray).intValue())
                         .mapError(_ => DeserializationTypeError("Failed reading length"))
             sender <- ByteCodec.decode[NodeAddress](chunk.drop(4).take(senderL))
-            msgRaw <- ByteCodec.decode[ActiveProtocol](chunk.drop(4 + senderL))
+            msgRaw <- ByteCodec.decode[Message](chunk.drop(4 + senderL))
             msg <- msgRaw match {
-                    case m: ActiveProtocol.PlumTreeProtocol => ZIO.succeed(m)
-                    case m                                  => ZIO.fail(DeserializationTypeError(s"Invalid message type ${m.getClass}"))
+                    case m: Message.PeerMessage => ZIO.succeed(m)
+                    case m                      => ZIO.fail(DeserializationTypeError(s"Invalid message type ${m.getClass}"))
                   }
           } yield Envelope(sender, msg)
 
         override def toChunk(a: Envelope): IO[SerializationTypeError, Chunk[Byte]] =
           for {
             sender  <- ByteCodec.encode(a.sender)
-            msg     <- ByteCodec.encode[ActiveProtocol](a.msg)
+            msg     <- ByteCodec.encode[Message](a.msg)
             senderL = Chunk.fromArray(ByteBuffer.allocate(4).putInt(sender.length).array())
           } yield (senderL ++ sender ++ msg)
       }
@@ -67,11 +68,11 @@ object TestPeerService {
       ref         <- TRef.make(Set.empty[NodeAddress]).commit.toManaged_
       eventsQueue <- TQueue.bounded[PeerEvent](eventsBuffer).commit.toManaged_
       msgsQueue <- Queue
-                    .bounded[Take[Error, (NodeAddress, PlumTreeProtocol)]](messagesBuffer)
+                    .bounded[Take[Error, (NodeAddress, PeerMessage)]](messagesBuffer)
                     .toManaged_
       _ <- Transport
             .bind(identifier)
-            .flatMapPar[Transport, Error, (NodeAddress, PlumTreeProtocol)](concurrentConnections) { channel =>
+            .flatMapPar[Transport, Error, (NodeAddress, PeerMessage)](concurrentConnections) { channel =>
               channel.receive
                 .mapM(ByteCodec.decode[Envelope](_).map(envelope => (envelope.sender, envelope.msg)))
                 .orElse(ZStream.empty)
@@ -94,19 +95,20 @@ object TestPeerService {
         override val getPeers: UIO[Set[NodeAddress]] =
           ref.get.commit
 
-        override def send(to: NodeAddress, message: PlumTreeProtocol): IO[SendError, Unit] =
+        override def send(to: NodeAddress, message: PeerMessage): IO[Nothing, Unit] =
           ref.get.map(_.contains(to)).commit.flatMap {
-            case false => ZIO.fail(SendError.NotConnected)
+            case false => ZIO.dieMessage("not connected")
             case true =>
               ByteCodec
                 .encode(Envelope(identifier, message))
                 .mapError(SendError.SerializationFailed)
                 .flatMap(Transport.send(to, _).mapError(SendError.TransportFailed))
                 .provide(env)
+                .orDie
           }
 
-        override val receive: ZStream[Any, Error, (NodeAddress, PlumTreeProtocol)] =
-          ZStream.fromQueue(msgsQueue).flattenTake
+        override val receive: ZStream[Any, Nothing, (NodeAddress, PeerMessage)] =
+          ZStream.fromQueue(msgsQueue).flattenTake orElse ZStream.empty
 
         override val events: ZStream[Any, Nothing, PeerEvent] =
           ZStream.fromEffect(eventsQueue.take.commit)

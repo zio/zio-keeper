@@ -3,10 +3,7 @@ package zio.keeper
 import java.util.UUID
 
 import zio.Chunk
-import zio.keeper.hyparview.ActiveProtocol._
-import zio.keeper.hyparview.InitialProtocol._
-import zio.keeper.hyparview.NeighborReply._
-import zio.keeper.hyparview._
+import zio.keeper.uuid.makeRandomUUID
 import zio.keeper.swim.protocols.{ FailureDetection, Initial }
 import zio.keeper.swim.protocols.FailureDetection.{ Ack, Alive, Dead, Nack, Ping, PingReq, Suspect }
 import zio.random.Random
@@ -14,7 +11,12 @@ import zio.test._
 
 object gens {
 
-  val timeToLive: Gen[Random, TimeToLive] =
+  object hyparview {
+    import zio.keeper.hyparview._
+    import zio.keeper.hyparview.Message._
+    import zio.keeper.hyparview.Message.PeerMessage._
+
+      val timeToLive: Gen[Random, TimeToLive] =
     Gen.anyInt.map(TimeToLive.apply)
 
   val round: Gen[Random, Round] =
@@ -24,9 +26,6 @@ object gens {
         else go(round.inc, remaining - 1)
       go(Round.zero, n)
     }
-
-  val nodeAddress: Gen[Random with Sized, NodeAddress] =
-    Gen.listOf(Gen.anyByte).map(_.toArray).zipWith(Gen.anyInt)(NodeAddress.apply)
 
   val joinReply: Gen[Random with Sized, JoinReply] =
     nodeAddress.map(JoinReply.apply)
@@ -51,28 +50,22 @@ object gens {
       sender <- nodeAddress
     } yield ForwardJoinReply(sender)
 
-  val initialProtocol: Gen[Random with Sized, InitialProtocol] =
-    Gen.oneOf(join, shuffleReply, neighbor, forwardJoinReply)
+  val neighborAccept: Gen[Random, NeighborAccept.type] =
+    Gen.const(NeighborAccept)
 
-  val accept: Gen[Any, Accept.type] = Gen.const(Accept)
-
-  val reject: Gen[Any, Reject.type] = Gen.const(Reject)
-
-  val neighborReply: Gen[Random, NeighborReply] =
-    Gen.oneOf(accept, reject)
+  val neighborReject: Gen[Random, NeighborReject.type] =
+    Gen.const(NeighborReject)
 
   val disconnect: Gen[Random with Sized, Disconnect] =
     for {
-      sender <- nodeAddress
       alive  <- Gen.boolean
-    } yield Disconnect(sender, alive)
+    } yield Disconnect(alive)
 
   val forwardJoin: Gen[Random with Sized, ForwardJoin] =
     for {
-      sender         <- nodeAddress
       originalSender <- nodeAddress
-      ttl            <- gens.timeToLive
-    } yield ForwardJoin(sender, originalSender, ttl)
+      ttl            <- timeToLive
+    } yield ForwardJoin(originalSender, ttl)
 
   def shuffle: Gen[Random with Sized, Shuffle] =
     for {
@@ -80,11 +73,8 @@ object gens {
       originalSender <- nodeAddress
       activeNodes    <- Gen.listOf(nodeAddress)
       passiveNodes   <- Gen.listOf(nodeAddress)
-      ttl            <- gens.timeToLive
+      ttl            <- timeToLive
     } yield Shuffle(sender, originalSender, activeNodes, passiveNodes, ttl)
-
-  val uuid: Gen[Any, UUID] =
-    Gen.fromEffect(makeRandomUUID)
 
   val prune: Gen[Any, Prune.type] =
     Gen.const(Prune)
@@ -105,11 +95,19 @@ object gens {
       round <- round
     } yield Gossip(uuid, body, round)
 
-  val plumTreeProtocol: Gen[Random with Sized, PlumTreeProtocol] =
+  val peerMessage: Gen[Random with Sized, PeerMessage] =
     Gen.oneOf(prune, iHave, graft, userMessage, gossip)
 
-  val activeProtocol: Gen[Random with Sized, ActiveProtocol] =
-    Gen.oneOf(disconnect, forwardJoin, shuffle, plumTreeProtocol)
+  val message: Gen[Random with Sized, Message] =
+    Gen.oneOf(disconnect, forwardJoin, forwardJoinReply, join, joinReply, neighbor, neighborAccept, neighborReject, peerMessage, shuffle, shuffleReply)
+
+  }
+
+  val nodeAddress: Gen[Random with Sized, NodeAddress] =
+    Gen.listOf(Gen.anyByte).map(_.toArray).zipWith(Gen.anyInt)(NodeAddress.apply)
+
+  val uuid: Gen[Any, UUID] =
+    Gen.fromEffect(makeRandomUUID)
 
   val ping: Gen[Any, Ping.type] =
     Gen.const(Ping)

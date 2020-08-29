@@ -135,7 +135,7 @@ object InitialProtocolSpec extends KeeperSpec {
     TRandom.live >+> {
       Logging.ignore ++
         Views.live(address(0), 10, 10) ++
-        HyParViewConfig.staticConfig(10, 10, 5, 3, 2, 2, 3, 256, 256, 256)
+        HyParViewConfig.staticConfig(address(0), 10, 10, 5, 3, 2, 2, 3, 256, 256, 256)
     }
 
 }

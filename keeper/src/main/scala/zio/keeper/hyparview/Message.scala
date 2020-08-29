@@ -10,6 +10,60 @@ sealed abstract class Message
 
 object Message {
 
+  sealed trait PeerMessage extends Message
+  object PeerMessage {
+    case object Prune extends PeerMessage {
+
+      implicit val codec: ByteCodec[Prune.type] =
+        ByteCodec.fromReadWriter(macroRW[Prune.type])
+    }
+
+    final case class IHave(
+      messages: Chunk[(UUID, Round)]
+    ) extends PeerMessage
+
+    object IHave {
+
+      implicit val codec: ByteCodec[IHave] =
+        ByteCodec[Chunk[(UUID, Round)]].bimap(IHave.apply, _.messages)
+    }
+
+    final case class Graft(
+      uuid: UUID
+    ) extends PeerMessage
+
+    object Graft {
+
+      implicit val codec: ByteCodec[Graft] =
+        ByteCodec.fromReadWriter(macroRW[Graft])
+    }
+
+    final case class Gossip(
+      uuid: UUID,
+      payload: Chunk[Byte],
+      round: Round
+    ) extends PeerMessage
+
+    object Gossip {
+
+      implicit val codec: ByteCodec[Gossip] =
+        ByteCodec[(UUID, (Chunk[Byte], Round))].bimap(
+          { case (uuid, (payload, round)) => Gossip(uuid, payload, round) },
+          gossip => (gossip.uuid, (gossip.payload, gossip.round))
+        )
+    }
+
+    final case class UserMessage(
+      payload: Chunk[Byte]
+    ) extends PeerMessage
+
+    object UserMessage {
+
+      implicit val codec: ByteCodec[UserMessage] =
+        ByteCodec[Chunk[Byte]].bimap(UserMessage.apply, _.payload)
+    }
+  }
+
   final case class Neighbor(
     sender: NodeAddress,
     isHighPriority: Boolean
@@ -64,17 +118,6 @@ object Message {
 
   }
 
-  final case class NeighborReply(
-    accept: Boolean
-  ) extends Message
-
-  object NeighborReply {
-
-    implicit val codec: ByteCodec[NeighborReply] =
-      ByteCodec.fromReadWriter(macroRW[NeighborReply])
-
-  }
-
   case object NeighborReject extends Message {
 
     implicit val codec: ByteCodec[NeighborReject.type] =
@@ -100,7 +143,6 @@ object Message {
   }
 
   final case class ForwardJoin(
-    sender: NodeAddress,
     originalSender: NodeAddress,
     ttl: TimeToLive
   ) extends Message
@@ -125,74 +167,23 @@ object Message {
       ByteCodec.fromReadWriter(macroRW[Shuffle])
   }
 
-  // Plumtree
-
-  case object Prune extends Message {
-
-    implicit val codec: ByteCodec[Prune.type] =
-      ByteCodec.fromReadWriter(macroRW[Prune.type])
-  }
-
-  final case class IHave(
-    messages: Chunk[(UUID, Round)]
-  ) extends Message
-
-  object IHave {
-
-    implicit val codec: ByteCodec[IHave] =
-      ByteCodec[Chunk[(UUID, Round)]].bimap(IHave.apply, _.messages)
-  }
-
-  final case class Graft(
-    uuid: UUID
-  ) extends Message
-
-  object Graft {
-
-    implicit val codec: ByteCodec[Graft] =
-      ByteCodec.fromReadWriter(macroRW[Graft])
-  }
-
-  final case class Gossip(
-    uuid: UUID,
-    payload: Chunk[Byte],
-    round: Round
-  ) extends Message
-
-  object Gossip {
-
-    implicit val codec: ByteCodec[Gossip] =
-      ByteCodec[(UUID, (Chunk[Byte], Round))].bimap(
-        { case (uuid, (payload, round)) => Gossip(uuid, payload, round) },
-        gossip => (gossip.uuid, (gossip.payload, gossip.round))
-      )
-  }
-
-  final case class UserMessage(
-    payload: Chunk[Byte]
-  ) extends Message
-
-  object UserMessage {
-
-    implicit val codec: ByteCodec[UserMessage] =
-      ByteCodec[Chunk[Byte]].bimap(UserMessage.apply, _.payload)
-  }
-
   implicit val codec: ByteCodec[Message] =
     ByteCodec.tagged[Message][
       Disconnect,
       ForwardJoin,
       ForwardJoinReply,
-      Gossip,
-      Graft,
-      IHave,
+      Join,
       JoinReply,
       Neighbor,
-      NeighborReply,
-      Prune.type,
+      NeighborAccept.type,
+      NeighborReject.type,
       Shuffle,
       ShuffleReply,
-      UserMessage
+      PeerMessage.Gossip,
+      PeerMessage.Graft,
+      PeerMessage.IHave,
+      PeerMessage.Prune.type,
+      PeerMessage.UserMessage
     ]
 
 }

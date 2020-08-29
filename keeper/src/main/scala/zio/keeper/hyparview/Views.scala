@@ -29,14 +29,6 @@ object Views {
       STM.unit // TODO
     }
 
-    def send(to: NodeAddress, msg: ActiveProtocol): IO[SendError, Unit]
-
-    def addToActiveView(
-      node: NodeAddress,
-      send: ActiveProtocol => IO[SendError, Unit],
-      disconnect: UIO[Unit]
-    ): STM[Unit, Unit]
-
     def addToActiveView(
       node: NodeAddress,
       send: Message => STM[Nothing, Unit],
@@ -95,13 +87,6 @@ object Views {
 
   def addToActiveView(
     node: NodeAddress,
-    send: ActiveProtocol => IO[SendError, Unit],
-    disconnect: UIO[Unit]
-  ): ZSTM[Views, Unit, Unit] =
-    ZSTM.accessM(_.get.addToActiveView(node, send, disconnect))
-
-  def addToActiveView(
-    node: NodeAddress,
     send: Message => STM[Nothing, Unit],
     disconnect: STM[Nothing, Unit]
   ): ZSTM[Views, Nothing, Unit] =
@@ -127,9 +112,6 @@ object Views {
 
   def viewState: ZSTM[Views, Nothing, ViewState] =
     ZSTM.accessM(_.get.viewState)
-
-  def send(to: NodeAddress, msg: ActiveProtocol): ZIO[Views, SendError, Unit] =
-    ZIO.accessM(_.get.send(to, msg))
 
   def send(to: NodeAddress, msg: Message): ZSTM[Views, Nothing, Unit] =
     ZSTM.accessM(_.get.send(to, msg))
@@ -158,7 +140,7 @@ object Views {
     passiveViewCapacity0: Int
   ): URIO[TRandom, Service] =
     for {
-      activeView0  <- TMap.empty[NodeAddress, (ActiveProtocol => IO[SendError, Unit], UIO[Unit])].commit
+      activeView0  <- TMap.empty[NodeAddress, (Message => IO[SendError, Unit], UIO[Unit])].commit
       passiveView0 <- TSet.empty[NodeAddress].commit
       tRandom      <- URIO.environment[TRandom].map(_.get)
     } yield new Service {
@@ -184,45 +166,45 @@ object Views {
       val isPassiveViewFull: STM[Nothing, Boolean] =
         passiveViewSize.zipWith(passiveViewCapacity)(_ >= _)
 
-      def send(to: NodeAddress, msg: ActiveProtocol): IO[SendError, Unit] =
-        activeView0
-          .get(to)
-          .commit
-          .get
-          .foldM(
-            _ => IO.fail(SendError.NotConnected),
-            n =>
-              n._1(msg)
-                .foldM(
-                  {
-                    case e: SendError.TransportFailed => n._2 *> IO.fail(e)
-                    case e                            => IO.fail(e)
-                  },
-                  _ => IO.unit
-                )
-          )
+      // def send(to: NodeAddress, msg: ActiveProtocol): IO[SendError, Unit] =
+      //   activeView0
+      //     .get(to)
+      //     .commit
+      //     .get
+      //     .foldM(
+      //       _ => IO.fail(SendError.NotConnected),
+      //       n =>
+      //         n._1(msg)
+      //           .foldM(
+      //             {
+      //               case e: SendError.TransportFailed => n._2 *> IO.fail(e)
+      //               case e                            => IO.fail(e)
+      //             },
+      //             _ => IO.unit
+      //           )
+      //     )
 
-      def addToActiveView(
-        node: NodeAddress,
-        send: ActiveProtocol => IO[SendError, Unit],
-        disconnect: UIO[Unit]
-      ): STM[Unit, Unit] =
-        if (node == myself0) STM.unit
-        else {
-          val abort = for {
-            inActive   <- activeView0.contains(node)
-            activeFull <- isActiveViewFull
-          } yield inActive || activeFull
-          abort.flatMap {
-            case false =>
-              for {
-                _ <- activeView0.put(node, (send, disconnect))
-                _ <- passiveView0.delete(node)
-              } yield ()
-            case true =>
-              STM.fail(())
-          }
-        }
+      // def addToActiveView(
+      //   node: NodeAddress,
+      //   send: ActiveProtocol => IO[SendError, Unit],
+      //   disconnect: UIO[Unit]
+      // ): STM[Unit, Unit] =
+      //   if (node == myself0) STM.unit
+      //   else {
+      //     val abort = for {
+      //       inActive   <- activeView0.contains(node)
+      //       activeFull <- isActiveViewFull
+      //     } yield inActive || activeFull
+      //     abort.flatMap {
+      //       case false =>
+      //         for {
+      //           _ <- activeView0.put(node, (send, disconnect))
+      //           _ <- passiveView0.delete(node)
+      //         } yield ()
+      //       case true =>
+      //         STM.fail(())
+      //     }
+      //   }
 
       def removeFromActiveView(node: NodeAddress): STM[Nothing, Unit] =
         activeView0.delete(node)

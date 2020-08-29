@@ -1,6 +1,7 @@
 package zio.keeper.transport
 
 import zio._
+import zio.stm._
 
 trait Protocol[-R, +E, -I, +O, +A] { self =>
 
@@ -200,6 +201,9 @@ object Protocol {
         ZIO.succeedNow(f(in))
 
     }
+
+  def fromTransaction[R, E, I, O, A](f: I => ZSTM[R, E, (Chunk[O], Either[A, Protocol[R, E, I, O, A]])]) =
+    fromEffect[R, E, I, O, A](f(_).commit)
 
   def run[R, E, I, O, A](con: Connection[R, E, O, I], initial: Protocol[R, E, I, O, A]): ZIO[R, E, Option[A]] =
     con.receive

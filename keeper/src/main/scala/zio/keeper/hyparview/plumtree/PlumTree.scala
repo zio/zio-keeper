@@ -9,11 +9,11 @@ import zio.keeper.hyparview.{ PeerService, TRandom }
 import zio.keeper._
 import zio.logging._
 import zio.logging.Logging
-import zio.keeper.hyparview.ActiveProtocol._
 import zio.keeper.hyparview.PeerEvent._
 import zio.keeper.hyparview.Round
 import zio.keeper.uuid.makeRandomUUID
 import zio.stream.{ Stream, ZStream }
+import zio.keeper.hyparview.Message.PeerMessage._
 
 import scala.Function.untupled
 
