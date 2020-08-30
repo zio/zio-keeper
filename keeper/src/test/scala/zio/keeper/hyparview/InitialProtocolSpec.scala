@@ -15,7 +15,7 @@ object InitialProtocolSpec extends KeeperSpec {
       suite("on receiving Join")(
         testM("should succeed with sender of messagee") {
           val gen = for {
-            localAddress <- gens.nodeAddress
+            localAddress  <- gens.nodeAddress
             remoteAddress <- gens.nodeAddress.filter(_ != localAddress)
           } yield (localAddress, remoteAddress)
           checkM(gen) {
@@ -55,8 +55,8 @@ object InitialProtocolSpec extends KeeperSpec {
       suite("on receiving a neighbor message")(
         testM("should reject if not high priority and activeView is full") {
           val gen = for {
-            localAddress <- gens.nodeAddress
-            remoteAddress <- gens.nodeAddress.filter(_ != localAddress)
+            localAddress    <- gens.nodeAddress
+            remoteAddress   <- gens.nodeAddress.filter(_ != localAddress)
             existingAddress <- gens.nodeAddress.filter(a => (a != localAddress) && (a != remoteAddress))
           } yield (localAddress, remoteAddress, existingAddress)
           checkM(gen) {
@@ -81,7 +81,7 @@ object InitialProtocolSpec extends KeeperSpec {
         },
         testM("should reject if not high priority and activeView is not full") {
           val gen = for {
-            localAddress <- gens.nodeAddress
+            localAddress  <- gens.nodeAddress
             remoteAddress <- gens.nodeAddress.filter(_ != localAddress)
           } yield (localAddress, remoteAddress)
           checkM(gen) {
@@ -105,7 +105,7 @@ object InitialProtocolSpec extends KeeperSpec {
         },
         testM("should accept if high priority and activeView is not full") {
           val gen = for {
-            localAddress <- gens.nodeAddress
+            localAddress  <- gens.nodeAddress
             remoteAddress <- gens.nodeAddress.filter(_ != localAddress)
           } yield (localAddress, remoteAddress)
           checkM(gen) {
@@ -129,8 +129,8 @@ object InitialProtocolSpec extends KeeperSpec {
         },
         testM("should accept if high priority and activeView is full") {
           val gen = for {
-            localAddress <- gens.nodeAddress
-            remoteAddress <- gens.nodeAddress.filter(_ != localAddress)
+            localAddress    <- gens.nodeAddress
+            remoteAddress   <- gens.nodeAddress.filter(_ != localAddress)
             existingAddress <- gens.nodeAddress.filter(a => (a != localAddress) && (a != remoteAddress))
           } yield (localAddress, remoteAddress, existingAddress)
           checkM(gen) {

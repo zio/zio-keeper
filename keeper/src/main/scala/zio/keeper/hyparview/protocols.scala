@@ -25,7 +25,8 @@ object protocols {
       Protocol.run(con, protocol).unit
     }
 
-  val initialProtocol: Protocol[HyParViewConfig with Views with TRandom, Nothing, Message, Message, Option[NodeAddress]] =
+  val initialProtocol
+    : Protocol[HyParViewConfig with Views with TRandom, Nothing, Message, Message, Option[NodeAddress]] =
     Protocol.fromTransaction {
       case Message.Join(sender) =>
         for {
@@ -127,56 +128,34 @@ object protocols {
     remoteAddress: NodeAddress,
     send: Message => ZIO[R, Nothing, Unit]
   ): ZManaged[R, Unit, Boolean => UIO[Unit]] =
-    TPromise
-      .make[Nothing, Unit]
-      .commit
-      .toManaged_
-      .flatMap { disconnected =>
-        TRef.make[Option[NodeAddress]](None).commit.toManaged_.flatMap { remoteAddressRef =>
-          val awaitDone = remoteAddressRef.get.flatMap[Any, Nothing, Unit](_.fold(STM.unit)(_ => disconnected.await))
-          TRef.make(false).commit.toManaged_.flatMap { keepRef =>
-            val disconnect =
-              keepRef.get
-                .zip(remoteAddressRef.get)
-                .flatMap {
-                  case (_, None) => STM.succeedNow(ZIO.unit)
-                  case (keep, Some(remoteAddress)) =>
-                    ZSTM.ifM(disconnected.succeed(()))(
-                      Views.removeFromActiveView(remoteAddress) *> {
-                        if (keep) Views.addToPassiveView(remoteAddress) else STM.unit
-                      }.as(send(Message.Disconnect(keep))),
-                      STM.succeedNow(ZIO.unit)
-                    )
-                }
-                .commit
-                .flatten
-            TQueue.bounded[Option[Message]](256).commit.toManaged_.flatMap { queue =>
-              val signalDisconnect = queue.offer(None) *> awaitDone
-              ZStream
-                .fromTQueue(queue)
-                .foldM(true) {
-                  case (true, Some(message)) =>
-                    send(message).as(true)
-                  case (true, None) =>
-                    disconnect.as(false)
-                  case _ =>
-                    ZIO.succeedNow(false)
-                }
-                .toManaged_
-                .fork
-                .zipRight {
-                  val setup = remoteAddressRef.set(Some(remoteAddress)) *> Views
-                    .addToActiveView(
-                      remoteAddress,
-                      (msg: Message) => queue.offer(Some(msg)),
-                      signalDisconnect
-                    )
-                  ZManaged.make(setup.commit.as((b: Boolean) => keepRef.set(b).commit))(_ => signalDisconnect.commit)
-                }
+    for {
+      env          <- ZManaged.environment[R]
+      disconnected <- Promise.make[Nothing, Unit].toManaged_
+      keepRef      <- TRef.make(false).commit.toManaged_
+      queue        <- TQueue.bounded[Either[Boolean, Message]](256).commit.toManaged_
+      _ <- ZStream
+            .fromTQueue(queue)
+            .foldManagedM(true) {
+              case (true, Right(message)) =>
+                send(message).as(true)
+              case (true, Left(keep)) =>
+                (send(Message.Disconnect(keep)) *> disconnected.succeed(())).as(false)
+              case _ =>
+                ZIO.succeedNow(false)
             }
-          }
-        }
-      }
+            .ensuring(disconnected.succeed(()))
+            .fork
+      signalDisconnect = for {
+        keep <- keepRef.get
+        _    <- Views.addToPassiveView(remoteAddress).when(keep)
+        _    <- queue.offer(Left(keep))
+      } yield ()
+
+      _ <- Views
+            .addToActiveView(remoteAddress, msg => queue.offer(Right(msg)), signalDisconnect.provide(env))
+            .commit
+            .toManaged(_ => Views.removeFromActiveView(remoteAddress).commit *> disconnected.await)
+    } yield (b: Boolean) => keepRef.set(b).commit
 
   def addShuffledNodes(
     sentOriginally: Set[NodeAddress],

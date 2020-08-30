@@ -14,12 +14,14 @@ object ViewsSpec extends KeeperSpec {
       testM("adding the same node twice to the active view fails with ()") {
         checkM(gens.nodeAddress) {
           case x =>
-            val result = ZSTM.atomically {
-              for {
-                _ <- Views.addToActiveView(x, _ => STM.unit, STM.unit)
-                _ <- Views.addToActiveView(x, _ => STM.unit, STM.unit)
-              } yield ()
-            }.provideSomeLayer(makeLayer(address(0), 2, 2))
+            val result = ZSTM
+              .atomically {
+                for {
+                  _ <- Views.addToActiveView(x, _ => STM.unit, STM.unit)
+                  _ <- Views.addToActiveView(x, _ => STM.unit, STM.unit)
+                } yield ()
+              }
+              .provideSomeLayer(makeLayer(address(0), 2, 2))
             assertM(result.run)(fails(equalTo(())))
         }
       },
@@ -31,28 +33,32 @@ object ViewsSpec extends KeeperSpec {
         } yield (x1, x2, x3)
         checkM(gen) {
           case (x1, x2, x3) =>
-            val result = ZSTM.atomically {
-              for {
-                ref <- TRef.make(false)
-                _ <- Views.addToActiveView(x1, _ => STM.unit, ref.set(true))
-                _ <- Views.addToActiveView(x2, _ => STM.unit, ref.set(true))
-                _ <- Views.addToActiveView(x3, _ => STM.unit, ref.set(true))
-                result <- ref.get
-              } yield result
-            }.provideSomeLayer(makeLayer(address(0), 2, 2))
+            val result = ZSTM
+              .atomically {
+                for {
+                  ref    <- TRef.make(false)
+                  _      <- Views.addToActiveView(x1, _ => STM.unit, ref.set(true))
+                  _      <- Views.addToActiveView(x2, _ => STM.unit, ref.set(true))
+                  _      <- Views.addToActiveView(x3, _ => STM.unit, ref.set(true))
+                  result <- ref.get
+                } yield result
+              }
+              .provideSomeLayer(makeLayer(address(0), 2, 2))
             assertM(result)(isTrue)
         }
       },
       testM("adding the same node twice to the passive view is a noop") {
         checkM(gens.nodeAddress) { x =>
-          ZSTM.atomically {
-            for {
-              _     <- Views.addToPassiveView(x)
-              size1 <- Views.passiveViewSize
-              _     <- Views.addToPassiveView(x)
-              size2 <- Views.passiveViewSize
-            } yield assert(size1)(equalTo(1)) && assert(size2)(equalTo(1))
-          }.provideSomeLayer(makeLayer(address(0), 2, 2))
+          ZSTM
+            .atomically {
+              for {
+                _     <- Views.addToPassiveView(x)
+                size1 <- Views.passiveViewSize
+                _     <- Views.addToPassiveView(x)
+                size2 <- Views.passiveViewSize
+              } yield assert(size1)(equalTo(1)) && assert(size2)(equalTo(1))
+            }
+            .provideSomeLayer(makeLayer(address(0), 2, 2))
         }
       },
       testM("adding more than the maximum number of nodes to the passive view drops nodes") {
@@ -63,15 +69,17 @@ object ViewsSpec extends KeeperSpec {
         } yield (x1, x2, x3)
         checkM(gen) {
           case (x1, x2, x3) =>
-            ZSTM.atomically {
-              for {
-                _     <- Views.addToPassiveView(x1)
-                _     <- Views.addToPassiveView(x2)
-                size1 <- Views.passiveViewSize
-                _     <- Views.addToPassiveView(x3)
-                size2 <- Views.passiveViewSize
-              } yield assert(size1)(equalTo(2)) && assert(size2)(equalTo(2))
-            }.provideSomeLayer(makeLayer(address(0), 2, 2))
+            ZSTM
+              .atomically {
+                for {
+                  _     <- Views.addToPassiveView(x1)
+                  _     <- Views.addToPassiveView(x2)
+                  size1 <- Views.passiveViewSize
+                  _     <- Views.addToPassiveView(x3)
+                  size2 <- Views.passiveViewSize
+                } yield assert(size1)(equalTo(2)) && assert(size2)(equalTo(2))
+              }
+              .provideSomeLayer(makeLayer(address(0), 2, 2))
         }
       },
       testM("addShuffledNodes will add all nodes in the replied set") {
@@ -82,13 +90,15 @@ object ViewsSpec extends KeeperSpec {
         } yield (x1, x2, x3)
         checkM(gen) {
           case (x1, x2, x3) =>
-            ZSTM.atomically {
-              for {
-                _      <- Views.addToPassiveView(x1)
-                _      <- protocols.addShuffledNodes(Set.empty, Set(x2, x3))
-                result <- Views.passiveView
-              } yield assert(result)(equalTo(Set(x2, x3)))
-            }.provideSomeLayer(makeLayer(address(0), 2, 2))
+            ZSTM
+              .atomically {
+                for {
+                  _      <- Views.addToPassiveView(x1)
+                  _      <- protocols.addShuffledNodes(Set.empty, Set(x2, x3))
+                  result <- Views.passiveView
+                } yield assert(result)(equalTo(Set(x2, x3)))
+              }
+              .provideSomeLayer(makeLayer(address(0), 2, 2))
         }
       },
       testM("addShuffledNodes will add nodes from sentOriginally if there is space") {
@@ -100,12 +110,14 @@ object ViewsSpec extends KeeperSpec {
         } yield (x1, x2, x3, x4)
         checkM(gen) {
           case (x1, x2, x3, x4) =>
-            ZSTM.atomically {
-              for {
-                _      <- protocols.addShuffledNodes(Set(x1, x2), Set(x3, x4))
-                result <- Views.passiveView
-              } yield assert(result)(contains(x3) && contains(x4) && hasSize(equalTo(3)))
-            }.provideSomeLayer(makeLayer(address(0), 2, 3))
+            ZSTM
+              .atomically {
+                for {
+                  _      <- protocols.addShuffledNodes(Set(x1, x2), Set(x3, x4))
+                  result <- Views.passiveView
+                } yield assert(result)(contains(x3) && contains(x4) && hasSize(equalTo(3)))
+              }
+              .provideSomeLayer(makeLayer(address(0), 2, 3))
         }
       }
     ).provideCustomLayer((TRandom.live ++ ZLayer.identity[TestRandom with Sized]))
