@@ -10,11 +10,11 @@ object protocols {
 
   def all[R <: HyParViewConfig with Views with TRandom](
     con: Connection[R, Nothing, Message, Message]
-  ): ZIO[R, Error, Unit] =
-    ZManaged.switchable[R, Nothing, Boolean => UIO[Unit]].use { switch =>
+  ): ZIO[R, Unit, Unit] =
+    ZManaged.switchable[R, Unit, Boolean => UIO[Unit]].use { switch =>
       val protocol =
         initialProtocol
-          .contM[R, Error, Message, Message, Any] {
+          .contM[R, Unit, Message, Message, Any] {
             case Some(remoteAddr) =>
               switch(inActiveView(remoteAddr, con.send)).map { setKeepRef =>
                 Right(activeProtocol(remoteAddr).onEnd(setKeepRef).unit)
@@ -25,7 +25,7 @@ object protocols {
       Protocol.run(con, protocol).unit
     }
 
-  val initialProtocol: Protocol[HyParViewConfig with Views, Error, Message, Message, Option[NodeAddress]] =
+  val initialProtocol: Protocol[HyParViewConfig with Views with TRandom, Nothing, Message, Message, Option[NodeAddress]] =
     Protocol.fromTransaction {
       case Message.Join(sender) =>
         for {
@@ -57,9 +57,7 @@ object protocols {
             )
         }
       case Message.ShuffleReply(passiveNodes, sentOriginally) =>
-        Views
-          .addShuffledNodes(sentOriginally.toSet, passiveNodes.toSet)
-          .as((Chunk.empty, Left(None)))
+        addShuffledNodes(sentOriginally.toSet, passiveNodes.toSet).as((Chunk.empty, Left(None)))
       case Message.ForwardJoinReply(sender) =>
         STM.succeedNow((Chunk.empty, Left(Some(sender))))
       case _ =>
@@ -100,24 +98,27 @@ object protocols {
           }
           .as((Chunk.empty, Right(activeProtocol(remoteAddress))))
       case Message.ShuffleReply(passiveNodes, sentOriginally) =>
-        Views
-          .addShuffledNodes(sentOriginally.toSet, passiveNodes.toSet)
+        addShuffledNodes(sentOriginally.toSet, passiveNodes.toSet)
           .as((Chunk.empty, Right(activeProtocol(remoteAddress))))
       case Message.ForwardJoin(originalSender, ttl) =>
-        HyParViewConfig.getConfigSTM.flatMap { config =>
-          Views.activeView.map(av => (av.filter(_ != remoteAddress), ttl.step)).flatMap {
-            case (_, None) =>
-              STM.unit // TODO: connect
-            case (activeView, _) if activeView.size == 0 =>
-              STM.unit // TODO: connect
-            case (activeView, Some(newTtl)) =>
-              for {
-                _        <- Views.addToPassiveView(originalSender).when(newTtl.count == config.prwl)
-                nextNode <- TRandom.selectOne(activeView.toList)
-                _        <- nextNode.fold[ZSTM[Views, Nothing, Unit]](STM.unit)(Views.send(_, Message.ForwardJoin(originalSender, newTtl)))
-              } yield ()
+        HyParViewConfig.getConfigSTM
+          .flatMap { config =>
+            Views.activeView.map(av => (av.filter(_ != remoteAddress), ttl.step)).flatMap {
+              case (_, None) =>
+                STM.unit // TODO: connect
+              case (activeView, _) if activeView.size == 0 =>
+                STM.unit // TODO: connect
+              case (activeView, Some(newTtl)) =>
+                for {
+                  _        <- Views.addToPassiveView(originalSender).when(newTtl.count == config.prwl)
+                  nextNode <- TRandom.selectOne(activeView.toList)
+                  _ <- nextNode.fold[ZSTM[Views, Nothing, Unit]](STM.unit)(
+                        Views.send(_, Message.ForwardJoin(originalSender, newTtl))
+                      )
+                } yield ()
+            }
           }
-        }.as((Chunk.empty, Right(activeProtocol(remoteAddress))))
+          .as((Chunk.empty, Right(activeProtocol(remoteAddress))))
       case _ =>
         STM.succeedNow((Chunk.empty, Right(activeProtocol(remoteAddress))))
     }
@@ -125,7 +126,7 @@ object protocols {
   def inActiveView[R <: Views](
     remoteAddress: NodeAddress,
     send: Message => ZIO[R, Nothing, Unit]
-  ): ZManaged[R, Nothing, Boolean => UIO[Unit]] =
+  ): ZManaged[R, Unit, Boolean => UIO[Unit]] =
     TPromise
       .make[Nothing, Unit]
       .commit
@@ -176,5 +177,30 @@ object protocols {
           }
         }
       }
+
+  def addShuffledNodes(
+    sentOriginally: Set[NodeAddress],
+    replied: Set[NodeAddress]
+  ): ZSTM[Views with TRandom, Nothing, Unit] = {
+    val dropOneFromPassive: ZSTM[Views with TRandom, Nothing, Unit] =
+      for {
+        list    <- Views.passiveView.map(_.toList)
+        dropped <- TRandom.selectOne(list)
+        _       <- ZSTM.foreach_(dropped)(Views.removeFromPassiveView)
+      } yield ()
+
+    def dropNFromPassive(n: Int): ZSTM[Views with TRandom, Nothing, Unit] =
+      if (n <= 0) STM.unit else (dropOneFromPassive *> dropNFromPassive(n - 1))
+
+    for {
+      _         <- ZSTM.foreach(sentOriginally)(Views.removeFromPassiveView)
+      size      <- Views.passiveViewSize
+      capacity  <- Views.passiveViewCapacity
+      _         <- dropNFromPassive(replied.size - (capacity - size))
+      _         <- Views.addAllToPassiveView(replied.toList)
+      remaining <- Views.passiveViewSize.map(capacity - _)
+      _         <- Views.addAllToPassiveView(sentOriginally.take(remaining).toList)
+    } yield ()
+  }
 
 }

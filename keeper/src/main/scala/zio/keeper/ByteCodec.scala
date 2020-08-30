@@ -395,7 +395,7 @@ object ByteCodec {
       A10 <: A: ByteCodec: ClassTag,
       A11 <: A: ByteCodec: ClassTag,
       A12 <: A: ByteCodec: ClassTag,
-      A13 <: A: ByteCodec: ClassTag,
+      A13 <: A: ByteCodec: ClassTag
     ]: ByteCodec[A] =
       taggedInstance[A](
         {
@@ -428,7 +428,6 @@ object ByteCodec {
           case 12 => ByteCodec[A13].unsafeWiden[A]
         }
       )
-
 
     def apply[
       A1 <: A: ByteCodec: ClassTag,

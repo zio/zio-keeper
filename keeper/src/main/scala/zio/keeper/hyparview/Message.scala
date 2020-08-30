@@ -11,7 +11,9 @@ sealed abstract class Message
 object Message {
 
   sealed trait PeerMessage extends Message
+
   object PeerMessage {
+
     case object Prune extends PeerMessage {
 
       implicit val codec: ByteCodec[Prune.type] =

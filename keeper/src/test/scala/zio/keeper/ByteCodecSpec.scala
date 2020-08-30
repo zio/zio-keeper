@@ -7,7 +7,7 @@ import zio.keeper.swim.protocols.{ FailureDetection, Initial }
 import zio.keeper.swim.protocols.FailureDetection.{ Ack, Alive, Dead, Nack, Ping, PingReq, Suspect }
 import zio.test._
 
-object ByteCodecSpec extends DefaultRunnableSpec {
+object ByteCodecSpec extends KeeperSpec {
 
   def spec =
     suite("ByteCodec")(

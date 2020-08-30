@@ -1,5 +1,6 @@
 package zio.keeper.hyparview
 
+import zio.stm.STM
 import zio.test._
 import zio.test.Assertion._
 import zio.keeper.KeeperSpec
@@ -13,7 +14,11 @@ object InitialProtocolSpec extends KeeperSpec {
     suite("InitialProtocol")(
       suite("on receiving Join")(
         testM("should succeed with sender of messagee") {
-          checkM(gens.nodeAddress, gens.nodeAddress) {
+          val gen = for {
+            localAddress <- gens.nodeAddress
+            remoteAddress <- gens.nodeAddress.filter(_ != localAddress)
+          } yield (localAddress, remoteAddress)
+          checkM(gen) {
             case (localAddress, remoteAddress) =>
               val makeConnection = {
                 import MockConnection._
@@ -49,8 +54,13 @@ object InitialProtocolSpec extends KeeperSpec {
       },
       suite("on receiving a neighbor message")(
         testM("should reject if not high priority and activeView is full") {
-          checkM(gens.nodeAddress, gens.nodeAddress) {
-            case (localAddress, remoteAddress) =>
+          val gen = for {
+            localAddress <- gens.nodeAddress
+            remoteAddress <- gens.nodeAddress.filter(_ != localAddress)
+            existingAddress <- gens.nodeAddress.filter(a => (a != localAddress) && (a != remoteAddress))
+          } yield (localAddress, remoteAddress, existingAddress)
+          checkM(gen) {
+            case (localAddress, remoteAddress, existingAddress) =>
               val makeConnection = {
                 import MockConnection._
                 make(
@@ -60,16 +70,21 @@ object InitialProtocolSpec extends KeeperSpec {
               }
               val test = makeConnection.use { con =>
                 for {
+                  _           <- Views.addToActiveView(existingAddress, _ => STM.unit, STM.unit).ignore.commit
                   protoResult <- protocols.initialProtocol.run(con)
                   viewsResult <- Views.passiveView.map(_.contains(remoteAddress)).commit
                 } yield protoResult.map((_, viewsResult))
               }
-              val env = defaultEnv >+> Views.live(localAddress, 0, 1)
+              val env = defaultEnv >+> Views.live(localAddress, 1, 1)
               assertM(test.provideLayer(env))(isSome(equalTo((None, true))))
           }
         },
         testM("should reject if not high priority and activeView is not full") {
-          checkM(gens.nodeAddress, gens.nodeAddress) {
+          val gen = for {
+            localAddress <- gens.nodeAddress
+            remoteAddress <- gens.nodeAddress.filter(_ != localAddress)
+          } yield (localAddress, remoteAddress)
+          checkM(gen) {
             case (localAddress, remoteAddress) =>
               val makeConnection = {
                 import MockConnection._
@@ -89,7 +104,11 @@ object InitialProtocolSpec extends KeeperSpec {
           }
         },
         testM("should accept if high priority and activeView is not full") {
-          checkM(gens.nodeAddress, gens.nodeAddress) {
+          val gen = for {
+            localAddress <- gens.nodeAddress
+            remoteAddress <- gens.nodeAddress.filter(_ != localAddress)
+          } yield (localAddress, remoteAddress)
+          checkM(gen) {
             case (localAddress, remoteAddress) =>
               val makeConnection = {
                 import MockConnection._
@@ -109,8 +128,13 @@ object InitialProtocolSpec extends KeeperSpec {
           }
         },
         testM("should accept if high priority and activeView is full") {
-          checkM(gens.nodeAddress, gens.nodeAddress) {
-            case (localAddress, remoteAddress) =>
+          val gen = for {
+            localAddress <- gens.nodeAddress
+            remoteAddress <- gens.nodeAddress.filter(_ != localAddress)
+            existingAddress <- gens.nodeAddress.filter(a => (a != localAddress) && (a != remoteAddress))
+          } yield (localAddress, remoteAddress, existingAddress)
+          checkM(gen) {
+            case (localAddress, remoteAddress, existingAdress) =>
               val makeConnection = {
                 import MockConnection._
                 make(
@@ -120,11 +144,12 @@ object InitialProtocolSpec extends KeeperSpec {
               }
               val test = makeConnection.use { con =>
                 for {
+                  _           <- Views.addToActiveView(existingAdress, _ => STM.unit, STM.unit).ignore.commit
                   protoResult <- protocols.initialProtocol.run(con)
                   viewsResult <- Views.passiveView.map(_.contains(remoteAddress)).commit
                 } yield protoResult.map((_, viewsResult))
               }
-              val env = defaultEnv >+> Views.live(localAddress, 0, 1)
+              val env = defaultEnv >+> Views.live(localAddress, 1, 1)
               assertM(test.provideLayer(env))(isSome(equalTo((Some(remoteAddress), false))))
           }
         }

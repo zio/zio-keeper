@@ -36,16 +36,17 @@ object PeerService {
   def live: ZLayer[HyParViewConfig with Transport with TRandom, Nothing, PeerService] =
     ZLayer.fromManaged {
       for {
-        cfg          <- HyParViewConfig.getConfig.toManaged_
-        views         = Views.live(cfg.address, cfg.activeViewCapacity, cfg.passiveViewCapacity)
-        connections   = Transport.bind(cfg.address)
-        _            <- connections.foreachManaged { rawConnection =>
-          val con = rawConnection
-            .biMapM(ByteCodec.encode[Message], ByteCodec.decode[Message])
-          protocols.all(con.closeOnError)
-        }
-          .provideSomeLayer[HyParViewConfig with TRandom with Transport](views)
-          .fork
+        cfg         <- HyParViewConfig.getConfig.toManaged_
+        views       = Views.live(cfg.address, cfg.activeViewCapacity, cfg.passiveViewCapacity)
+        connections = Transport.bind(cfg.address)
+        _ <- connections
+              .foreachManaged { rawConnection =>
+                val con = rawConnection
+                  .biMapM(ByteCodec.encode[Message], ByteCodec.decode[Message])
+                protocols.all(con.closeOnError)
+              }
+              .provideSomeLayer[HyParViewConfig with TRandom with Transport](views)
+              .fork
       } yield ???
     }
 
