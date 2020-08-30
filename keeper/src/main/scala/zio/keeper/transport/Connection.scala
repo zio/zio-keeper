@@ -6,6 +6,8 @@ import zio.duration._
 import zio.stream.ZStream
 import zio.logging.log
 import zio.logging.Logging
+import zio.keeper.ByteCodec
+import zio.keeper.SerializationError
 
 trait Connection[-R, +E, -I, +O] { self =>
   def send(data: I): ZIO[R, E, Unit]
@@ -170,6 +172,26 @@ trait Connection[-R, +E, -I, +O] { self =>
 
     }
 
+  def withCodec[A]: Connection.WithCodecPartiallyApplied[R, E, I, O, A] =
+    new Connection.WithCodecPartiallyApplied(self)
+
   // todo: remove
   val close: UIO[Unit]
+}
+
+object Connection {
+
+  final class WithCodecPartiallyApplied[-R, +E, -I, +O, A](con: Connection[R, E, I, O]) {
+
+    def apply[E3, E1 >: E <: E3, E2 >: SerializationError <: E3]()(
+      implicit evI: Chunk[Byte] <:< I,
+      evO: O <:< Chunk[Byte],
+      ev: ByteCodec[A]
+    ): Connection[R, E3, A, A] =
+      (con: Connection[R, E1, I, O]).biMapM[R, E3, A, A](
+        ByteCodec.encode[A](_).map(evI).mapError[E2](identity),
+        o => ByteCodec.decode[A](evO(o)).mapError[E2](identity)
+      )
+  }
+
 }

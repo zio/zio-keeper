@@ -3,10 +3,12 @@ package zio.keeper.hyparview
 import zio.keeper.NodeAddress
 import zio.keeper.transport.Transport
 import zio.stream.{ Stream, ZStream }
-import zio.{ IO, UIO, ZIO }
+import zio.{ IO, Schedule, UIO, ZIO }
+import zio.clock.Clock
+import zio.duration._
 import zio.ZLayer
-import zio.keeper.ByteCodec
 import zio.keeper.hyparview.Message.PeerMessage
+import zio.logging.Logging
 
 object PeerService {
 
@@ -33,20 +35,35 @@ object PeerService {
   def events: ZStream[PeerService, Nothing, PeerEvent] =
     ZStream.accessStream(_.get.events)
 
-  def live: ZLayer[HyParViewConfig with Transport with TRandom, Nothing, PeerService] =
+  def live[R <: HyParViewConfig with Transport with TRandom with Logging with Clock](
+    shuffleSchedule: Schedule[R, ViewState, Any],
+    fibersForIncomingConnections: Int = 32,
+    reportInterval: Duration = 2.seconds
+  ): ZLayer[R, Nothing, PeerService] =
     ZLayer.fromManaged {
       for {
         cfg         <- HyParViewConfig.getConfig.toManaged_
         views       = Views.live(cfg.address, cfg.activeViewCapacity, cfg.passiveViewCapacity)
         connections = Transport.bind(cfg.address)
-        _ <- connections
-              .foreachManaged { rawConnection =>
-                val con = rawConnection
-                  .biMapM(ByteCodec.encode[Message], ByteCodec.decode[Message])
-                protocols.all(con.closeOnError)
-              }
-              .provideSomeLayer[HyParViewConfig with TRandom with Transport](views)
-              .fork
+        _ <- {
+          for {
+            _ <- connections
+                  .mapMParUnordered(fibersForIncomingConnections) { rawConnection =>
+                    protocols.all(rawConnection.withCodec[Message]().closeOnError)
+                  }
+                  .runDrain
+                  .toManaged_
+                  .fork
+            _ <- periodic.doShuffle
+                  .repeat(shuffleSchedule)
+                  .toManaged_
+                  .fork
+            _ <- periodic.doReport
+                  .repeat(Schedule.spaced(reportInterval))
+                  .toManaged_
+                  .fork
+          } yield ()
+        }.provideSomeLayer[R](views)
       } yield ???
     }
 

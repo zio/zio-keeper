@@ -104,11 +104,15 @@ object protocols {
       case Message.ForwardJoin(originalSender, ttl) =>
         HyParViewConfig.getConfigSTM
           .flatMap { config =>
+            val accept = for {
+              myself <- Views.myself
+              _      <- Views.send(originalSender, Message.ForwardJoinReply(myself))
+            } yield ()
             Views.activeView.map(av => (av.filter(_ != remoteAddress), ttl.step)).flatMap {
               case (_, None) =>
-                STM.unit // TODO: connect
+                accept
               case (activeView, _) if activeView.size == 0 =>
-                STM.unit // TODO: connect
+                accept
               case (activeView, Some(newTtl)) =>
                 for {
                   _        <- Views.addToPassiveView(originalSender).when(newTtl.count == config.prwl)
