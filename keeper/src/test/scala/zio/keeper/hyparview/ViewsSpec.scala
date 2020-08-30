@@ -11,18 +11,20 @@ object ViewsSpec extends KeeperSpec {
 
   def spec =
     suite("ViewsSpec")(
-      testM("adding the same node twice to the active view fails with ()") {
+      testM("adding the same node twice to the active view evicts the old instance") {
         checkM(gens.nodeAddress) {
           case x =>
             val result = ZSTM
               .atomically {
                 for {
-                  _ <- Views.addToActiveView(x, _ => STM.unit, STM.unit)
-                  _ <- Views.addToActiveView(x, _ => STM.unit, STM.unit)
-                } yield ()
+                  ref    <- TRef.make(0)
+                  _      <- Views.addToActiveView(x, _ => STM.unit, ref.update(_ + 1))
+                  _      <- Views.addToActiveView(x, _ => STM.unit, ref.update(_ + 1))
+                  result <- ref.get
+                } yield result
               }
               .provideSomeLayer(makeLayer(address(0), 2, 2))
-            assertM(result.run)(fails(equalTo(())))
+            assertM(result)(equalTo((1)))
         }
       },
       testM("adding more than the maximum number of nodes to the active view drops nodes") {

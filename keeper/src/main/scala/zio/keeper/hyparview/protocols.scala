@@ -8,13 +8,13 @@ import zio.keeper.transport.{ Connection, Protocol }
 
 object protocols {
 
-  def all[R <: HyParViewConfig with Views with TRandom](
-    con: Connection[R, Nothing, Message, Message]
-  ): ZIO[R, Unit, Unit] =
-    ZManaged.switchable[R, Unit, Boolean => UIO[Unit]].use { switch =>
+  def all[R <: HyParViewConfig with Views with TRandom, E](
+    con: Connection[R, E, Message, Message]
+  ): ZIO[R, E, Unit] =
+    ZManaged.switchable[R, E, Boolean => UIO[Unit]].use { switch =>
       val protocol =
         initialProtocol
-          .contM[R, Unit, Message, Message, Any] {
+          .contM[R, E, Message, Message, Any] {
             case Some(remoteAddr) =>
               switch(inActiveView(remoteAddr, con.send)).map { setKeepRef =>
                 Right(activeProtocol(remoteAddr).onEnd(setKeepRef).unit)
@@ -126,8 +126,8 @@ object protocols {
 
   def inActiveView[R <: Views](
     remoteAddress: NodeAddress,
-    send: Message => ZIO[R, Nothing, Unit]
-  ): ZManaged[R, Unit, Boolean => UIO[Unit]] =
+    send: Message => ZIO[R, Any, Unit]
+  ): ZManaged[R, Nothing, Boolean => UIO[Unit]] =
     for {
       env          <- ZManaged.environment[R]
       disconnected <- Promise.make[Nothing, Unit].toManaged_
