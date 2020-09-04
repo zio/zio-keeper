@@ -9,7 +9,7 @@ import zio.keeper.hyparview.PeerEvent._
 import zio.keeper.hyparview.{ PeerEvent, PeerService }
 import zio.keeper.transport.Transport
 import zio.keeper.{ ByteCodec, Error, NodeAddress, SendError }
-import zio.stm.{ STM, TQueue, TRef, ZSTM }
+import zio.stm._
 import zio.stream.{ Take, ZStream }
 import zio.keeper.hyparview.Message.PeerMessage
 import zio.keeper.hyparview.Message
@@ -17,7 +17,7 @@ import zio.keeper.hyparview.Message
 object TestPeerService {
 
   trait Service {
-    def setPeers(peers: Set[NodeAddress]): STM[Nothing, Unit]
+    def setPeers(peers: Set[NodeAddress]): USTM[Unit]
   }
 
   final case class Envelope(
@@ -82,7 +82,7 @@ object TestPeerService {
             .fork
     } yield Has.allOf[Service, PeerService.Service](
       new Service {
-        override def setPeers(peers: Set[NodeAddress]): STM[Nothing, Unit] =
+        override def setPeers(peers: Set[NodeAddress]): USTM[Unit] =
           for {
             oldPeers <- ref.modify((_, peers))
             _        <- eventsQueue.offerAll(oldPeers.diff(peers).map(NeighborDown.apply).toList)

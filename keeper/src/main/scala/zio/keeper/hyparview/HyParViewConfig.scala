@@ -2,7 +2,7 @@ package zio.keeper.hyparview
 
 import zio.{ UIO, ULayer, URIO, ZIO, ZLayer }
 import zio.keeper.NodeAddress
-import zio.stm.{ STM, ZSTM }
+import zio.stm._
 
 object HyParViewConfig {
 
@@ -35,7 +35,7 @@ object HyParViewConfig {
   }
 
   trait Service {
-    val getConfigSTM: STM[Nothing, Config]
+    val getConfigSTM: USTM[Config]
 
     val getConfig: UIO[Config] =
       getConfigSTM.commit
@@ -62,7 +62,7 @@ object HyParViewConfig {
   ): ULayer[HyParViewConfig] =
     ZLayer.succeed {
       new Service {
-        val getConfigSTM: STM[Nothing, Config] =
+        val getConfigSTM: USTM[Config] =
           STM.succeed {
             Config(
               address,

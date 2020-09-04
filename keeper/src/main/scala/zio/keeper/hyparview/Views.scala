@@ -9,23 +9,23 @@ import zio.keeper.hyparview.ViewEvent._
 object Views {
 
   trait Service {
-    def activeView: STM[Nothing, Set[NodeAddress]]
-    def activeViewCapacity: STM[Nothing, Int]
-    def addAllToPassiveView(nodes: List[NodeAddress]): STM[Nothing, Unit]
+    def activeView: USTM[Set[NodeAddress]]
+    def activeViewCapacity: USTM[Int]
+    def addAllToPassiveView(nodes: List[NodeAddress]): USTM[Unit]
 
     def addToActiveView(
       node: NodeAddress,
-      send: Message => STM[Nothing, _],
-      disconnect: STM[Nothing, _]
-    ): STM[Nothing, Unit]
-    def addToPassiveView(node: NodeAddress): STM[Nothing, Unit]
+      send: Message => USTM[_],
+      disconnect: USTM[_]
+    ): USTM[Unit]
+    def addToPassiveView(node: NodeAddress): USTM[Unit]
     def events: Stream[Nothing, ViewEvent]
-    def myself: STM[Nothing, NodeAddress]
-    def passiveView: STM[Nothing, Set[NodeAddress]]
-    def passiveViewCapacity: STM[Nothing, Int]
-    def removeFromActiveView(node: NodeAddress): STM[Nothing, Unit]
-    def removeFromPassiveView(node: NodeAddress): STM[Nothing, Unit]
-    def send(to: NodeAddress, msg: Message): STM[Nothing, Unit]
+    def myself: USTM[NodeAddress]
+    def passiveView: USTM[Set[NodeAddress]]
+    def passiveViewCapacity: USTM[Int]
+    def removeFromActiveView(node: NodeAddress): USTM[Unit]
+    def removeFromPassiveView(node: NodeAddress): USTM[Unit]
+    def send(to: NodeAddress, msg: Message): USTM[Unit]
   }
 
   def activeView: ZSTM[Views, Nothing, Set[NodeAddress]] =
@@ -42,8 +42,8 @@ object Views {
 
   def addToActiveView(
     node: NodeAddress,
-    send: Message => STM[Nothing, _],
-    disconnect: STM[Nothing, _]
+    send: Message => USTM[_],
+    disconnect: USTM[_]
   ): ZSTM[Views, Nothing, Unit] =
     ZSTM.accessM(_.get.addToActiveView(node, send, disconnect))
 
@@ -99,18 +99,18 @@ object Views {
         _            <- ZIO.dieMessage("active view capacity must be greater than 0").when(activeViewCapacity0 <= 0)
         _            <- ZIO.dieMessage("passive view capacity must be greater than 0").when(passiveViewCapacity0 <= 0)
         viewEvents   <- TQueue.bounded[ViewEvent](eventsBuffer).commit
-        activeView0  <- TMap.empty[NodeAddress, (Message => STM[Nothing, Any], STM[Nothing, Any])].commit
+        activeView0  <- TMap.empty[NodeAddress, (Message => USTM[Any], USTM[Any])].commit
         passiveView0 <- TSet.empty[NodeAddress].commit
         tRandom      <- URIO.environment[TRandom].map(_.get)
       } yield new Service {
 
-        override val activeView: STM[Nothing, Set[NodeAddress]] =
+        override val activeView: USTM[Set[NodeAddress]] =
           activeView0.keys.map(_.toSet)
 
-        override val activeViewCapacity: STM[Nothing, Int] =
+        override val activeViewCapacity: USTM[Int] =
           STM.succeedNow(activeViewCapacity0)
 
-        override def addAllToPassiveView(remaining: List[NodeAddress]): STM[Nothing, Unit] =
+        override def addAllToPassiveView(remaining: List[NodeAddress]): USTM[Unit] =
           remaining match {
             case Nil     => STM.unit
             case x :: xs => addToPassiveView(x) *> addAllToPassiveView(xs)
@@ -118,11 +118,10 @@ object Views {
 
         override def addToActiveView(
           node: NodeAddress,
-          send: Message => STM[Nothing, _],
-          disconnect: STM[Nothing, _]
-        ): STM[Nothing, Unit] =
-          if (node == myself0) STM.unit
-          else {
+          send: Message => USTM[_],
+          disconnect: USTM[_]
+        ): USTM[Unit] =
+          STM.when(!(node == myself0)) {
             ZSTM.ifM(activeView0.contains(node))(
               {
                 for {
@@ -136,7 +135,7 @@ object Views {
                     for {
                       activeView <- activeView
                       node       <- tRandom.selectOne(activeView.toList)
-                      _          <- node.fold[STM[Nothing, Unit]](STM.unit)(removeFromActiveView)
+                      _          <- node.fold[USTM[Unit]](STM.unit)(removeFromActiveView)
                     } yield ()
                   }.whenM(activeView0.size.map(_ >= activeViewCapacity0))
                   _ <- viewEvents.offer(AddedToActiveView(node))
@@ -146,7 +145,7 @@ object Views {
             )
           }
 
-        override def addToPassiveView(node: NodeAddress): STM[Nothing, Unit] =
+        override def addToPassiveView(node: NodeAddress): USTM[Unit] =
           for {
             inActive            <- activeView0.contains(node)
             inPassive           <- passiveView0.contains(node)
@@ -165,16 +164,16 @@ object Views {
         override val events: Stream[Nothing, ViewEvent] =
           Stream.fromTQueue(viewEvents)
 
-        override val myself: STM[Nothing, NodeAddress] =
+        override val myself: USTM[NodeAddress] =
           STM.succeed(myself0)
 
-        override val passiveView: STM[Nothing, Set[NodeAddress]] =
+        override val passiveView: USTM[Set[NodeAddress]] =
           passiveView0.toList.map(_.toSet)
 
-        override val passiveViewCapacity: STM[Nothing, Int] =
+        override val passiveViewCapacity: USTM[Int] =
           STM.succeed(passiveViewCapacity0)
 
-        override def removeFromActiveView(node: NodeAddress): STM[Nothing, Unit] =
+        override def removeFromActiveView(node: NodeAddress): USTM[Unit] =
           activeView0
             .get(node)
             .get
@@ -189,11 +188,11 @@ object Views {
               }
             )
 
-        override def removeFromPassiveView(node: NodeAddress): STM[Nothing, Unit] = {
+        override def removeFromPassiveView(node: NodeAddress): USTM[Unit] = {
           viewEvents.offer(RemovedFromPassiveView(node)) *> passiveView0.delete(node)
         }.whenM(passiveView0.contains(node))
 
-        override def send(to: NodeAddress, msg: Message): STM[Nothing, Unit] =
+        override def send(to: NodeAddress, msg: Message): USTM[Unit] =
           activeView0
             .get(to)
             .get
@@ -202,10 +201,10 @@ object Views {
               _._1(msg).unit
             )
 
-        private def dropNFromPassive(n: Int): STM[Nothing, Unit] =
+        private def dropNFromPassive(n: Int): USTM[Unit] =
           if (n <= 0) STM.unit else (dropOneFromPassive *> dropNFromPassive(n - 1))
 
-        private val dropOneFromPassive: STM[Nothing, Unit] =
+        private val dropOneFromPassive: USTM[Unit] =
           for {
             list    <- passiveView0.toList
             dropped <- tRandom.selectOne(list)
