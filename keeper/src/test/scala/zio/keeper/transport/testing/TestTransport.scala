@@ -31,6 +31,11 @@ object TestTransport {
   def setConnectivity(f: (NodeAddress, NodeAddress) => Boolean): URIO[TestTransport, Unit] =
     ZIO.accessM(_.get.setConnectivity(f))
 
+  def transportLayer(addr: NodeAddress): ZLayer[TestTransport, Nothing, Transport] =
+    ZLayer.fromEffect(
+      ZIO.accessM(_.get.asNode[TestTransport, Nothing, Transport.Service](addr)(ZIO.service[Transport.Service]))
+    )
+
   val make: ZLayer[Any, Nothing, TestTransport] =
     ZLayer.fromEffect {
       RefM.make(State.initial).map { ref =>
