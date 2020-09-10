@@ -31,23 +31,22 @@ object TestTransport {
   def setConnectivity(f: (NodeAddress, NodeAddress) => Boolean): URIO[TestTransport, Unit] =
     ZIO.accessM(_.get.setConnectivity(f))
 
-  def make(
-    messagesBuffer: Int = 128,
-    connectionBuffer: Int = 12
-  ): ZLayer[Any, Nothing, TestTransport] =
+  val make: ZLayer[Any, Nothing, TestTransport] =
     ZLayer.fromEffect {
-      Ref.make(State.initial).map { ref =>
+      RefM.make(State.initial).map { ref =>
         new Service {
           def awaitAvailable(node: NodeAddress): UIO[Unit] =
             Promise.make[Nothing, Unit].flatMap { available =>
-              ref.modify { old =>
-                if (old.nodes.contains(node)) (ZIO.unit, old)
-                else
-                  (
-                    available.await,
-                    (old.copy(waiters = old.waiters + (node -> (available.succeed(()).unit :: old.waiters(node)))))
-                  )
-              }.flatten
+              ref
+                .modify[Any, Nothing, UIO[Unit]] { old =>
+                  if (old.nodes.contains(node)) ZIO.succeedNow((ZIO.unit, old))
+                  else {
+                    val newState =
+                      old.copy(waiters = old.waiters + (node -> (available.succeed(()).unit :: old.waiters(node))))
+                    ZIO.succeedNow((available.await, newState))
+                  }
+                }
+                .flatten
             }
           def nodes: UIO[Set[NodeAddress]] =
             ref.get.map(_.nodes.keySet)
@@ -55,65 +54,64 @@ object TestTransport {
             ref.get.map(_.connections.keySet)
           def setConnectivity(f: (NodeAddress, NodeAddress) => Boolean): UIO[Unit] =
             ref
-              .modify { old =>
+              .update { old =>
                 val (remaining, disconnected) = old.connections.toList.partition {
                   case ((t1, t2), _) => f(t1, t2) && f(t2, t1)
                 }
-                (disconnected, old.copy(connections = remaining.toMap, f = f))
-              }
-              .flatMap(
+                val newState = old.copy(connections = remaining.toMap, f = f)
                 ZIO
-                  .foreach_(_)(
+                  .foreach_(disconnected) {
                     _._2(TransportError.ExceptionWrapper(new RuntimeException("disconnected (setConnectivity)")))
-                  )
-              )
+                  }
+                  .as(newState)
+              }
           def asNode[R <: Has[_], E, A](addr: NodeAddress)(zio: ZIO[R with Transport, E, A]): ZIO[R, E, A] = {
             val transport = new Transport.Service {
               def bind(addr: NodeAddress): Stream[TransportError, ChunkConnection] = {
 
                 def completeWaiters(node: NodeAddress): UIO[Unit] =
                   ref
-                    .modify { old =>
+                    .update { old =>
                       val matching = old.waiters(node)
-                      (matching, old.copy(waiters = old.waiters - node))
+                      val newState = old.copy(waiters = old.waiters - node)
+                      ZIO.collectAll(matching).as(newState)
                     }
-                    .flatMap(ZIO.collectAll[Any, Nothing, Unit](_).unit)
 
                 def makeConnection(
                   out: Chunk[Byte] => UIO[Unit],
                   in: UIO[Either[Option[TransportError], Chunk[Byte]]],
-                  sendLock: Semaphore,
-                  isConnected: UIO[Boolean]
+                  getSendStatus: UIO[Either[Option[TransportError], Unit]]
                 ): UIO[ChunkConnection] =
                   for {
-                    receiveEnd <- Promise.make[Nothing, Option[TransportError]]
+                    receiveEnd    <- Promise.make[Nothing, Option[TransportError]]
+                    receiveStatus <- Ref.make[Either[Option[TransportError], Unit]](Right(()))
                   } yield new ChunkConnection {
 
                     override def send(data: Chunk[Byte]): IO[TransportError, Unit] =
-                      sendLock.withPermit {
-                        isConnected.flatMap {
-                          case false =>
-                            ZIO.fail(TransportError.ExceptionWrapper(new RuntimeException("connection failed")))
-                          case true =>
-                            out(data)
-                        }
+                      getSendStatus.flatMap {
+                        case Left(err) =>
+                          err.fold[IO[TransportError, Nothing]](
+                            ZIO.fail(TransportError.ExceptionWrapper(new RuntimeException("disconnected")))
+                          )(ZIO.fail(_))
+                        case _ =>
+                          out(data)
                       }
 
                     override val receive: ZStream[Any, TransportError, Chunk[Byte]] =
                       ZStream {
                         ZManaged.succeed {
-
-                          val awaitDisconnect = receiveEnd.await.map(Left(_))
-
-                          in.race(awaitDisconnect)
-                            .flatMap(
-                              _.fold(
-                                e =>
-                                  receiveEnd
-                                    .succeed(e) *> e.fold[Pull[Any, TransportError, Nothing]](Pull.end)(Pull.fail(_)),
-                                bytes => Pull.emit(Chunk.single(bytes))
-                              )
+                          in.race(receiveEnd.await.map(Left(_))).flatMap {
+                            _.fold(
+                              e =>
+                                receiveEnd.succeed(e) *> receiveStatus.set(Left(e)) *> e
+                                  .fold[Pull[Any, TransportError, Nothing]](Pull.end)(Pull.fail(_)),
+                              bytes =>
+                                receiveStatus.get.flatMap {
+                                  case Left(err) => err.fold[Pull[Any, TransportError, Nothing]](Pull.end)(Pull.fail(_))
+                                  case _         => Pull.emit(Chunk.single(bytes))
+                                }
                             )
+                          }
                         }
                       }
                   }
@@ -121,86 +119,80 @@ object TestTransport {
                 for {
                   connections <- ZStream.managed(
                                   Queue
-                                    .bounded[ChunkConnection](connectionBuffer)
+                                    .unbounded[Managed[Nothing, ChunkConnection]]
                                     .toManaged(_.shutdown)
                                 )
-                  connect <- ZStream.managed(
-                              Ref
-                                .make[ConnectionRequest] { remote =>
-                                  for {
-                                    incoming <- Queue
-                                                 .bounded[Either[Option[TransportError], Chunk[Byte]]](messagesBuffer)
-                                    outgoing <- Queue
-                                                 .bounded[Either[Option[TransportError], Chunk[Byte]]](messagesBuffer)
-                                    inSendLock  <- Semaphore.make(1)
-                                    outSendLock <- Semaphore.make(1)
-                                    connected   <- Ref.make(true)
-                                    closeRef <- Ref.make(
-                                                 (c: Option[TransportError]) =>
-                                                   inSendLock.withPermit[Any, Nothing, Unit](
-                                                     outSendLock.withPermit[Any, Nothing, Unit](
-                                                       incoming.offer(Left(c)) *> outgoing.offer(Left(c)) *> connected
-                                                         .set(false)
-                                                     )
-                                                   )
-                                               )
-                                    close = (c: Option[TransportError]) =>
-                                      closeRef.modify(old => (old, _ => ZIO.unit)).flatMap(_(c))
-                                    con1 <- makeConnection(
-                                             msg => outgoing.offer(Right(msg)).unit,
-                                             incoming.take,
-                                             outSendLock,
-                                             connected.get
-                                           )
-                                    _ <- connections.offer(con1)
-                                    con2 <- makeConnection(
-                                             msg => incoming.offer(Right(msg)).unit,
-                                             outgoing.take,
-                                             inSendLock,
-                                             connected.get
-                                           )
-                                    _ <- ref.update(
-                                          old =>
-                                            old.copy(
-                                              connections = old.connections + ((addr, remote) -> (
-                                                (e: TransportError) => close(Some(e)).unit
-                                              ))
-                                            )
-                                        )
-                                  } yield (con2, close(None))
-                                }
-                                .toManaged(_.set(_ => ZIO.fail(())))
-                            )
-                  _ <- ZStream.managed(
-                        ZManaged.make(
-                          ref.update(
-                            old =>
+                  finalizers <- ZStream.managed {
+                                 Ref.make[List[UIO[Unit]]](Nil).toManaged(_.get.flatMap(ZIO.collectAll(_)))
+                               }
+                  connect = (remote: NodeAddress) =>
+                    for {
+                      incoming      <- Queue.unbounded[Either[Option[TransportError], Chunk[Byte]]]
+                      outgoing      <- Queue.unbounded[Either[Option[TransportError], Chunk[Byte]]]
+                      sendStatusRef <- Ref.make[Either[Option[TransportError], Unit]](Right(()))
+                      closeRef <- Ref.make { (c: Option[TransportError]) =>
+                                   incoming.offer(Left(c)) *> outgoing.offer(Left(c)) *> sendStatusRef.set(Left(c))
+                                 }
+                      close = (c: Option[TransportError]) => closeRef.modify(old => (old, _ => ZIO.unit)).flatMap(_(c))
+                      _ <- ref.update { old =>
+                            ZIO.succeedNow {
                               old.copy(
-                                nodes = old.nodes + (addr -> ((remote: NodeAddress) => connect.get.flatMap(_(remote))))
+                                connections = old.connections + ((addr, remote) -> (
+                                  (e: TransportError) => close(Some(e)).unit
+                                ))
                               )
-                          )
-                        )(_ => ref.update(old => old.copy(nodes = old.nodes - addr)))
-                      )
+                            }
+                          }
+                      _ <- finalizers.update(close(None) :: _)
+                      con1 <- makeConnection(
+                               msg => outgoing.offer(Right(msg)).unit,
+                               incoming.take,
+                               sendStatusRef.get
+                             )
+                      con2 <- makeConnection(
+                               msg => incoming.offer(Right(msg)).unit,
+                               outgoing.take,
+                               sendStatusRef.get
+                             )
+                      _ <- connections.offer(ZManaged.make(ZIO.succeedNow(con1))(_ => close(None)))
+                    } yield (con2, close(None))
+                  _ <- ZStream.managed {
+                        ZManaged.make {
+                          ref.update { old =>
+                            ZIO.succeedNow {
+                              old.copy(
+                                nodes = old.nodes + (addr -> ((remote: NodeAddress) => connect(remote)))
+                              )
+                            }
+                          }
+                        } { _ =>
+                          ref.update(old => ZIO.succeedNow(old.copy(nodes = old.nodes - addr)))
+                        }
+                      }
                   _      <- ZStream.fromEffect(completeWaiters(addr))
-                  result <- ZStream.fromQueue(connections)
+                  result <- ZStream.fromQueue(connections).flatMap(ZStream.managed(_))
                 } yield result
               }
               def connect(to: NodeAddress): Managed[TransportError, ChunkConnection] =
-                ref.get
-                  .map(s => s.nodes.get(to).map((s.f(addr, to), _)))
-                  .get
-                  .toManaged_
-                  .foldM(
-                    _ => ZManaged.fail(TransportError.ExceptionWrapper(new RuntimeException("Node not available"))), {
-                      case (false, _) =>
-                        ZManaged.fail(TransportError.ExceptionWrapper(new RuntimeException("Can't reach node")))
-                      case (true, request) =>
-                        request(addr).toManaged_.foldM[Any, TransportError, ChunkConnection](
-                          _ => ZManaged.fail(TransportError.ExceptionWrapper(new RuntimeException("Can't reach node"))),
-                          { case (connection, close) => ZManaged.make(ZIO.succeedNow(connection))(_ => close) }
+                ref
+                  .mapM { s =>
+                    s.nodes.get(to).map((s.f(addr, to), _)) match {
+                      case None =>
+                        ZIO.fail(TransportError.ExceptionWrapper(new RuntimeException("Node not available")))
+                      case Some((false, _)) =>
+                        ZIO.fail(TransportError.ExceptionWrapper(new RuntimeException("Can't reach node")))
+                      case Some((true, request)) =>
+                        request(addr).foldM(
+                          _ => ZIO.fail(TransportError.ExceptionWrapper(new RuntimeException("Can't reach node"))), {
+                            case (connection, close) =>
+                              ZIO.succeedNow(ZManaged.make(ZIO.succeedNow(connection))(_ => close))
+                          }
                         )
                     }
-                  )
+                  }
+                  .get
+                  .toManaged_
+                  .flatten
             }
             zio.provideSomeLayer[R](ZLayer.succeed(transport))
           }

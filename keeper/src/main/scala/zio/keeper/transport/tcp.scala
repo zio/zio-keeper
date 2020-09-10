@@ -15,8 +15,8 @@ import java.io.IOException
 object tcp {
 
   def make[R <: Clock with Logging](
-    maxConnections: Long,
-    connectionRetryPolicy: Schedule[R, Exception, Any]
+    maxConnections: Int,
+    connectRetryPolicy: Schedule[R, Exception, Any]
   ): ZLayer[R, Nothing, Transport] = ZLayer.fromFunctionM { env =>
     def toConnection(
       channel: AsynchronousSocketChannel,
@@ -30,13 +30,13 @@ object tcp {
             val size      = dataChunk.size
             val sizeChunk = Chunk.fromArray(intToByteArray(size))
 
-            log.debug(s"$id: Sending $size bytes") *>
-              writeLock
-                .withPermit {
-                  channel
-                    .write(sizeChunk ++ dataChunk)
-                    .unit
-                }
+            writeLock
+              .withPermit {
+                channel
+                  .write(sizeChunk ++ dataChunk)
+                  .unit
+              } <* log.debug(s"$id: Sent $size bytes")
+
           }.provide(env)
 
           override val receive = {
@@ -59,21 +59,19 @@ object tcp {
         }
       } yield connection.mapError(TransportError.ExceptionWrapper(_))
 
-    Semaphore.make(maxConnections).map { sema =>
+    Semaphore.make(maxConnections.toLong).map { sema =>
       new Transport.Service {
         override def connect(to: NodeAddress): Managed[TransportError, ChunkConnection] = {
           for {
+            _  <- sema.withPermitManaged
             id <- uuid.makeRandomUUID.toManaged_
             _  <- log.debug(s"$id: new outbound connection to $to").toManaged_
             connection <- AsynchronousSocketChannel()
                            .mapM { channel =>
-                             val connection = toConnection(
-                               channel,
-                               id
-                             )
+                             val connection = toConnection(channel, id)
                              to.socketAddress.flatMap(channel.connect) *> connection
                            }
-                           .retry(connectionRetryPolicy)
+                           .retry(connectRetryPolicy)
           } yield connection
         }.provide(env).mapError(TransportError.ExceptionWrapper(_))
 

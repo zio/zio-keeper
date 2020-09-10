@@ -4,11 +4,11 @@ import java.net.InetAddress
 
 import javax.net.ServerSocketFactory
 import zio.clock.Clock
-import zio.keeper.{ ByteCodec, KeeperSpec, NodeAddress }
+import zio.keeper.{ ByteCodec, KeeperSpec, NodeAddress, TransportError }
 import zio.logging.Logging
 import zio.random.Random
-import zio.test.Assertion.{ equalTo, isInterrupted, isSome, succeeds }
-import zio.test.TestAspect.{ sequential, timeout }
+import zio.test.Assertion.{ anything, equalTo, fails, isInterrupted, isSome, succeeds }
+import zio.test.TestAspect.{ flaky, sequential, timeout }
 import zio.test.environment.Live
 import zio.test._
 import zio._
@@ -72,6 +72,36 @@ object TcpTransportSpec extends KeeperSpec {
                  }
       } yield assert(result)(isInterrupted)
     },
+    testM("can not receive messages after bind stream is closed") {
+      checkNM(20)(Gen.listOf(Gen.anyByte)) {
+        bytes =>
+          val payload = Chunk.fromIterable(bytes)
+
+          for {
+            addr  <- makeAddr
+            latch <- Promise.make[Nothing, Unit]
+            chunk <- Transport
+                      .bind(addr)
+                      .take(1)
+                      .runHead
+                      .mapError(Some(_))
+                      .flatMap { con =>
+                        latch.succeed(()) *>
+                          con.fold[IO[Option[TransportError], Option[Chunk[Byte]]]](ZIO.fail(None))(
+                            _.receive.runHead.mapError(Some(_))
+                          )
+                      }
+                      .fork
+            _ <- Transport
+                  .connect(addr)
+                  .use { con =>
+                    latch.await *> con.send(payload)
+                  }
+                  .ignore
+            result <- chunk.await
+          } yield assert(result)(fails(anything))
+      }
+    },
     testM("closes stream when the connected stream closes - client") {
       for {
         addr <- makeAddr
@@ -99,7 +129,7 @@ object TcpTransportSpec extends KeeperSpec {
         result <- f1.await <* f2.await
       } yield assert(result)(succeeds(equalTo(())))
     },
-    testM("respects max connections") {
+    testM("respects max connections - receive") {
       val limit   = 10
       val senders = 15
       val waiters = 20
@@ -132,16 +162,56 @@ object TcpTransportSpec extends KeeperSpec {
               .runDrain
               .race(latch.await)
               .fork
+              .provideSomeLayer(tcp.make(limit, Schedule.spaced(10.millis)))
         _      <- ZIO.collectAll_(List.fill(senders)(connect))
         _      <- ZIO.foreach(latches)(_.await)
         result <- ref.get
         _      <- latch.succeed(())
       } yield assert(result)(equalTo(limit))
+    },
+    testM("respects max connections - send") {
+      val limit   = 10
+      val senders = 15
+      val waiters = 20
+      for {
+        ref     <- Ref.make(0)
+        latch   <- Promise.make[Nothing, Unit]
+        latches <- ZIO.collectAll(List.fill(limit)(Promise.make[Nothing, Unit]))
+        completeOne = ZIO.foldLeft(latches)(true) {
+          case (true, p) =>
+            p.succeed(()).map(!_)
+          case (false, _) =>
+            ZIO.succeedNow(false)
+        }
+        addr <- makeAddr
+        connect = Transport
+          .connect(addr)
+          .use { con =>
+            con.receive.runHead *>
+              ref.update(_ + 1) *>
+              completeOne *>
+              latch.await
+          }
+          .fork
+
+        _ <- Transport
+              .bind(addr)
+              .mapMPar(waiters) { con =>
+                con.send(Chunk.empty) *> latch.await
+              }
+              .runDrain
+              .race(latch.await)
+              .fork
+        _      <- ZIO.collectAll_(List.fill(senders)(connect)).provideSomeLayer(tcp.make(limit, Schedule.spaced(10.millis)))
+        _      <- ZIO.foreach(latches)(_.await)
+        result <- ref.get
+        _      <- latch.succeed(())
+      } yield assert(result)(equalTo(limit))
     }
-  ) @@ timeout(15.seconds) @@ sequential).provideCustomLayer(environment)
+  ) @@ timeout(15.seconds) @@ sequential @@ flaky).provideCustomLayer(environment)
 
   private lazy val environment =
-    ((Clock.live ++ Logging.ignore) >+> tcp.make(10, Schedule.spaced(10.millis)))
+    ((Clock.live ++ Logging.ignore) >+> tcp.make(128, Schedule.spaced(10.millis)))
 
   private def findAvailableTCPPort(minPort: Int, maxPort: Int): URIO[Live, Int] = {
     val portRange = maxPort - minPort
