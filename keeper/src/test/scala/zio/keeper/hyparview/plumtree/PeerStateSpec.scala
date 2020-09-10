@@ -3,7 +3,6 @@ package zio.keeper.hyparview.plumtree
 import zio.keeper.KeeperSpec
 import zio.keeper.hyparview.testing.TestPeerService
 import zio.keeper.hyparview.TRandom
-import zio.keeper.transport.testing.TestTransport
 import zio.keeper.gens
 import zio.logging.Logging
 import zio.stm._
@@ -15,9 +14,8 @@ object PeerStateSpec extends KeeperSpec {
   val spec = {
 
     val environment =
-      (TestTransport.make ++ Logging.ignore ++ TRandom.live) >+>
-        TestTransport.transportLayer(address(0)) >+>
-        TestPeerService.make(address(0)) >+>
+      (TestPeerService.make ++ Logging.ignore ++ TRandom.live) >+>
+        TestPeerService.peerServiceLayer >+>
         PeerState.live(2)
 
     suite("PeerState")(

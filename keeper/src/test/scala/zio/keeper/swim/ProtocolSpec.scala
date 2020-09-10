@@ -1,6 +1,6 @@
 package zio.keeper.swim
 
-import zio.ZIO
+import zio.{ Chunk, ZIO }
 import zio.keeper.swim.PingPong.{ Ping, Pong }
 import zio.keeper.{ ByteCodec, KeeperSpec, NodeAddress }
 import zio.stream.ZStream
@@ -18,7 +18,7 @@ object ProtocolSpec extends KeeperSpec {
     ZStream.empty
   )
 
-  val testNode = NodeAddress(Array(1, 2, 3, 4), 123)
+  val testNode = NodeAddress(Chunk(1, 2, 3, 4), 123)
 
   val spec = suite("protocol spec")(
     testM("request response") {

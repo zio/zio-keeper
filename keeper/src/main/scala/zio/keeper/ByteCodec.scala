@@ -20,7 +20,7 @@ trait ByteCodec[A] { self =>
     ByteCodec.instance { chunk =>
       val (sizeChunk, dataChunk) = chunk.splitAt(4)
       for {
-        split  <- byteArrayToInt(sizeChunk.toArray)
+        split  <- byteChunkToInt(sizeChunk)
         first  <- self.fromChunk(dataChunk.take(split))
         second <- that.fromChunk(dataChunk.drop(split))
       } yield (first, second)
@@ -28,7 +28,7 @@ trait ByteCodec[A] { self =>
       case (first, second) =>
         self.toChunk(first).zipWith(that.toChunk(second)) {
           case (firstChunk, secondChunk) =>
-            val sizeChunk = Chunk.fromArray(intToByteArray(firstChunk.size))
+            val sizeChunk = intToByteChunk(firstChunk.size)
             sizeChunk ++ firstChunk ++ secondChunk
         }
     }
@@ -606,9 +606,9 @@ object ByteCodec {
 
   implicit val intCodec: ByteCodec[Int] =
     instance { chunk =>
-      byteArrayToInt(chunk.toArray)
+      byteChunkToInt(chunk)
     } { value =>
-      ZIO.succeed(Chunk.fromArray(intToByteArray(value)))
+      ZIO.succeed(intToByteChunk(value))
     }
 
   implicit val stringCodec: ByteCodec[String] =
@@ -637,7 +637,7 @@ object ByteCodec {
         if (remaining.isEmpty) ZIO.succeed(Chunk.fromIterable(acc))
         else {
           val (sizeChunk, dataChunk) = remaining.splitAt(4)
-          byteArrayToInt(sizeChunk.toArray).flatMap { elementSize =>
+          byteChunkToInt(sizeChunk).flatMap { elementSize =>
             ByteCodec[A].fromChunk(dataChunk.take(elementSize)).flatMap { nextA =>
               go(dataChunk.drop(elementSize), nextA :: acc)
             }
@@ -648,7 +648,7 @@ object ByteCodec {
       data.foldM(Chunk.empty: Chunk[Byte]) {
         case (acc, next) =>
           ByteCodec[A].toChunk(next).map { chunk =>
-            val sizeChunk = Chunk.fromArray(intToByteArray(chunk.size))
+            val sizeChunk = intToByteChunk(chunk.size)
             sizeChunk ++ chunk ++ acc
           }
       }

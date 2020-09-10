@@ -8,32 +8,34 @@ import zio.keeper.{ NodeAddress, TransportError }
 
 object TestTransport {
 
+  type Ip = Chunk[Byte]
+
   trait Service {
     def awaitAvailable(node: NodeAddress): UIO[Unit]
-    def nodes: UIO[Set[NodeAddress]]
-    def existingConnections: UIO[Set[(NodeAddress, NodeAddress)]]
-    def asNode[R <: Has[_], E, A](addr: NodeAddress)(zio: ZIO[R with Transport, E, A]): ZIO[R, E, A]
-    def setConnectivity(f: (NodeAddress, NodeAddress) => Boolean): UIO[Unit]
+    def servers: UIO[Set[NodeAddress]]
+    def existingConnections: UIO[List[(Ip, Ip)]]
+    def asNode[R <: Has[_], E, A](ip: Ip)(zio: ZIO[R with Transport, E, A]): ZIO[R, E, A]
+    def setConnectivity(f: (Ip, Ip) => Boolean): UIO[Unit]
   }
 
   def awaitAvailable(node: NodeAddress): URIO[TestTransport, Unit] =
     ZIO.accessM(_.get.awaitAvailable(node))
 
-  def nodes: URIO[TestTransport, Set[NodeAddress]] =
-    ZIO.accessM(_.get.nodes)
+  def servers: URIO[TestTransport, Set[NodeAddress]] =
+    ZIO.accessM(_.get.servers)
 
-  def existingConnections: URIO[TestTransport, Set[(NodeAddress, NodeAddress)]] =
+  def existingConnections: URIO[TestTransport, List[(Ip, Ip)]] =
     ZIO.accessM(_.get.existingConnections)
 
-  def asNode[R <: TestTransport, E, A](addr: NodeAddress)(zio: ZIO[R with Transport, E, A]): ZIO[R, E, A] =
-    ZIO.accessM(_.get.asNode[R, E, A](addr)(zio))
+  def asNode[R <: TestTransport, E, A](ip: Ip)(zio: ZIO[R with Transport, E, A]): ZIO[R, E, A] =
+    ZIO.accessM(_.get.asNode[R, E, A](ip)(zio))
 
-  def setConnectivity(f: (NodeAddress, NodeAddress) => Boolean): URIO[TestTransport, Unit] =
+  def setConnectivity(f: (Ip, Ip) => Boolean): URIO[TestTransport, Unit] =
     ZIO.accessM(_.get.setConnectivity(f))
 
-  def transportLayer(addr: NodeAddress): ZLayer[TestTransport, Nothing, Transport] =
+  def transportLayer(ip: Ip): ZLayer[TestTransport, Nothing, Transport] =
     ZLayer.fromEffect(
-      ZIO.accessM(_.get.asNode[TestTransport, Nothing, Transport.Service](addr)(ZIO.service[Transport.Service]))
+      ZIO.accessM(_.get.asNode[TestTransport, Nothing, Transport.Service](ip)(ZIO.service[Transport.Service]))
     )
 
   val make: ZLayer[Any, Nothing, TestTransport] =
@@ -53,24 +55,24 @@ object TestTransport {
                 }
                 .flatten
             }
-          def nodes: UIO[Set[NodeAddress]] =
+          def servers: UIO[Set[NodeAddress]] =
             ref.get.map(_.nodes.keySet)
-          def existingConnections: UIO[Set[(NodeAddress, NodeAddress)]] =
-            ref.get.map(_.connections.keySet)
-          def setConnectivity(f: (NodeAddress, NodeAddress) => Boolean): UIO[Unit] =
+          def existingConnections: UIO[List[(Ip, Ip)]] =
+            ref.get.map(_.connections.map { case (t1, t2, _) => (t1, t2) })
+          def setConnectivity(f: (Ip, Ip) => Boolean): UIO[Unit] =
             ref
               .update { old =>
-                val (remaining, disconnected) = old.connections.toList.partition {
-                  case ((t1, t2), _) => f(t1, t2) && f(t2, t1)
+                val (remaining, disconnected) = old.connections.partition {
+                  case (t1, t2, _) => (t1 == t2) || (f(t1, t2) && f(t2, t1))
                 }
-                val newState = old.copy(connections = remaining.toMap, f = f)
+                val newState = old.copy(connections = remaining, f = f)
                 ZIO
                   .foreach_(disconnected) {
-                    _._2(TransportError.ExceptionWrapper(new RuntimeException("disconnected (setConnectivity)")))
+                    _._3(TransportError.ExceptionWrapper(new RuntimeException("disconnected (setConnectivity)")))
                   }
                   .as(newState)
               }
-          def asNode[R <: Has[_], E, A](addr: NodeAddress)(zio: ZIO[R with Transport, E, A]): ZIO[R, E, A] = {
+          def asNode[R <: Has[_], E, A](ip: Ip)(zio: ZIO[R with Transport, E, A]): ZIO[R, E, A] = {
             val transport = new Transport.Service {
               def bind(addr: NodeAddress): Stream[TransportError, ChunkConnection] = {
 
@@ -122,6 +124,11 @@ object TestTransport {
                   }
 
                 for {
+                  _ <- ZStream.fromEffect(
+                        ZIO
+                          .fail(TransportError.ExceptionWrapper(new RuntimeException("Cannot bind to this ip.")))
+                          .when(addr.ip != ip)
+                      )
                   connections <- ZStream.managed(
                                   Queue
                                     .unbounded[Managed[Nothing, ChunkConnection]]
@@ -130,7 +137,7 @@ object TestTransport {
                   finalizers <- ZStream.managed {
                                  Ref.make[List[UIO[Unit]]](Nil).toManaged(_.get.flatMap(ZIO.collectAll(_)))
                                }
-                  connect = (remote: NodeAddress) =>
+                  connect = (remote: Ip) =>
                     for {
                       incoming      <- Queue.unbounded[Either[Option[TransportError], Chunk[Byte]]]
                       outgoing      <- Queue.unbounded[Either[Option[TransportError], Chunk[Byte]]]
@@ -142,9 +149,7 @@ object TestTransport {
                       _ <- ref.update { old =>
                             ZIO.succeedNow {
                               old.copy(
-                                connections = old.connections + ((addr, remote) -> (
-                                  (e: TransportError) => close(Some(e)).unit
-                                ))
+                                connections = (addr.ip, remote, (e: TransportError) => close(Some(e)).unit) :: old.connections
                               )
                             }
                           }
@@ -164,11 +169,19 @@ object TestTransport {
                   _ <- ZStream.managed {
                         ZManaged.make {
                           ref.update { old =>
-                            ZIO.succeedNow {
-                              old.copy(
-                                nodes = old.nodes + (addr -> ((remote: NodeAddress) => connect(remote)))
-                              )
-                            }
+                            old.nodes
+                              .get(addr)
+                              .fold[IO[TransportError, State]] {
+                                ZIO.succeedNow {
+                                  old.copy(
+                                    nodes = old.nodes + (addr -> ((remote: Ip) => connect(remote)))
+                                  )
+                                }
+                              } { _ =>
+                                ZIO.fail(
+                                  TransportError.ExceptionWrapper(new RuntimeException("Address already in use."))
+                                )
+                              }
                           }
                         } { _ =>
                           ref.update(old => ZIO.succeedNow(old.copy(nodes = old.nodes - addr)))
@@ -181,13 +194,13 @@ object TestTransport {
               def connect(to: NodeAddress): Managed[TransportError, ChunkConnection] =
                 ref
                   .mapM { s =>
-                    s.nodes.get(to).map((s.f(addr, to), _)) match {
+                    s.nodes.get(to).map((s.f(ip, to.ip), _)) match {
                       case None =>
                         ZIO.fail(TransportError.ExceptionWrapper(new RuntimeException("Node not available")))
                       case Some((false, _)) =>
                         ZIO.fail(TransportError.ExceptionWrapper(new RuntimeException("Can't reach node")))
                       case Some((true, request)) =>
-                        request(addr).foldM(
+                        request(ip).foldM(
                           _ => ZIO.fail(TransportError.ExceptionWrapper(new RuntimeException("Can't reach node"))), {
                             case (connection, close) =>
                               ZIO.succeedNow(ZManaged.make(ZIO.succeedNow(connection))(_ => close))
@@ -205,19 +218,19 @@ object TestTransport {
       }
     }
 
-  private type ConnectionRequest = NodeAddress => IO[Unit, (ChunkConnection, UIO[Unit])]
+  private type ConnectionRequest = Ip => IO[Unit, (ChunkConnection, UIO[Unit])]
 
   final private case class State(
-    connections: Map[(NodeAddress, NodeAddress), TransportError => UIO[Unit]],
+    connections: List[(Ip, Ip, TransportError => UIO[Unit])],
     nodes: Map[NodeAddress, ConnectionRequest],
-    f: (NodeAddress, NodeAddress) => Boolean,
+    f: (Ip, Ip) => Boolean,
     waiters: Map[NodeAddress, List[UIO[Unit]]]
   )
 
   private object State {
 
     def initial: State =
-      State(Map.empty, Map.empty, (_, _) => true, Map.empty.withDefaultValue(Nil))
+      State(Nil, Map.empty, (_, _) => true, Map.empty.withDefaultValue(Nil))
   }
 
 }

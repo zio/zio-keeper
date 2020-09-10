@@ -8,6 +8,7 @@ import zio.test._
 import zio._
 import zio.keeper.transport.testing.TestTransport.{ asNode, awaitAvailable, setConnectivity }
 import zio.keeper.TransportError
+import zio.keeper.NodeAddress
 
 object TestTransportSpec extends KeeperSpec {
 
@@ -15,21 +16,25 @@ object TestTransportSpec extends KeeperSpec {
 
     val environment = TestTransport.make
 
+    val addr1Ip = Chunk[Byte](0, 0, 0, 1)
+    val addr1   = NodeAddress(addr1Ip, 0)
+    val addr2Ip = Chunk[Byte](0, 0, 0, 2)
+
     suite("InMemoryTransport")(
       testM("can send and receive messages") {
         checkM(Gen.listOf(Gen.anyByte)) {
           bytes =>
             val payload = Chunk.fromIterable(bytes)
             val io = for {
-              chunk <- asNode[TestTransport, TransportError, Option[Chunk[Byte]]](address(0)) {
+              chunk <- asNode[TestTransport, TransportError, Option[Chunk[Byte]]](addr1Ip) {
                         Transport
-                          .bind(address(0))
+                          .bind(addr1)
                           .flatMap(_.receive.take(1))
                           .take(1)
                           .runHead
                       }.fork
-              _ <- asNode[TestTransport, TransportError, Unit](address(1)) {
-                    awaitAvailable(address(0)) *> Transport.send(address(0), payload)
+              _ <- asNode[TestTransport, TransportError, Unit](addr2Ip) {
+                    awaitAvailable(addr1) *> Transport.send(addr1, payload)
                   }
               result <- chunk.join
             } yield result
@@ -41,15 +46,15 @@ object TestTransportSpec extends KeeperSpec {
 
         val io = for {
           latch <- Promise.make[Nothing, Unit]
-          fiber <- asNode[TestTransport, TransportError, Unit](address(0)) {
+          fiber <- asNode[TestTransport, TransportError, Unit](addr1Ip) {
                     Transport
-                      .bind(address(0))
+                      .bind(addr1)
                       .flatMap(_.receive.take(1).tap(_ => latch.succeed(())))
                       .take(2)
                       .runDrain
                   }.fork
-          _ <- asNode[TestTransport, TransportError, Unit](address(1)) {
-                awaitAvailable(address(0)) *> Transport.send(address(0), payload)
+          _ <- asNode[TestTransport, TransportError, Unit](addr2Ip) {
+                awaitAvailable(addr1) *> Transport.send(addr1, payload)
               }
           result <- latch.await *> fiber.interrupt
         } yield result
@@ -63,9 +68,9 @@ object TestTransportSpec extends KeeperSpec {
             val io =
               for {
                 latch <- Promise.make[Nothing, Unit]
-                fiber <- asNode[TestTransport, Option[TransportError], Option[Chunk[Byte]]](address(0)) {
+                fiber <- asNode[TestTransport, Option[TransportError], Option[Chunk[Byte]]](addr1Ip) {
                           Transport
-                            .bind(address(0))
+                            .bind(addr1)
                             .take(1)
                             .runHead
                             .mapError(Some(_))
@@ -76,8 +81,8 @@ object TestTransportSpec extends KeeperSpec {
                                 )
                             }
                         }.fork
-                _ <- asNode[TestTransport, TransportError, Unit](address(1)) {
-                      awaitAvailable(address(0)) *> Transport.connect(address(0)).use { con =>
+                _ <- asNode[TestTransport, TransportError, Unit](addr2Ip) {
+                      awaitAvailable(addr1) *> Transport.connect(addr1).use { con =>
                         latch.await *> con.send(payload)
                       }
                     }
@@ -94,9 +99,9 @@ object TestTransportSpec extends KeeperSpec {
             val io =
               for {
                 latch <- Promise.make[Nothing, Unit]
-                fiber <- asNode[TestTransport, Option[TransportError], Option[Chunk[Byte]]](address(0)) {
+                fiber <- asNode[TestTransport, Option[TransportError], Option[Chunk[Byte]]](addr1Ip) {
                           Transport
-                            .bind(address(0))
+                            .bind(addr1)
                             .take(1)
                             .runHead
                             .mapError(Some(_))
@@ -107,8 +112,8 @@ object TestTransportSpec extends KeeperSpec {
                                 )
                             }
                         }.fork
-                result <- asNode[TestTransport, TransportError, Unit](address(1)) {
-                           awaitAvailable(address(0)) *> Transport.connect(address(0)).use { con =>
+                result <- asNode[TestTransport, TransportError, Unit](addr2Ip) {
+                           awaitAvailable(addr1) *> Transport.connect(addr1).use { con =>
                              latch.await *> con.send(payload)
                            }
                          }.run
@@ -119,15 +124,15 @@ object TestTransportSpec extends KeeperSpec {
       },
       testM("Fails receive if connectivity is interrupted") {
         val io = for {
-          fiber <- asNode[TestTransport, TransportError, Option[Chunk[Byte]]](address(0)) {
+          fiber <- asNode[TestTransport, TransportError, Option[Chunk[Byte]]](addr1Ip) {
                     Transport
-                      .bind(address(0))
+                      .bind(addr1)
                       .flatMap(_.receive.take(1))
                       .take(1)
                       .runHead
                   }.fork
-          result <- asNode[TestTransport, TransportError, Option[Chunk[Byte]]](address(1)) {
-                     awaitAvailable(address(0)) *> Transport.connect(address(0)).use_ {
+          result <- asNode[TestTransport, TransportError, Option[Chunk[Byte]]](addr2Ip) {
+                     awaitAvailable(addr1) *> Transport.connect(addr1).use_ {
                        setConnectivity((_, _) => false) *> fiber.join
                      }
                    }
@@ -140,15 +145,15 @@ object TestTransportSpec extends KeeperSpec {
             bytes =>
               val io =
                 for {
-                  fiber <- asNode[TestTransport, TransportError, Option[Chunk[Byte]]](address(0)) {
+                  fiber <- asNode[TestTransport, TransportError, Option[Chunk[Byte]]](addr1Ip) {
                             Transport
-                              .bind(address(0))
+                              .bind(addr1)
                               .flatMap(_.receive.take(1))
                               .take(1)
                               .runHead
                           }.fork
-                  result <- asNode[TestTransport, TransportError, Unit](address(1)) {
-                             awaitAvailable(address(0)) *> Transport.connect(address(0)).use { channel =>
+                  result <- asNode[TestTransport, TransportError, Unit](addr2Ip) {
+                             awaitAvailable(addr1) *> Transport.connect(addr1).use { channel =>
                                setConnectivity((_, _) => false) *> channel
                                  .send(Chunk.fromIterable(bytes)) <* fiber.await
                              }
@@ -157,6 +162,33 @@ object TestTransportSpec extends KeeperSpec {
               assertM(io.run)(fails(anything)).provideCustomLayer(environment)
           }
         }
+      },
+      testM("Cannot bind twice to the same address") {
+        val f1 = asNode[TestTransport, TransportError, Unit](addr1Ip) {
+          Transport
+            .bind(addr1)
+            .flatMap(_.receive)
+            .take(1)
+            .runDrain
+        }
+        val f2 = asNode[TestTransport, TransportError, Unit](addr1Ip) {
+          Transport
+            .bind(addr1)
+            .flatMap(_.receive)
+            .take(1)
+            .runDrain
+        }
+        assertM((f1 <&> f2).run)(fails(anything)).provideCustomLayer(environment)
+      },
+      testM("Cannot bind to address belonging to different ip") {
+        val io = asNode[TestTransport, TransportError, Unit](addr2Ip) {
+          Transport
+            .bind(addr1)
+            .flatMap(_.receive)
+            .take(1)
+            .runDrain
+        }
+        assertM(io.run)(fails(anything)).provideCustomLayer(environment)
       }
     )
   } @@ nonFlaky(20)

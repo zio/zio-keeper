@@ -28,7 +28,7 @@ object tcp {
         connection = new Connection[Any, Exception, Chunk[Byte], Chunk[Byte]] {
           override def send(dataChunk: Chunk[Byte]) = {
             val size      = dataChunk.size
-            val sizeChunk = Chunk.fromArray(intToByteArray(size))
+            val sizeChunk = intToByteChunk(size)
 
             writeLock
               .withPermit {
@@ -44,7 +44,7 @@ object tcp {
               .repeatEffect {
                 readLock.withPermit {
                   for {
-                    length <- channel.read(4).flatMap(c => byteArrayToInt(c.toArray))
+                    length <- channel.read(4).flatMap(byteChunkToInt)
                     data   <- channel.read(length * 8)
                     _      <- log.debug(s"$id: Received $length bytes")
                   } yield data

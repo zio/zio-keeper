@@ -9,7 +9,7 @@ import zio.logging.Logging
 import zio.test.Assertion._
 import zio.test._
 import zio.test.environment.TestClock
-import zio.{ Promise, ZIO, ZLayer }
+import zio.{ Chunk, Promise, ZIO, ZLayer }
 import zio.clock._
 import zio.keeper.SwimError.SuspicionTimeoutCancelled
 
@@ -34,8 +34,8 @@ object SuspicionTimeoutSpec extends KeeperSpec {
     testM("schedule timeout with 100 nodes cluster") {
       for {
         promise <- Promise.make[Nothing, Long]
-        _       <- ZIO.foreach(1 to 100)(i => Nodes.addNode(NodeAddress(Array(1, 2, 3, 4), i)))
-        node    = NodeAddress(Array(1, 1, 1, 1), 1111)
+        _       <- ZIO.foreach(1 to 100)(i => Nodes.addNode(NodeAddress(Chunk(1, 2, 3, 4), i)))
+        node    = NodeAddress(Chunk(1, 1, 1, 1), 1111)
         start   <- currentTime(TimeUnit.MILLISECONDS)
         _ <- SuspicionTimeout
               .registerTimeout(node)(
@@ -49,9 +49,9 @@ object SuspicionTimeoutSpec extends KeeperSpec {
     testM("timeout should be decreased when another confirmation arrives") {
       for {
         promise <- Promise.make[Nothing, Long]
-        _       <- ZIO.foreach(1 to 100)(i => Nodes.addNode(NodeAddress(Array(1, 2, 3, 4), i)))
-        node    = NodeAddress(Array(1, 1, 1, 1), 1111)
-        other   = NodeAddress(Array(2, 1, 1, 1), 1111)
+        _       <- ZIO.foreach(1 to 100)(i => Nodes.addNode(NodeAddress(Chunk(1, 2, 3, 4), i)))
+        node    = NodeAddress(Chunk(1, 1, 1, 1), 1111)
+        other   = NodeAddress(Chunk(2, 1, 1, 1), 1111)
         start   <- currentTime(TimeUnit.MILLISECONDS)
         _ <- SuspicionTimeout
               .registerTimeout(node)(
@@ -67,8 +67,8 @@ object SuspicionTimeoutSpec extends KeeperSpec {
     testM("should be able to cancel") {
       for {
         promise <- Promise.make[Nothing, Long]
-        _       <- ZIO.foreach(1 to 100)(i => Nodes.addNode(NodeAddress(Array(1, 2, 3, 4), i)))
-        node    = NodeAddress(Array(1, 1, 1, 1), 1111)
+        _       <- ZIO.foreach(1 to 100)(i => Nodes.addNode(NodeAddress(Chunk(1, 2, 3, 4), i)))
+        node    = NodeAddress(Chunk(1, 1, 1, 1), 1111)
         start   <- currentTime(TimeUnit.MILLISECONDS)
         timeoutFiber <- SuspicionTimeout
                          .registerTimeout(node)(

@@ -24,7 +24,7 @@ object MessagesSpec extends KeeperSpec {
 
   val spec = suite("messages")(
     testM("receiveMessage") {
-      val testNodeAddress = NodeAddress(Array(1, 2, 3, 4), 1111)
+      val testNodeAddress = NodeAddress(Chunk(1, 2, 3, 4), 1111)
 
       val protocol = Protocol[PingPong].make(
         {
@@ -56,7 +56,7 @@ object MessagesSpec extends KeeperSpec {
       }
     },
     testM("should not exceed size of message") {
-      val testNodeAddress = NodeAddress(Array(1, 2, 3, 4), 1111)
+      val testNodeAddress = NodeAddress(Chunk(1, 2, 3, 4), 1111)
 
       val protocol = Protocol[PingPong].make(
         {

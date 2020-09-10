@@ -14,24 +14,16 @@ import zio.keeper.hyparview.ViewEvent.UnhandledMessage
 object PeerService {
 
   trait Service {
-    val identity: UIO[NodeAddress]
     val getPeers: UIO[Set[NodeAddress]]
     def send(to: NodeAddress, message: PeerMessage): IO[Nothing, Unit]
-    val receive: Stream[Nothing, (NodeAddress, PeerMessage)]
     val events: Stream[Nothing, PeerEvent]
   }
-
-  def identity: ZIO[PeerService, Nothing, NodeAddress] =
-    ZIO.accessM(_.get.identity)
 
   def getPeers: ZIO[PeerService, Nothing, Set[NodeAddress]] =
     ZIO.accessM(_.get.getPeers)
 
   def send(to: NodeAddress, message: PeerMessage): ZIO[PeerService, Nothing, Unit] =
     ZIO.accessM(_.get.send(to, message))
-
-  def receive: ZStream[PeerService, Nothing, (NodeAddress, PeerMessage)] =
-    ZStream.accessStream(_.get.receive)
 
   def events: ZStream[PeerService, Nothing, PeerEvent] =
     ZStream.accessStream(_.get.events)
