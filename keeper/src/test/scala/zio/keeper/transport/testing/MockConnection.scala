@@ -159,8 +159,5 @@ object MockConnection {
       val receive: ZStream[Any, E, O] =
         ZStream.repeatEffectChunkOption(outbound.take.flatMap(_.done))
 
-      val close: UIO[Unit] =
-        ZIO.unit
-
     }
 }

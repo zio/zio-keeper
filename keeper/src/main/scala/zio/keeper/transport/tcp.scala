@@ -17,11 +17,10 @@ object tcp {
   def make[R <: Clock with Logging](
     maxConnections: Long,
     connectionRetryPolicy: Schedule[R, Exception, Any]
-  ): ZLayer[R, Nothing, Transport] = ZLayer.fromFunction { env =>
+  ): ZLayer[R, Nothing, Transport] = ZLayer.fromFunctionM { env =>
     def toConnection(
       channel: AsynchronousSocketChannel,
-      id: ju.UUID,
-      _close: UIO[Unit]
+      id: ju.UUID
     ) =
       for {
         writeLock <- Semaphore.make(1)
@@ -57,62 +56,51 @@ object tcp {
                 case e                                                              => Stream.fail(e)
               }
           }.provide(env)
-
-          override val close = _close
         }
       } yield connection.mapError(TransportError.ExceptionWrapper(_))
 
-    new Transport.Service {
-      override def connect(to: NodeAddress): Managed[TransportError, ChunkConnection] = {
-        for {
-          id <- uuid.makeRandomUUID.toManaged_
-          _  <- log.debug(s"$id: new outbound connection to $to").toManaged_
-          connection <- AsynchronousSocketChannel().withEarlyRelease
-                         .mapM {
-                           case (close, channel) =>
+    Semaphore.make(maxConnections).map { sema =>
+      new Transport.Service {
+        override def connect(to: NodeAddress): Managed[TransportError, ChunkConnection] = {
+          for {
+            id <- uuid.makeRandomUUID.toManaged_
+            _  <- log.debug(s"$id: new outbound connection to $to").toManaged_
+            connection <- AsynchronousSocketChannel()
+                           .mapM { channel =>
                              val connection = toConnection(
                                channel,
-                               id,
-                               close.unit
+                               id
                              )
                              to.socketAddress.flatMap(channel.connect) *> connection
-                         }
-                         .retry(connectionRetryPolicy)
-        } yield connection
-      }.provide(env).mapError(TransportError.ExceptionWrapper(_))
+                           }
+                           .retry(connectionRetryPolicy)
+          } yield connection
+        }.provide(env).mapError(TransportError.ExceptionWrapper(_))
 
-      override def bind(addr: NodeAddress): Stream[TransportError, ChunkConnection] = {
-
-        val bind = ZStream.managed {
-          AsynchronousServerSocketChannel()
-            .tapM { server =>
-              addr.socketAddress.flatMap { sAddr =>
-                server.bind(sAddr)
-              }
-            }
-            .zip(ZManaged.fromEffect(Semaphore.make(maxConnections)))
-        }
-
-        val connections = bind.flatMap {
-          case (server, lock) =>
-            ZStream.managed(ZManaged.scope).flatMap { allocate =>
-              ZStream
-                .repeatEffect(
-                  allocate(lock.withPermitManaged *> server.accept)
-                )
-                .mapM {
-                  case (close, channel) =>
-                    for {
-                      id         <- uuid.makeRandomUUID
-                      _          <- log.debug(s"$id: new inbound connection")
-                      connection <- toConnection(channel, id, close(Exit.unit).unit)
-                    } yield connection
+        override def bind(addr: NodeAddress): Stream[TransportError, ChunkConnection] =
+          ZStream
+            .managed {
+              AsynchronousServerSocketChannel()
+                .tapM { server =>
+                  addr.socketAddress.flatMap { sAddr =>
+                    log.info(s"Binding transport to $sAddr") *> server.bind(sAddr)
+                  }
                 }
             }
-        }
-
-        ZStream.fromEffect(log.info(s"Binding transport to $addr")) *> connections
-      }.provide(env).mapError(TransportError.ExceptionWrapper(_))
+            .flatMap { server =>
+              ZStream.managed {
+                for {
+                  _          <- sema.withPermitManaged
+                  channel    <- server.accept
+                  id         <- uuid.makeRandomUUID.toManaged_
+                  _          <- log.debug(s"$id: new inbound connection").toManaged_
+                  connection <- toConnection(channel, id).toManaged_
+                } yield connection
+              }.forever
+            }
+            .provide(env)
+            .mapError(TransportError.ExceptionWrapper(_))
+      }
     }
   }
 }

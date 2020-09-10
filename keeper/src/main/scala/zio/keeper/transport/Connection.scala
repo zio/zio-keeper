@@ -47,9 +47,6 @@ trait Connection[-R, +E, -I, +O] { self =>
 
             val receive: ZStream[R, E, O] =
               self.receive
-
-            val close: UIO[Unit] =
-              self.close
           }
         }
     }
@@ -60,8 +57,6 @@ trait Connection[-R, +E, -I, +O] { self =>
 
       val receive: ZStream[R, E, O1] = self.receive.map(g)
 
-      val close: UIO[Unit] = self.close
-
     }
 
   def biMapM[R1 <: R, E1 >: E, I1, O1](f: I1 => ZIO[R1, E1, I], g: O => ZIO[R1, E1, O1]): Connection[R1, E1, I1, O1] =
@@ -70,21 +65,6 @@ trait Connection[-R, +E, -I, +O] { self =>
 
       val receive: ZStream[R1, E1, O1] = self.receive.mapM(g)
 
-      val close: UIO[Unit] = self.close
-
-    }
-
-  def closeOnError: Connection[R, Nothing, I, O] =
-    new Connection[R, Nothing, I, O] {
-
-      def send(data: I): ZIO[R, Nothing, Unit] =
-        self.send(data).orElse(close)
-
-      val receive: ZStream[R, Nothing, O] =
-        self.receive.orElse(ZStream.fromEffect(close) *> ZStream.empty)
-
-      val close: UIO[Unit] =
-        self.close
     }
 
   def contraMap[I1](f: I1 => I): Connection[R, E, I1, O] =
@@ -93,8 +73,6 @@ trait Connection[-R, +E, -I, +O] { self =>
 
       val receive: ZStream[R, E, O] = self.receive
 
-      val close: UIO[Unit] = self.close
-
     }
 
   def contraMapM[R1 <: R, E1 >: E, I1](f: I1 => ZIO[R1, E1, I]): Connection[R1, E1, I1, O] =
@@ -102,8 +80,6 @@ trait Connection[-R, +E, -I, +O] { self =>
       def send(data: I1): ZIO[R1, E1, Unit] = f(data).flatMap(self.send)
 
       val receive: ZStream[R1, E1, O] = self.receive
-
-      val close: UIO[Unit] = self.close
 
     }
 
@@ -116,9 +92,6 @@ trait Connection[-R, +E, -I, +O] { self =>
       val receive: ZStream[R, E, O1] =
         self.receive.map(f)
 
-      val close: UIO[Unit] =
-        self.close
-
     }
 
   def mapError[E1](f: E => E1): Connection[R, E1, I, O] =
@@ -130,9 +103,6 @@ trait Connection[-R, +E, -I, +O] { self =>
       val receive: ZStream[R, E1, O] =
         self.receive.mapError(f)
 
-      val close: UIO[Unit] =
-        self.close
-
     }
 
   def mapM[R1 <: R, E1 >: E, O1](f: O => ZIO[R1, E1, O1]): Connection[R1, E1, I, O1] =
@@ -143,9 +113,6 @@ trait Connection[-R, +E, -I, +O] { self =>
 
       val receive: ZStream[R1, E1, O1] =
         self.receive.mapM(f)
-
-      val close: UIO[Unit] =
-        self.close
 
     }
 
@@ -167,16 +134,11 @@ trait Connection[-R, +E, -I, +O] { self =>
       val receive: ZStream[R1, E1, O1] =
         self.receive.mapM(f(_)).flattenChunks
 
-      val close: UIO[Unit] =
-        self.close
-
     }
 
   def withCodec[A]: Connection.WithCodecPartiallyApplied[R, E, I, O, A] =
     new Connection.WithCodecPartiallyApplied(self)
 
-  // todo: remove
-  val close: UIO[Unit]
 }
 
 object Connection {

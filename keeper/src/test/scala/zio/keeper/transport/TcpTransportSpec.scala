@@ -93,7 +93,6 @@ object TcpTransportSpec extends KeeperSpec {
         f2 <- Transport
                .bind(addr)
                .take(1)
-               .mapM(_.close)
                .runDrain
                .fork
         _      <- latch.succeed(())

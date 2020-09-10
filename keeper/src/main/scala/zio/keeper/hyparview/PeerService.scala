@@ -3,12 +3,13 @@ package zio.keeper.hyparview
 import zio.keeper.NodeAddress
 import zio.keeper.transport.Transport
 import zio.stream.{ Stream, ZStream }
-import zio.{ IO, Schedule, UIO, ZIO }
+import zio._
 import zio.clock.Clock
 import zio.duration._
 import zio.ZLayer
 import zio.keeper.hyparview.Message.PeerMessage
 import zio.logging.Logging
+import zio.keeper.hyparview.ViewEvent.UnhandledMessage
 
 object PeerService {
 
@@ -37,23 +38,24 @@ object PeerService {
 
   def live[R <: HyParViewConfig with Transport with TRandom with Logging with Clock](
     shuffleSchedule: Schedule[R, ViewState, Any],
-    fibersForIncomingConnections: Int = 32,
+    workers: Int = 32,
     reportInterval: Duration = 2.seconds
   ): ZLayer[R, Nothing, PeerService] =
     ZLayer.fromManaged {
+
+      def openConnection(addr: NodeAddress, initialMessages: Chunk[Message]) =
+        for {
+          rawConnection <- Transport.connect(addr)
+          connection    = rawConnection.withCodec[Message]()
+          _             <- ZIO.foreach(initialMessages)(connection.send).toManaged_
+        } yield connection
+
       for {
         cfg         <- HyParViewConfig.getConfig.toManaged_
         views       = Views.live(cfg.address, cfg.activeViewCapacity, cfg.passiveViewCapacity)
         connections = Transport.bind(cfg.address)
         _ <- {
           for {
-            _ <- connections
-                  .mapMParUnordered(fibersForIncomingConnections) { rawConnection =>
-                    protocols.all(rawConnection.withCodec[Message]().closeOnError)
-                  }
-                  .runDrain
-                  .toManaged_
-                  .fork
             _ <- periodic.doShuffle
                   .repeat(shuffleSchedule)
                   .toManaged_
@@ -62,6 +64,13 @@ object PeerService {
                   .repeat(Schedule.spaced(reportInterval))
                   .toManaged_
                   .fork
+            outgoing = Views.events.flatMap {
+              case UnhandledMessage(to, msg) =>
+                ZStream.managed(openConnection(to, Chunk.single(msg)))
+              case _ => ZStream.empty
+            }
+            incoming = connections.map(_.withCodec[Message]())
+            _        <- outgoing.merge(incoming).mapMParUnordered(workers)(protocols.all(_)).runDrain.toManaged_.fork
           } yield ()
         }.provideSomeLayer[R](views)
       } yield ???

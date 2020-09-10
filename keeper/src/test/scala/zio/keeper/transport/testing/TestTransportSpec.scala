@@ -8,13 +8,14 @@ import zio.test.TestAspect.nonFlaky
 import zio.test._
 import zio.{ Chunk, Promise, Schedule, ZLayer }
 import zio.duration._
-import zio.keeper.transport.testing.InMemoryTransport.asNode
+import zio.keeper.transport.testing.TestTransport.asNode
+import zio.keeper.TransportError
 
 object InMemoryTransportSpec extends KeeperSpec {
 
   val spec = {
 
-    val environment = Clock.live >>> (ZLayer.identity[Clock] ++ InMemoryTransport.make())
+    val environment = Clock.live >>> (ZLayer.identity[Clock] ++ TestTransport.make())
 
     suite("InMemoryTransport")(
       testM("can send and receive messages") {
@@ -22,14 +23,14 @@ object InMemoryTransportSpec extends KeeperSpec {
           bytes =>
             val payload = Chunk.fromIterable(bytes)
             val io = for {
-              chunk <- asNode(address(0)) {
+              chunk <- asNode[TestTransport, TransportError, Option[Chunk[Byte]]](address(0)) {
                         Transport
                           .bind(address(0))
-                          .flatMap(c => c.receive.take(1).ensuring(c.close))
+                          .flatMap(_.receive.take(1))
                           .take(1)
                           .runHead
                       }.fork
-              _ <- asNode(address(1)) {
+              _ <- asNode[TestTransport with Clock, TransportError, Unit](address(1)) {
                     Transport.send(address(0), payload).retry(Schedule.spaced(10.milliseconds))
                   }
               result <- chunk.join
@@ -42,14 +43,14 @@ object InMemoryTransportSpec extends KeeperSpec {
 
         val io = for {
           latch <- Promise.make[Nothing, Unit]
-          fiber <- asNode(address(0)) {
+          fiber <- asNode[TestTransport, TransportError, Unit](address(0)) {
                     Transport
                       .bind(address(0))
-                      .flatMap(c => c.receive.take(1).tap(_ => latch.succeed(()).ensuring(c.close)))
+                      .flatMap(_.receive.take(1).tap(_ => latch.succeed(())))
                       .take(2)
                       .runDrain
                   }.fork
-          _ <- asNode(address(1)) {
+          _ <- asNode[TestTransport with Clock, TransportError, Unit](address(1)) {
                 Transport.send(address(0), payload).retry(Schedule.spaced(10.milliseconds))
               }
           result <- latch.await *> fiber.interrupt
@@ -62,14 +63,14 @@ object InMemoryTransportSpec extends KeeperSpec {
             val payload = Chunk.fromIterable(bytes)
 
             val io = for {
-              fiber <- asNode(address(0)) {
+              fiber <- asNode[TestTransport, TransportError, Option[Chunk[Byte]]](address(0)) {
                         Transport
                           .bind(address(0))
-                          .flatMap(c => c.receive.take(1).ensuring(c.close))
+                          .flatMap(_.receive.take(1))
                           .take(1)
                           .runHead
                       }.fork
-              _ <- asNode(address(1)) {
+              _ <- asNode[TestTransport with Clock, TransportError, Unit](address(1)) {
                     Transport.send(address(0), payload).retry(Schedule.spaced(10.milliseconds))
                   }
               result <- fiber.join
@@ -79,16 +80,16 @@ object InMemoryTransportSpec extends KeeperSpec {
       },
       testM("Fails receive if connectivity is interrupted") {
         val io = for {
-          fiber <- asNode(address(0)) {
+          fiber <- asNode[TestTransport, TransportError, Option[Chunk[Byte]]](address(0)) {
                     Transport
                       .bind(address(0))
-                      .flatMap(c => c.receive.take(1).ensuring(c.close))
+                      .flatMap(_.receive.take(1))
                       .take(1)
                       .runHead
                   }.fork
-          result <- asNode(address(1)) {
+          result <- asNode[TestTransport with Clock, TransportError, Option[Chunk[Byte]]](address(1)) {
                      Transport.connect(address(0)).retry(Schedule.spaced(10.milliseconds)).use_ {
-                       InMemoryTransport.setConnectivity((_, _) => false) *> fiber.join
+                       TestTransport.setConnectivity((_, _) => false) *> fiber.join
                      }
                    }
         } yield result
@@ -100,16 +101,16 @@ object InMemoryTransportSpec extends KeeperSpec {
             bytes =>
               val io =
                 for {
-                  fiber <- asNode(address(0)) {
+                  fiber <- asNode[TestTransport, TransportError, Option[Chunk[Byte]]](address(0)) {
                             Transport
                               .bind(address(0))
-                              .flatMap(c => c.receive.take(1).ensuring(c.close))
+                              .flatMap(_.receive.take(1))
                               .take(1)
                               .runHead
                           }.fork
-                  result <- asNode(address(1)) {
+                  result <- asNode[TestTransport with Clock, TransportError, Unit](address(1)) {
                              Transport.connect(address(0)).retry(Schedule.spaced(10.milliseconds)).use { channel =>
-                               InMemoryTransport.setConnectivity((_, _) => false) *> channel
+                               TestTransport.setConnectivity((_, _) => false) *> channel
                                  .send(Chunk.fromIterable(bytes)) <* fiber.await
                              }
                            }
