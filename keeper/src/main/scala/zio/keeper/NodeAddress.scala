@@ -36,7 +36,9 @@ object NodeAddress {
       .map(addr => NodeAddress(Chunk.fromArray(addr.address), port))
       .orDie
 
-  implicit val nodeAddressRw: ReadWriter[NodeAddress] = macroRW[NodeAddress]
+  implicit val nodeAddressRw: ReadWriter[NodeAddress] = macroRW[(Array[Byte], Int)].bimap(n => (n.ip.toArray, n.port), {
+    case (ip, port) => NodeAddress(Chunk.fromArray(ip), port)
+  })
 
   implicit val byteCodec: ByteCodec[NodeAddress] =
     ByteCodec.fromReadWriter(nodeAddressRw)

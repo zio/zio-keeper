@@ -116,7 +116,7 @@ object gens {
   }
 
   val nodeAddress: Gen[Random with Sized, NodeAddress] =
-    Gen.chunkOf(Gen.anyByte).zipWith(Gen.anyInt)(NodeAddress.apply)
+    Gen.chunkOfN(4)(Gen.anyByte).zipWith(Gen.anyInt)(NodeAddress.apply)
 
   val uuid: Gen[Any, UUID] =
     Gen.fromEffect(makeRandomUUID)

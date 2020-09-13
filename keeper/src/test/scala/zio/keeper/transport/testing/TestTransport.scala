@@ -11,7 +11,7 @@ object TestTransport {
   type Ip = Chunk[Byte]
 
   trait Service {
-    def awaitAvailable(node: NodeAddress): UIO[Unit]
+    def awaitAvailable(serverAddress: NodeAddress): UIO[Unit]
     def servers: UIO[Set[NodeAddress]]
     def existingConnections: UIO[List[(Ip, Ip)]]
     def asNode[R <: Has[_], E, A](ip: Ip)(zio: ZIO[R with Transport, E, A]): ZIO[R, E, A]
@@ -42,14 +42,17 @@ object TestTransport {
     ZLayer.fromEffect {
       RefM.make(State.initial).map { ref =>
         new Service {
-          def awaitAvailable(node: NodeAddress): UIO[Unit] =
+          def awaitAvailable(serverAddress: NodeAddress): UIO[Unit] =
             Promise.make[Nothing, Unit].flatMap { available =>
               ref
                 .modify[Any, Nothing, UIO[Unit]] { old =>
-                  if (old.nodes.contains(node)) ZIO.succeedNow((ZIO.unit, old))
+                  if (old.nodes.contains(serverAddress)) ZIO.succeedNow((ZIO.unit, old))
                   else {
                     val newState =
-                      old.copy(waiters = old.waiters + (node -> (available.succeed(()).unit :: old.waiters(node))))
+                      old.copy(
+                        waiters = old.waiters + (serverAddress -> (available.succeed(()).unit :: old
+                          .waiters(serverAddress)))
+                      )
                     ZIO.succeedNow((available.await, newState))
                   }
                 }
@@ -63,7 +66,7 @@ object TestTransport {
             ref
               .update { old =>
                 val (remaining, disconnected) = old.connections.partition {
-                  case (t1, t2, _) => (t1 == t2) || (f(t1, t2) && f(t2, t1))
+                  case (t1, t2, _) => f(t1, t2) && f(t2, t1)
                 }
                 val newState = old.copy(connections = remaining, f = f)
                 ZIO
@@ -174,7 +177,7 @@ object TestTransport {
                               .fold[IO[TransportError, State]] {
                                 ZIO.succeedNow {
                                   old.copy(
-                                    nodes = old.nodes + (addr -> ((remote: Ip) => connect(remote)))
+                                    nodes = old.nodes + (addr -> connect)
                                   )
                                 }
                               } { _ =>

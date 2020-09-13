@@ -85,7 +85,7 @@ object MessagesSpec extends KeeperSpec {
             bytes <- m.fold[IO[SerializationError.SerializationTypeError, Chunk[Byte]]](ZIO.succeedNow(Chunk.empty))(
                       ByteCodec[WithPiggyback].toChunk(_)
                     )
-          } yield assert(m.map(_.gossip.size))(isSome(equalTo(1453))) && assert(bytes.size)(equalTo(62580))
+          } yield assert(m.map(_.gossip.size))(isSome(equalTo(1453))) && assert(bytes.size)(equalTo(62578))
       }
     }
   ).provideCustomLayer(logger ++ ConversationId.live ++ ((ZLayer.requires[Clock] ++ logger) >>> Nodes.live))
