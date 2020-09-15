@@ -10,6 +10,8 @@ import zio.ZLayer
 import zio.keeper.hyparview.Message.PeerMessage
 import zio.logging.Logging
 import zio.keeper.hyparview.ViewEvent.UnhandledMessage
+import zio.keeper.hyparview.ViewEvent.AddedToActiveView
+import zio.keeper.hyparview.ViewEvent.RemovedFromActiveView
 
 object PeerService {
 
@@ -31,7 +33,8 @@ object PeerService {
   def live[R <: HyParViewConfig with Transport with TRandom with Logging with Clock](
     shuffleSchedule: Schedule[R, ViewState, Any],
     workers: Int = 32,
-    reportInterval: Duration = 2.seconds
+    reportInterval: Duration = 2.seconds,
+    messagesBuffer: Int = 128
   ): ZLayer[R, Nothing, PeerService] =
     ZLayer.fromManaged {
 
@@ -44,8 +47,10 @@ object PeerService {
 
       for {
         cfg         <- HyParViewConfig.getConfig.toManaged_
-        views       = Views.live(cfg.address, cfg.activeViewCapacity, cfg.passiveViewCapacity)
         connections = Transport.bind(cfg.address)
+        peerEventsQ <- Queue.sliding[PeerEvent](messagesBuffer).toManaged_
+        viewsLayer  = Views.live(cfg.address, cfg.activeViewCapacity, cfg.passiveViewCapacity)
+        env         <- ZManaged.environment[R with Views].provideSomeLayer[R](viewsLayer)
         _ <- {
           for {
             _ <- periodic.doShuffle
@@ -59,13 +64,32 @@ object PeerService {
             outgoing = Views.events.flatMap {
               case UnhandledMessage(to, msg) =>
                 ZStream.managed(openConnection(to, Chunk.single(msg)))
-              case _ => ZStream.empty
+              case AddedToActiveView(node) =>
+                ZStream.fromEffect(peerEventsQ.offer(PeerEvent.NeighborUp(node))).drain
+              case RemovedFromActiveView(node) =>
+                ZStream.fromEffect(peerEventsQ.offer(PeerEvent.NeighborDown(node))).drain
+              case _ =>
+                ZStream.empty
             }
             incoming = connections.map(_.withCodec[Message]())
-            _        <- outgoing.merge(incoming).mapMParUnordered(workers)(protocols.all(_)).runDrain.toManaged_.fork
+            _ <- incoming
+                  .merge(outgoing)
+                  .mapMParUnordered(workers) { connection =>
+                    protocols.hyparview(connection, peerEventsQ.contramap((PeerEvent.MessageReceived.apply _).tupled))
+                  }
+                  .runDrain
+                  .toManaged_
+                  .fork
           } yield ()
-        }.provideSomeLayer[R](views)
-      } yield ???
+        }.provide(env)
+      } yield new PeerService.Service {
+        override val getPeers: UIO[Set[NodeAddress]] =
+          Views.activeView.commit.provide(env)
+        override def send(to: NodeAddress, message: PeerMessage): IO[Nothing, Unit] =
+          Views.send(to, message).commit.provide(env)
+        override val events: Stream[Nothing, PeerEvent] =
+          ZStream.fromQueue(peerEventsQ)
+      }
     }
 
 }

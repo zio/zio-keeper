@@ -12,12 +12,7 @@ object Views {
     def activeView: USTM[Set[NodeAddress]]
     def activeViewCapacity: USTM[Int]
     def addAllToPassiveView(nodes: List[NodeAddress]): USTM[Unit]
-
-    def addToActiveView(
-      node: NodeAddress,
-      send: Message => USTM[_],
-      disconnect: USTM[_]
-    ): USTM[Unit]
+    def addToActiveView(node: NodeAddress, send: Message => USTM[_], disconnect: USTM[_]): USTM[Unit]
     def addToPassiveView(node: NodeAddress): USTM[Unit]
     def events: Stream[Nothing, ViewEvent]
     def myself: USTM[NodeAddress]
@@ -40,11 +35,7 @@ object Views {
   def addAllToPassiveView(nodes: List[NodeAddress]): ZSTM[Views, Nothing, Unit] =
     ZSTM.accessM(_.get.addAllToPassiveView(nodes))
 
-  def addToActiveView(
-    node: NodeAddress,
-    send: Message => USTM[_],
-    disconnect: USTM[_]
-  ): ZSTM[Views, Nothing, Unit] =
+  def addToActiveView(node: NodeAddress, send: Message => USTM[_], disconnect: USTM[_]): ZSTM[Views, Nothing, Unit] =
     ZSTM.accessM(_.get.addToActiveView(node, send, disconnect))
 
   def addToPassiveView(node: NodeAddress): ZSTM[Views, Nothing, Unit] =
@@ -116,11 +107,7 @@ object Views {
             case x :: xs => addToPassiveView(x) *> addAllToPassiveView(xs)
           }
 
-        override def addToActiveView(
-          node: NodeAddress,
-          send: Message => USTM[_],
-          disconnect: USTM[_]
-        ): USTM[Unit] =
+        override def addToActiveView(node: NodeAddress, send: Message => USTM[_], disconnect: USTM[_]): USTM[Unit] =
           STM.when(!(node == myself0)) {
             ZSTM.ifM(activeView0.contains(node))(
               {
