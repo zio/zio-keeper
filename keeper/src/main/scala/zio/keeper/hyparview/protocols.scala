@@ -34,7 +34,7 @@ object protocols {
           config    <- HyParViewConfig.getConfigSTM
           others    <- Views.activeView.map(_.filterNot(_ == sender))
           localAddr <- Views.myself
-          _ <- ZSTM.foreach(others)(
+          _ <- ZSTM.foreach(others.toList)(
                 node =>
                   Views
                     .send(
@@ -184,7 +184,7 @@ object protocols {
       if (n <= 0) STM.unit else (dropOneFromPassive *> dropNFromPassive(n - 1))
 
     for {
-      _         <- ZSTM.foreach(sentOriginally)(Views.removeFromPassiveView)
+      _         <- ZSTM.foreach(sentOriginally.toList)(Views.removeFromPassiveView)
       size      <- Views.passiveViewSize
       capacity  <- Views.passiveViewCapacity
       _         <- dropNFromPassive(replied.size - (capacity - size))

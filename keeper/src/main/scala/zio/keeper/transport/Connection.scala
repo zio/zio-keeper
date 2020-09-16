@@ -30,7 +30,7 @@ trait Connection[-R, +E, -I, +O] { self =>
     ZQueue.bounded[I1](messageBuffer).toManaged(_.shutdown).flatMap { queue =>
       ZStream
         .fromQueue(queue)
-        .groupedWithin(maxItems.toLong, batchTimeout)
+        .groupedWithin(maxItems, batchTimeout)
         .mapM(
           l =>
             f(Chunk.fromIterable(l))

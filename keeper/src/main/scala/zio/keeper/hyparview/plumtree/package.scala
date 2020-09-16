@@ -84,7 +84,7 @@ package object plumtree {
   def sendIHave[R <: Logging with PeerService with Clock, E](
     stream: Stream[E, (NodeAddress, UUID, Round)],
     schedule: Schedule[R, Chunk[IHave], _],
-    maxMessageSize: Long = 12
+    maxMessageSize: Int = 12
   ): ZStream[R, E, Unit] =
     stream.groupByKey(_._1) {
       case (target, group) =>
