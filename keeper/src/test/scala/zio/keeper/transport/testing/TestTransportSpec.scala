@@ -6,6 +6,7 @@ import zio.test.Assertion._
 import zio.test.TestAspect.nonFlaky
 import zio.test._
 import zio._
+import zio.stream.Stream
 import zio.keeper.transport.testing.TestTransport.{ asNode, awaitAvailable, setConnectivity }
 import zio.keeper.TransportError
 import zio.keeper.NodeAddress
@@ -29,6 +30,7 @@ object TestTransportSpec extends KeeperSpec {
               chunk <- asNode[TestTransport, TransportError, Option[Chunk[Byte]]](addr1Ip) {
                         Transport
                           .bind(addr1)
+                          .flatMap(Stream.managed(_))
                           .flatMap(_.receive.take(1))
                           .take(1)
                           .runHead
@@ -49,6 +51,7 @@ object TestTransportSpec extends KeeperSpec {
           fiber <- asNode[TestTransport, TransportError, Unit](addr1Ip) {
                     Transport
                       .bind(addr1)
+                      .flatMap(Stream.managed(_))
                       .flatMap(_.receive.take(1).tap(_ => latch.succeed(())))
                       .take(2)
                       .runDrain
@@ -77,7 +80,7 @@ object TestTransportSpec extends KeeperSpec {
                             .flatMap { con =>
                               latch.succeed(()) *>
                                 con.fold[IO[Option[TransportError], Option[Chunk[Byte]]]](ZIO.fail(None))(
-                                  _.receive.runHead.mapError(Some(_))
+                                  _.use(_.receive.runHead).mapError(Some(_))
                                 )
                             }
                         }.fork
@@ -108,7 +111,7 @@ object TestTransportSpec extends KeeperSpec {
                             .flatMap { con =>
                               latch.succeed(()) *>
                                 con.fold[IO[Option[TransportError], Option[Chunk[Byte]]]](ZIO.fail(None))(
-                                  _.receive.runHead.mapError(Some(_))
+                                  _.use(_.receive.runHead).mapError(Some(_))
                                 )
                             }
                         }.fork
@@ -127,6 +130,7 @@ object TestTransportSpec extends KeeperSpec {
           fiber <- asNode[TestTransport, TransportError, Option[Chunk[Byte]]](addr1Ip) {
                     Transport
                       .bind(addr1)
+                      .flatMap(Stream.managed(_))
                       .flatMap(_.receive.take(1))
                       .take(1)
                       .runHead
@@ -148,6 +152,7 @@ object TestTransportSpec extends KeeperSpec {
                   fiber <- asNode[TestTransport, TransportError, Option[Chunk[Byte]]](addr1Ip) {
                             Transport
                               .bind(addr1)
+                              .flatMap(Stream.managed(_))
                               .flatMap(_.receive.take(1))
                               .take(1)
                               .runHead
@@ -167,6 +172,7 @@ object TestTransportSpec extends KeeperSpec {
         val f1 = asNode[TestTransport, TransportError, Unit](addr1Ip) {
           Transport
             .bind(addr1)
+            .flatMap(Stream.managed(_))
             .flatMap(_.receive)
             .take(1)
             .runDrain
@@ -174,6 +180,7 @@ object TestTransportSpec extends KeeperSpec {
         val f2 = asNode[TestTransport, TransportError, Unit](addr1Ip) {
           Transport
             .bind(addr1)
+            .flatMap(Stream.managed(_))
             .flatMap(_.receive)
             .take(1)
             .runDrain
@@ -184,6 +191,7 @@ object TestTransportSpec extends KeeperSpec {
         val io = asNode[TestTransport, TransportError, Unit](addr2Ip) {
           Transport
             .bind(addr1)
+            .flatMap(Stream.managed(_))
             .flatMap(_.receive)
             .take(1)
             .runDrain

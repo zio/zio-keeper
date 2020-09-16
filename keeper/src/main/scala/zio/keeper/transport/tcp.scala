@@ -68,14 +68,13 @@ object tcp {
             _  <- log.debug(s"$id: new outbound connection to $to").toManaged_
             connection <- AsynchronousSocketChannel()
                            .mapM { channel =>
-                             val connection = toConnection(channel, id)
-                             to.socketAddress.flatMap(channel.connect) *> connection
+                             to.socketAddress.flatMap(channel.connect) *> toConnection(channel, id)
                            }
                            .retry(connectRetryPolicy)
           } yield connection
         }.provide(env).mapError(TransportError.ExceptionWrapper(_))
 
-        override def bind(addr: NodeAddress): Stream[TransportError, ChunkConnection] =
+        override def bind(addr: NodeAddress): Stream[TransportError, Managed[TransportError, ChunkConnection]] =
           ZStream
             .managed {
               AsynchronousServerSocketChannel()
@@ -86,15 +85,15 @@ object tcp {
                 }
             }
             .flatMap { server =>
-              ZStream.managed {
-                for {
+              ZStream.repeat {
+                val connectionManaged = for {
                   _          <- sema.withPermitManaged
                   channel    <- server.accept
                   id         <- uuid.makeRandomUUID.toManaged_
-                  _          <- log.debug(s"$id: new inbound connection").toManaged_
                   connection <- toConnection(channel, id).toManaged_
                 } yield connection
-              }.forever
+                connectionManaged.mapError(TransportError.ExceptionWrapper(_))
+              }
             }
             .provide(env)
             .mapError(TransportError.ExceptionWrapper(_))

@@ -12,6 +12,7 @@ import zio.logging.Logging
 import zio.keeper.hyparview.ViewEvent.UnhandledMessage
 import zio.keeper.hyparview.ViewEvent.AddedToActiveView
 import zio.keeper.hyparview.ViewEvent.RemovedFromActiveView
+import zio.keeper.Error
 
 object PeerService {
 
@@ -63,7 +64,7 @@ object PeerService {
                   .fork
             outgoing = Views.events.flatMap {
               case UnhandledMessage(to, msg) =>
-                ZStream.managed(openConnection(to, Chunk.single(msg)))
+                ZStream.succeed(openConnection(to, Chunk.single(msg)))
               case AddedToActiveView(node) =>
                 ZStream.fromEffect(peerEventsQ.offer(PeerEvent.NeighborUp(node))).drain
               case RemovedFromActiveView(node) =>
@@ -71,11 +72,14 @@ object PeerService {
               case _ =>
                 ZStream.empty
             }
-            incoming = connections.map(_.withCodec[Message]())
+            incoming = connections.map(_.map(_.withCodec[Message]()))
             _ <- incoming
                   .merge(outgoing)
-                  .mapMParUnordered(workers) { connection =>
-                    protocols.hyparview(connection, peerEventsQ.contramap((PeerEvent.MessageReceived.apply _).tupled))
+                  .mapMParUnordered[Views with HyParViewConfig with TRandom with Transport, Error, Unit](workers) {
+                    connection =>
+                      connection.use(
+                        protocols.hyparview(_, peerEventsQ.contramap((PeerEvent.MessageReceived.apply _).tupled))
+                      )
                   }
                   .runDrain
                   .toManaged_

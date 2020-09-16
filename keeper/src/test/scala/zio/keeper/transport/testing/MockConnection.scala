@@ -59,7 +59,7 @@ object MockConnection {
     def runOneAwait(in: I): Either[E, Option[Script[E, I, O]]] =
       self match {
         case AndThen(first, second) =>
-          first.runOneAwait(in).right.map(_.fold(Some(second))(remaining => Some(remaining ++ second)))
+          first.runOneAwait(in).map(_.fold(Some(second))(remaining => Some(remaining ++ second)))
         case Or(first, second) =>
           first.runOneAwait(in).fold(_ => second.runOneAwait(in), remaining => Right(remaining.map(_ <|> second)))
         case Await(assertion) =>
@@ -145,7 +145,7 @@ object MockConnection {
             case None => ((Chunk.empty, Right(None)), None)
             case Some(script) =>
               val (out, result) = script.run(data)
-              ((out, result), result.right.toOption.flatten)
+              ((out, result), result.toOption.flatten)
           }
           .flatMap {
             case (out, result) =>

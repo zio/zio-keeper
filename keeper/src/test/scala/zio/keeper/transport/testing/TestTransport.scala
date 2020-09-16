@@ -77,7 +77,7 @@ object TestTransport {
               }
           def asNode[R <: Has[_], E, A](ip: Ip)(zio: ZIO[R with Transport, E, A]): ZIO[R, E, A] = {
             val transport = new Transport.Service {
-              def bind(addr: NodeAddress): Stream[TransportError, ChunkConnection] = {
+              def bind(addr: NodeAddress): Stream[TransportError, Managed[TransportError, ChunkConnection]] = {
 
                 def completeWaiters(node: NodeAddress): UIO[Unit] =
                   ref
@@ -191,7 +191,7 @@ object TestTransport {
                         }
                       }
                   _      <- ZStream.fromEffect(completeWaiters(addr))
-                  result <- ZStream.fromQueue(connections).flatMap(ZStream.managed(_))
+                  result <- ZStream.fromQueue(connections)
                 } yield result
               }
               def connect(to: NodeAddress): Managed[TransportError, ChunkConnection] =
