@@ -7,8 +7,8 @@ import zio.clock.Clock
 import zio.keeper.{ ByteCodec, KeeperSpec, NodeAddress, TransportError }
 import zio.logging.Logging
 import zio.random.Random
-import zio.test.Assertion.{ anything, equalTo, fails, isInterrupted, isSome, succeeds }
-import zio.test.TestAspect.{ flaky, ignore, sequential, timeout }
+import zio.test.Assertion.{ equalTo, isInterrupted, isSome, succeeds }
+import zio.test.TestAspect.{ flaky, sequential, timeout }
 import zio.test.environment.Live
 import zio.test._
 import zio._
@@ -75,7 +75,7 @@ object TcpTransportSpec extends KeeperSpec {
                  }
       } yield assert(result)(isInterrupted)
     },
-    testM("can not receive messages after bind stream is closed") {
+    testM("can send messages after bind stream is closed") {
       val payload = Chunk.single(Byte.MaxValue)
 
       for {
@@ -101,8 +101,8 @@ object TcpTransportSpec extends KeeperSpec {
               .ignore
         result <- chunk.await
         _      <- log.info(result.toString())
-      } yield assert(result)(fails(anything))
-    } @@ ignore,
+      } yield assert(result)(succeeds(isSome(equalTo(payload))))
+    },
     testM("closes stream when the connected stream closes - client") {
       for {
         addr <- makeAddr
@@ -170,7 +170,7 @@ object TcpTransportSpec extends KeeperSpec {
         _      <- f1.await
         _      <- ZIO.foreach(f2)(_.await)
       } yield assert(result)(equalTo(limit))
-    } @@ ignore,
+    },
     testM("respects max connections - send") {
       val limit   = 10
       val senders = 15
@@ -213,7 +213,7 @@ object TcpTransportSpec extends KeeperSpec {
   ) @@ timeout(15.seconds) @@ sequential @@ flaky).provideCustomLayer(environment)
 
   private lazy val environment =
-    ((Clock.live ++ Logging.console()) >+> tcp.make(128, Schedule.spaced(10.millis)))
+    ((Clock.live ++ Logging.ignore) >+> tcp.make(128, Schedule.spaced(10.millis)))
 
   private def findAvailableTCPPort(minPort: Int, maxPort: Int): URIO[Live, Int] = {
     val portRange = maxPort - minPort

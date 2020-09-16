@@ -8,7 +8,7 @@ import zio.keeper.{ NodeAddress, TransportError, uuid }
 import zio.keeper.encoding._
 import zio.logging.Logging
 import zio.logging.log
-import zio.nio.channels._
+import zio.nio.core.channels._
 import zio.stream._
 import java.io.IOException
 
@@ -66,7 +66,8 @@ object tcp {
             _  <- sema.withPermitManaged
             id <- uuid.makeRandomUUID.toManaged_
             _  <- log.debug(s"$id: new outbound connection to $to").toManaged_
-            connection <- AsynchronousSocketChannel()
+            connection <- ZManaged
+                           .make(AsynchronousSocketChannel())(_.close.ignore)
                            .mapM { channel =>
                              to.socketAddress.flatMap(channel.connect) *> toConnection(channel, id)
                            }
@@ -77,7 +78,8 @@ object tcp {
         override def bind(addr: NodeAddress): Stream[TransportError, Managed[TransportError, ChunkConnection]] =
           ZStream
             .managed {
-              AsynchronousServerSocketChannel()
+              ZManaged
+                .make(AsynchronousServerSocketChannel())(_.close.ignore)
                 .tapM { server =>
                   addr.socketAddress.flatMap { sAddr =>
                     log.info(s"Binding transport to $sAddr") *> server.bind(sAddr)
@@ -85,14 +87,14 @@ object tcp {
                 }
             }
             .flatMap { server =>
-              ZStream.repeat {
+              ZStream.repeatEffect {
                 val connectionManaged = for {
                   _          <- sema.withPermitManaged
-                  channel    <- server.accept
+                  channel    <- ZManaged.makeInterruptible(server.accept)(_.close.ignore)
                   id         <- uuid.makeRandomUUID.toManaged_
                   connection <- toConnection(channel, id).toManaged_
                 } yield connection
-                connectionManaged.mapError(TransportError.ExceptionWrapper(_))
+                connectionManaged.preallocate
               }
             }
             .provide(env)
