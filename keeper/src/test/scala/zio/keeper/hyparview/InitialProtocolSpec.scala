@@ -1,6 +1,6 @@
 package zio.keeper.hyparview
 
-import zio.stm.STM
+import zio.stm._
 import zio.test._
 import zio.test.Assertion._
 import zio.keeper.KeeperSpec
@@ -36,8 +36,32 @@ object InitialProtocolSpec extends KeeperSpec {
               assertM(test.provideLayer(env))(isSome(equalTo(remoteAddress)))
           }
         },
-        test("should send ForwardJoin to every other member of active view") {
-          assert(())(anything) // TODO
+        testM("should send ForwardJoin to every other member of active view") {
+          val gen = for {
+            localAddress    <- gens.nodeAddress
+            remoteAddress   <- gens.nodeAddress.filter(_ != localAddress)
+            existingAddress <- gens.nodeAddress.filter(a => (a != localAddress) && (a != remoteAddress))
+          } yield (localAddress, remoteAddress, existingAddress)
+          checkM(gen) {
+            case (localAddress, remoteAddress, existingAddress) =>
+              val makeConnection = {
+                import MockConnection._
+                make(
+                  emit(Message.Join(remoteAddress)) ++
+                    await[Message](equalTo(Message.JoinReply(localAddress)))
+                )
+              }
+              val test = makeConnection.use { con =>
+                for {
+                  ref    <- TRef.make[List[Message]](Nil).commit
+                  _      <- Views.addToActiveView(existingAddress, m => ref.update(m :: _), STM.unit).commit
+                  _      <- protocols.initialProtocol.run(con)
+                  result <- ref.get.commit
+                } yield result
+              }
+              val env = defaultEnv >+> Views.live(localAddress, 10, 10)
+              assertM(test.provideLayer(env))(equalTo(List(Message.ForwardJoin(remoteAddress, TimeToLive(5)))))
+          }
         }
       ),
       testM("succeeds with sender on receiving ForwardJoinReply") {
