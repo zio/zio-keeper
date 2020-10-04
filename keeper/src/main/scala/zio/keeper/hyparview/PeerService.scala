@@ -50,7 +50,7 @@ object PeerService {
         cfg         <- HyParViewConfig.getConfig.toManaged_
         connections = Transport.bind(cfg.address)
         peerEventsQ <- Queue.sliding[PeerEvent](messagesBuffer).toManaged_
-        viewsLayer  = Views.live(cfg.address, cfg.activeViewCapacity, cfg.passiveViewCapacity)
+        viewsLayer  = Views.live
         env         <- ZManaged.environment[R with Views].provideSomeLayer[R](viewsLayer)
         _ <- {
           for {
