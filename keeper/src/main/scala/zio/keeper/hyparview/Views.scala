@@ -113,8 +113,7 @@ object Views {
               {
                 for {
                   _ <- removeFromActiveView(node)
-                  _ <- viewEvents.offer(AddedToActiveView(node))
-                  _ <- activeView0.put(node, (send, disconnect))
+                  _ <- addToActiveView(node, send, disconnect)
                 } yield ()
               }, {
                 for {

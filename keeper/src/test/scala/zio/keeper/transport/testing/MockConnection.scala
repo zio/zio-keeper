@@ -3,7 +3,7 @@ package zio.keeper.transport.testing
 import zio._
 import zio.stream.Take
 import zio.stream.ZStream
-import zio.test.{ AssertResult, Assertion }
+import zio.test.{ Assertion, TestResult, assert }
 import zio.keeper.transport.Connection
 
 object MockConnection {
@@ -101,16 +101,16 @@ object MockConnection {
     final case class Fail[E](value: E)                                                 extends Script[E, Any, Nothing]
   }
 
-  def await[I](assertion: Assertion[I]): Script[AssertResult, I, Nothing] = {
+  def await[I](assertion: Assertion[I]): Script[TestResult, I, Nothing] = {
     def f = (in: I) => {
-      val result = assertion.run(in)
+      val result = assert(in)(assertion)
       if (result.isSuccess) None
       else Some(result)
     }
     Script.Await(f)
   }
 
-  val awaitFail: Script[AssertResult, Any, Nothing] =
+  val awaitFail: Script[TestResult, Any, Nothing] =
     await(Assertion.nothing)
 
   def emit[O](value: O): Script[Nothing, Any, O] =
@@ -122,8 +122,8 @@ object MockConnection {
   def emitChunk[O](values: Chunk[O]): Script[Nothing, Any, O] =
     Script.EmitChunk(values)
 
-  val fail: Script[AssertResult, Any, Nothing] =
-    Script.Fail(Assertion.nothing.run(()))
+  val fail: Script[TestResult, Any, Nothing] =
+    Script.Fail(assert("Connection was asked to fail.")(Assertion.nothing))
 
   def make[E, I, O](script: Script[E, I, O]): Managed[Nothing, Connection[Any, E, I, O]] =
     for {

@@ -70,7 +70,7 @@ object protocols {
     remoteAddress: NodeAddress,
     peerMessages: Enqueue[Message.PeerMessage]
   ): Protocol[Views with HyParViewConfig with TRandom, Nothing, Message, Message, Boolean] = {
-    val rec = activeProtocol(remoteAddress, peerMessages)
+    lazy val rec = activeProtocol(remoteAddress, peerMessages)
     Protocol.fromEffect {
       case Message.Disconnect(keep) =>
         ZIO.succeedNow((Chunk.empty, Left(keep)))
@@ -136,7 +136,32 @@ object protocols {
     }
   }
 
-  def inActiveView[R <: Views](
+  def addShuffledNodes(
+    sentOriginally: Set[NodeAddress],
+    replied: Set[NodeAddress]
+  ): ZSTM[Views with TRandom, Nothing, Unit] = {
+    val dropOneFromPassive: ZSTM[Views with TRandom, Nothing, Unit] =
+      for {
+        list    <- Views.passiveView.map(_.toList)
+        dropped <- TRandom.selectOne(list)
+        _       <- ZSTM.foreach_(dropped)(Views.removeFromPassiveView)
+      } yield ()
+
+    def dropNFromPassive(n: Int): ZSTM[Views with TRandom, Nothing, Unit] =
+      if (n <= 0) STM.unit else (dropOneFromPassive *> dropNFromPassive(n - 1))
+
+    for {
+      _         <- ZSTM.foreach(sentOriginally.toList)(Views.removeFromPassiveView)
+      size      <- Views.passiveViewSize
+      capacity  <- Views.passiveViewCapacity
+      _         <- dropNFromPassive(replied.size - (capacity - size))
+      _         <- Views.addAllToPassiveView(replied.toList)
+      remaining <- Views.passiveViewSize.map(capacity - _)
+      _         <- Views.addAllToPassiveView(sentOriginally.take(remaining).toList)
+    } yield ()
+  }
+
+  private def inActiveView[R <: Views](
     remoteAddress: NodeAddress,
     send: Message => ZIO[R, Any, Unit]
   ): ZManaged[R, Nothing, Boolean => UIO[Unit]] =
@@ -168,30 +193,5 @@ object protocols {
             .commit
             .toManaged(_ => Views.removeFromActiveView(remoteAddress).commit *> disconnected.await)
     } yield (b: Boolean) => keepRef.set(b).commit
-
-  def addShuffledNodes(
-    sentOriginally: Set[NodeAddress],
-    replied: Set[NodeAddress]
-  ): ZSTM[Views with TRandom, Nothing, Unit] = {
-    val dropOneFromPassive: ZSTM[Views with TRandom, Nothing, Unit] =
-      for {
-        list    <- Views.passiveView.map(_.toList)
-        dropped <- TRandom.selectOne(list)
-        _       <- ZSTM.foreach_(dropped)(Views.removeFromPassiveView)
-      } yield ()
-
-    def dropNFromPassive(n: Int): ZSTM[Views with TRandom, Nothing, Unit] =
-      if (n <= 0) STM.unit else (dropOneFromPassive *> dropNFromPassive(n - 1))
-
-    for {
-      _         <- ZSTM.foreach(sentOriginally.toList)(Views.removeFromPassiveView)
-      size      <- Views.passiveViewSize
-      capacity  <- Views.passiveViewCapacity
-      _         <- dropNFromPassive(replied.size - (capacity - size))
-      _         <- Views.addAllToPassiveView(replied.toList)
-      remaining <- Views.passiveViewSize.map(capacity - _)
-      _         <- Views.addAllToPassiveView(sentOriginally.take(remaining).toList)
-    } yield ()
-  }
 
 }
