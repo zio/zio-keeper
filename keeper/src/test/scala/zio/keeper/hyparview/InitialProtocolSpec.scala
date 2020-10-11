@@ -7,6 +7,9 @@ import zio.keeper.KeeperSpec
 import zio.keeper.gens
 import zio.keeper.transport.testing.MockConnection
 import zio.logging.Logging
+import zio.ZLayer
+import zio.keeper.NodeAddress
+import zio.random.Random
 
 object InitialProtocolSpec extends KeeperSpec {
 
@@ -32,7 +35,7 @@ object InitialProtocolSpec extends KeeperSpec {
                   protoResult <- protocols.initialProtocol.run(con)
                 } yield protoResult.flatten
               }
-              val env = defaultEnv >+> Views.live(localAddress, 1, 1)
+              val env = defaultEnv >+> overrideEnv(localAddress, 1, 1)
               assertM(test.provideLayer(env))(isSome(equalTo(remoteAddress)))
           }
         },
@@ -59,7 +62,7 @@ object InitialProtocolSpec extends KeeperSpec {
                   result <- ref.get.commit
                 } yield result
               }
-              val env = defaultEnv >+> Views.live(localAddress, 10, 10)
+              val env = defaultEnv >+> overrideEnv(localAddress, 10, 10)
               assertM(test.provideLayer(env))(equalTo(List(Message.ForwardJoin(remoteAddress, TimeToLive(5)))))
           }
         }
@@ -99,7 +102,7 @@ object InitialProtocolSpec extends KeeperSpec {
                   viewsResult <- Views.passiveView.map(_.contains(remoteAddress)).commit
                 } yield protoResult.map((_, viewsResult))
               }
-              val env = defaultEnv >+> Views.live(localAddress, 1, 1)
+              val env = defaultEnv >+> overrideEnv(localAddress, 1, 1)
               assertM(test.provideLayer(env))(isSome(equalTo((None, true))))
           }
         },
@@ -123,7 +126,7 @@ object InitialProtocolSpec extends KeeperSpec {
                   viewsResult <- Views.passiveView.map(_.contains(remoteAddress)).commit
                 } yield protoResult.map((_, viewsResult))
               }
-              val env = defaultEnv >+> Views.live(localAddress, 1, 1)
+              val env = defaultEnv >+> overrideEnv(localAddress, 1, 1)
               assertM(test.provideLayer(env))(isSome(equalTo((Some(remoteAddress), false))))
           }
         },
@@ -147,7 +150,7 @@ object InitialProtocolSpec extends KeeperSpec {
                   viewsResult <- Views.passiveView.map(_.contains(remoteAddress)).commit
                 } yield protoResult.map((_, viewsResult))
               }
-              val env = defaultEnv >+> Views.live(localAddress, 1, 1)
+              val env = defaultEnv >+> overrideEnv(localAddress, 1, 1)
               assertM(test.provideLayer(env))(isSome(equalTo((Some(remoteAddress), false))))
           }
         },
@@ -173,18 +176,28 @@ object InitialProtocolSpec extends KeeperSpec {
                   viewsResult <- Views.passiveView.map(_.contains(remoteAddress)).commit
                 } yield protoResult.map((_, viewsResult))
               }
-              val env = defaultEnv >+> Views.live(localAddress, 1, 1)
+              val env = defaultEnv >+> overrideEnv(localAddress, 1, 1)
               assertM(test.provideLayer(env))(isSome(equalTo((Some(remoteAddress), false))))
           }
         }
       )
     )
 
-  private val defaultEnv =
-    TRandom.live >+> {
-      Logging.ignore ++
-        Views.live(address(0), 10, 10) ++
-        HyParViewConfig.staticConfig(address(0), 10, 10, 5, 3, 2, 2, 3, 256, 256, 256)
-    }
+  private val defaultEnv: ZLayer[Random, Nothing, TRandom with HyParViewConfig with Logging with Views] =
+    TRandom.live >+> HyParViewConfig.static(address(0), 10, 10, 5, 3, 2, 2, 3, 256, 10, 10) >+> Logging.ignore >+> Views.live
 
+  private def overrideEnv(address: NodeAddress, activeViewCapacity: Int, passiveViewCapacity: Int) =
+    ZLayer.identity[TRandom with Logging] >+> HyParViewConfig.static(
+      address,
+      activeViewCapacity,
+      passiveViewCapacity,
+      5,
+      3,
+      2,
+      2,
+      3,
+      256,
+      10,
+      10
+    ) >+> Views.live
 }

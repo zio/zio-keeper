@@ -79,27 +79,23 @@ object Views {
       passiveViewCapacity <- passiveViewCapacity
     } yield ViewState(activeViewSize, activeViewCapacity, passiveViewSize, passiveViewCapacity)
 
-  def live(
-    myself0: NodeAddress,
-    activeViewCapacity0: Int,
-    passiveViewCapacity0: Int,
-    eventsBuffer: Int = 256
-  ): ZLayer[TRandom, Nothing, Views] =
+  def live: ZLayer[TRandom with HyParViewConfig, Nothing, Views] =
     ZLayer.fromEffect {
       for {
-        _            <- ZIO.dieMessage("active view capacity must be greater than 0").when(activeViewCapacity0 <= 0)
-        _            <- ZIO.dieMessage("passive view capacity must be greater than 0").when(passiveViewCapacity0 <= 0)
-        viewEvents   <- TQueue.bounded[ViewEvent](eventsBuffer).commit
-        activeView0  <- TMap.empty[NodeAddress, (Message => USTM[Any], USTM[Any])].commit
-        passiveView0 <- TSet.empty[NodeAddress].commit
-        tRandom      <- URIO.environment[TRandom].map(_.get)
+        config           <- HyParViewConfig.getConfig
+        _                <- ZIO.dieMessage("active view capacity must be greater than 0").when(config.activeViewCapacity <= 0)
+        _                <- ZIO.dieMessage("passive view capacity must be greater than 0").when(config.passiveViewCapacity <= 0)
+        viewEvents       <- TQueue.bounded[ViewEvent](config.viewsEventBuffer).commit
+        activeViewState  <- TMap.empty[NodeAddress, (Message => USTM[Any], USTM[Any])].commit
+        passiveViewState <- TSet.empty[NodeAddress].commit
+        tRandom          <- URIO.environment[TRandom].map(_.get)
       } yield new Service {
 
         override val activeView: USTM[Set[NodeAddress]] =
-          activeView0.keys.map(_.toSet)
+          activeViewState.keys.map(_.toSet)
 
         override val activeViewCapacity: USTM[Int] =
-          STM.succeedNow(activeViewCapacity0)
+          STM.succeedNow(config.activeViewCapacity)
 
         override def addAllToPassiveView(remaining: List[NodeAddress]): USTM[Unit] =
           remaining match {
@@ -108,8 +104,8 @@ object Views {
           }
 
         override def addToActiveView(node: NodeAddress, send: Message => USTM[_], disconnect: USTM[_]): USTM[Unit] =
-          STM.when(!(node == myself0)) {
-            ZSTM.ifM(activeView0.contains(node))(
+          STM.when(!(node == config.address)) {
+            ZSTM.ifM(activeViewState.contains(node))(
               {
                 for {
                   _ <- removeFromActiveView(node)
@@ -123,9 +119,9 @@ object Views {
                       node       <- tRandom.selectOne(activeView.toList)
                       _          <- node.fold[USTM[Unit]](STM.unit)(removeFromActiveView)
                     } yield ()
-                  }.whenM(activeView0.size.map(_ >= activeViewCapacity0))
+                  }.whenM(activeViewState.size.map(_ >= config.activeViewCapacity))
                   _ <- viewEvents.offer(AddedToActiveView(node))
-                  _ <- activeView0.put(node, (send, disconnect))
+                  _ <- activeViewState.put(node, (send, disconnect))
                 } yield ()
               }
             )
@@ -133,16 +129,16 @@ object Views {
 
         override def addToPassiveView(node: NodeAddress): USTM[Unit] =
           for {
-            inActive            <- activeView0.contains(node)
-            inPassive           <- passiveView0.contains(node)
+            inActive            <- activeViewState.contains(node)
+            inPassive           <- passiveViewState.contains(node)
             passiveViewCapacity <- passiveViewCapacity
-            _ <- if (node == myself0 || inActive || inPassive) STM.unit
+            _ <- if (node == config.address || inActive || inPassive) STM.unit
                 else {
                   for {
-                    size <- passiveView0.size
+                    size <- passiveViewState.size
                     _    <- dropOneFromPassive.when(size >= passiveViewCapacity)
                     _    <- viewEvents.offer(AddedToPassiveView(node))
-                    _    <- passiveView0.put(node)
+                    _    <- passiveViewState.put(node)
                   } yield ()
                 }
           } yield ()
@@ -151,16 +147,16 @@ object Views {
           Stream.fromTQueue(viewEvents)
 
         override val myself: USTM[NodeAddress] =
-          STM.succeed(myself0)
+          STM.succeed(config.address)
 
         override val passiveView: USTM[Set[NodeAddress]] =
-          passiveView0.toList.map(_.toSet)
+          passiveViewState.toList.map(_.toSet)
 
         override val passiveViewCapacity: USTM[Int] =
-          STM.succeed(passiveViewCapacity0)
+          STM.succeed(config.passiveViewCapacity)
 
         override def removeFromActiveView(node: NodeAddress): USTM[Unit] =
-          activeView0
+          activeViewState
             .get(node)
             .get
             .foldM(
@@ -168,18 +164,18 @@ object Views {
                 case (_, disconnect) =>
                   for {
                     _ <- viewEvents.offer(RemovedFromActiveView(node))
-                    _ <- activeView0.delete(node)
+                    _ <- activeViewState.delete(node)
                     _ <- disconnect
                   } yield ()
               }
             )
 
         override def removeFromPassiveView(node: NodeAddress): USTM[Unit] = {
-          viewEvents.offer(RemovedFromPassiveView(node)) *> passiveView0.delete(node)
-        }.whenM(passiveView0.contains(node))
+          viewEvents.offer(RemovedFromPassiveView(node)) *> passiveViewState.delete(node)
+        }.whenM(passiveViewState.contains(node))
 
         override def send(to: NodeAddress, msg: Message): USTM[Unit] =
-          activeView0
+          activeViewState
             .get(to)
             .get
             .foldM(
@@ -192,7 +188,7 @@ object Views {
 
         private val dropOneFromPassive: USTM[Unit] =
           for {
-            list    <- passiveView0.toList
+            list    <- passiveViewState.toList
             dropped <- tRandom.selectOne(list)
             _       <- STM.foreach_(dropped)(removeFromPassiveView(_))
           } yield ()

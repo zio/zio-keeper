@@ -1,6 +1,6 @@
 package zio.keeper.hyparview
 
-import zio.{ UIO, ULayer, URIO, ZIO, ZLayer }
+import zio.{ ULayer, URIO, ZIO, ZLayer }
 import zio.keeper.NodeAddress
 import zio.stm._
 
@@ -17,7 +17,8 @@ object HyParViewConfig {
     shuffleTTL: Int,
     connectionBuffer: Int,
     userMessagesBuffer: Int,
-    concurrentIncomingConnections: Int
+    concurrentIncomingConnections: Int,
+    viewsEventBuffer: Int
   ) {
 
     val prettyPrint: String =
@@ -31,23 +32,21 @@ object HyParViewConfig {
          |shuffleTTL: $shuffleTTL
          |connectionBuffer: $connectionBuffer
          |userMessagesBuffer: $userMessagesBuffer
-         |concurrentIncomingConnections: $concurrentIncomingConnections""".stripMargin
+         |concurrentIncomingConnections: $concurrentIncomingConnections
+         |viewsEventBuffer: $viewsEventBuffer""".stripMargin
   }
 
   trait Service {
     val getConfigSTM: USTM[Config]
-
-    val getConfig: UIO[Config] =
-      getConfigSTM.commit
   }
 
   val getConfig: URIO[HyParViewConfig, Config] =
-    ZIO.accessM(_.get.getConfig)
+    ZIO.accessM(_.get.getConfigSTM.commit)
 
   val getConfigSTM: ZSTM[HyParViewConfig, Nothing, Config] =
     ZSTM.accessM(_.get.getConfigSTM)
 
-  def staticConfig(
+  def static(
     address: NodeAddress,
     activeViewCapacity: Int,
     passiveViewCapacity: Int,
@@ -58,7 +57,8 @@ object HyParViewConfig {
     shuffleTTL: Int,
     connectionBuffer: Int,
     userMessagesBuffer: Int,
-    concurrentIncomingConnections: Int
+    concurrentIncomingConnections: Int,
+    viewsEventBuffer: Int = 256
   ): ULayer[HyParViewConfig] =
     ZLayer.succeed {
       new Service {
@@ -75,7 +75,8 @@ object HyParViewConfig {
               shuffleTTL,
               connectionBuffer,
               userMessagesBuffer,
-              concurrentIncomingConnections
+              concurrentIncomingConnections,
+              viewsEventBuffer
             )
           }
       }

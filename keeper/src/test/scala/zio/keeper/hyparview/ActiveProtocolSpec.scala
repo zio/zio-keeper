@@ -56,12 +56,10 @@ object ActiveProtocolSpec extends KeeperSpec {
     }
 
   private val defaultEnv =
-    ZLayer.identity[Sized] ++ {
-      TRandom.live >+> {
-        Logging.ignore ++
-          Views.live(address(0), 10, 10) ++
-          HyParViewConfig.staticConfig(address(0), 10, 10, 5, 3, 2, 2, 3, 256, 256, 256)
-      }
-    }
+    ZLayer.identity[Sized] ++
+      TRandom.live ++
+      Logging.ignore ++
+      HyParViewConfig.static(address(0), 10, 10, 5, 3, 2, 2, 3, 256, 256, 256) >+>
+      Views.live
 
 }

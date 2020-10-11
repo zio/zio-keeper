@@ -130,10 +130,7 @@ object ViewsSpec extends KeeperSpec {
     passiveCapacity: Int,
     seed: Long = 0L
   ): ZLayer[TestRandom with TRandom, Nothing, Views] =
-    ZLayer.fromManaged {
-      for {
-        _     <- TestRandom.setSeed(seed).toManaged_
-        views <- Views.live(myself, activeCapacity, passiveCapacity).build
-      } yield views.get
-    }
+    (ZLayer.fromEffect(TestRandom.setSeed(seed)) ++ ZLayer.identity[TRandom]) >+>
+      HyParViewConfig.static(myself, activeCapacity, passiveCapacity, 0, 0, 0, 0, 0, 0, 0, 0, 256) >>>
+      Views.live
 }
