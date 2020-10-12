@@ -13,7 +13,7 @@ object MockConnectionSpec extends KeeperSpec {
     suite("MockConnection")(
       testM("emits messages") {
         val makeConnection = emit(1)
-        makeConnection.useTest { con =>
+        makeConnection.use { con =>
           assertM(Protocol.take(1).run(con))(isSome(hasSameElements(Chunk(1))))
         }
       },
@@ -22,7 +22,7 @@ object MockConnectionSpec extends KeeperSpec {
         val protocol = Protocol.fromFunction[Any, Nothing, Int, Int, Unit] { i: Int =>
           (Chunk.single(i + 1), Left(()))
         }
-        makeConnection.useTest { con =>
+        makeConnection.use { con =>
           assertM(protocol.run(con))(isSome(equalTo(())))
         }
       },
@@ -32,7 +32,7 @@ object MockConnectionSpec extends KeeperSpec {
           (Chunk.single(i), Left(()))
         }
         makeConnection
-          .useTest { con =>
+          .use { con =>
             assertM(protocol.run(con))(isNone)
           }
           .map(result => assert(result.failures)(isSome(anything)))
@@ -45,7 +45,7 @@ object MockConnectionSpec extends KeeperSpec {
               if (i > 4) (Chunk.empty, Left(i))
               else (Chunk.single(i + 1), Right(protocol))
           )
-        makeConnection.useTest { con =>
+        makeConnection.use { con =>
           assertM(Protocol.run(con, protocol))(isSome(equalTo(5)))
         }
       },
@@ -58,19 +58,19 @@ object MockConnectionSpec extends KeeperSpec {
               if (n >= 3) (Chunk.single(i), None)
               else (Chunk.single(i), Some(n + 1))
           }
-        makeConnection.useTest { con =>
+        makeConnection.use { con =>
           assertM(Protocol.run(con, protocol))(isSome(equalTo(3)))
         }
       },
       testM("closes stream when protocol is done") {
         val makeConnection = emit(1)
-        makeConnection.useTest { con =>
+        makeConnection.use { con =>
           assertM(Protocol.take(2).run(con))(isNone)
         }
       },
       testM("fails stream on fail") {
         val makeConnection = await(equalTo(2)) ++ fail("boom")
-        makeConnection.useTest { con =>
+        makeConnection.use { con =>
           val test =
             for {
               _      <- con.send(2).ignore

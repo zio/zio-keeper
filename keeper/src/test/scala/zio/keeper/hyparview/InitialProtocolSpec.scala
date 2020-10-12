@@ -27,7 +27,7 @@ object InitialProtocolSpec extends KeeperSpec {
                 emit(Message.Join(remoteAddress)) ++ await[Message](equalTo(Message.JoinReply(localAddress)))
               }
               makeConnection
-                .useTest { con =>
+                .use { con =>
                   for {
                     protoResult <- protocols.initialProtocol.run(con)
                   } yield assert(protoResult.flatten)(isSome(equalTo(remoteAddress)))
@@ -47,7 +47,7 @@ object InitialProtocolSpec extends KeeperSpec {
                 emit(Message.Join(remoteAddress)) ++ await[Message](equalTo(Message.JoinReply(localAddress)))
               }
               makeConnection
-                .useTest { con =>
+                .use { con =>
                   for {
                     ref    <- TRef.make[List[Message]](Nil).commit
                     _      <- Views.addToActiveView(existingAddress, m => ref.update(m :: _), STM.unit).commit
@@ -65,7 +65,7 @@ object InitialProtocolSpec extends KeeperSpec {
             emit(Message.ForwardJoinReply(remoteAddress))
           }
           makeConnection
-            .useTest { con =>
+            .use { con =>
               for {
                 result <- protocols.initialProtocol.run(con)
               } yield assert(result.flatten)(isSome(equalTo(remoteAddress)))
@@ -86,7 +86,7 @@ object InitialProtocolSpec extends KeeperSpec {
                 emit(Message.Neighbor(remoteAddress, false)) ++ await[Message](equalTo(Message.NeighborReject))
               }
               makeConnection
-                .useTest { con =>
+                .use { con =>
                   for {
                     _           <- Views.addToActiveView(existingAddress, _ => STM.unit, STM.unit).ignore.commit
                     protoResult <- protocols.initialProtocol.run(con)
@@ -107,7 +107,7 @@ object InitialProtocolSpec extends KeeperSpec {
                 emit(Message.Neighbor(remoteAddress, false)) ++ await[Message](equalTo(Message.NeighborAccept))
               }
               makeConnection
-                .useTest { con =>
+                .use { con =>
                   for {
                     protoResult <- protocols.initialProtocol.run(con)
                     viewsResult <- Views.passiveView.map(_.contains(remoteAddress)).commit
@@ -127,7 +127,7 @@ object InitialProtocolSpec extends KeeperSpec {
                 emit(Message.Neighbor(remoteAddress, true)) ++ await[Message](equalTo(Message.NeighborAccept))
               }
               makeConnection
-                .useTest { con =>
+                .use { con =>
                   for {
                     protoResult <- protocols.initialProtocol.run(con)
                     viewsResult <- Views.passiveView.map(_.contains(remoteAddress)).commit
@@ -148,7 +148,7 @@ object InitialProtocolSpec extends KeeperSpec {
                 emit(Message.Neighbor(remoteAddress, true)) ++ await[Message](equalTo(Message.NeighborAccept))
               }
               makeConnection
-                .useTest { con =>
+                .use { con =>
                   for {
                     _           <- Views.addToActiveView(existingAdress, _ => STM.unit, STM.unit).ignore.commit
                     protoResult <- protocols.initialProtocol.run(con)

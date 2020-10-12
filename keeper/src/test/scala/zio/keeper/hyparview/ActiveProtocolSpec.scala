@@ -43,11 +43,11 @@ object ActiveProtocolSpec extends KeeperSpec {
       )
     )
 
-  private def run(sender: NodeAddress, script: MockConnection[Nothing, Message, TestResult, Message])(
+  private def run(sender: NodeAddress, script: MockConnection[Nothing, Message, Message])(
     assertion: Assertion[List[(NodeAddress, Message.PeerMessage)]]
   ) = {
     val makeConnection = emit(Message.Join(sender)) ++ await[Message](equalTo(Message.JoinReply(address(0)))) ++ script
-    makeConnection.useTest { con =>
+    makeConnection.use { con =>
       for {
         peerMessages <- Queue.unbounded[(NodeAddress, Message.PeerMessage)]
         result <- protocols

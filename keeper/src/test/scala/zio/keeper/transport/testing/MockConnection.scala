@@ -6,80 +6,62 @@ import zio.stream.ZStream
 import zio.test.{ Assertion, TestResult, assert }
 import zio.keeper.transport.Connection
 
-sealed trait MockConnection[+E, -I, +V, +O] { self =>
+sealed trait MockConnection[+E, -I, +O] { self =>
   import MockConnection._
 
-  def ++ [E1 >: E, I1 <: I, V1 >: V, O1 >: O](that: MockConnection[E1, I1, V1, O1]): MockConnection[E1, I1, V1, O1] =
+  def ++ [E1 >: E, I1 <: I, O1 >: O](that: MockConnection[E1, I1, O1]): MockConnection[E1, I1, O1] =
     self.andThen(that)
 
-  def andThen[E1 >: E, I1 <: I, V1 >: V, O1 >: O](
-    that: MockConnection[E1, I1, V1, O1]
-  ): MockConnection[E1, I1, V1, O1] =
+  def andThen[E1 >: E, I1 <: I, O1 >: O](
+    that: MockConnection[E1, I1, O1]
+  ): MockConnection[E1, I1, O1] =
     AndThen(self, that)
-
-  def mapValidation[V1](f: V => V1): MockConnection[E, I, V1, O] = self match {
-    case AndThen(first, second) => first.mapValidation(f) ++ second.mapValidation(f)
-    case Await(assertion)       => Await(i => assertion(i).map(f))
-    case s @ EmitChunk(_)       => s
-    case s @ Fail(_)            => s
-  }
 
   lazy val render: String = self match {
     case AndThen(first, second) => s"(${first.render}) ++ (${second.render})"
-    case Await(_)               => "await(???)"
-    case EmitChunk(_)           => "emit(???)"
-    case Fail(_)                => "fail(???)"
+    case Await(await)           => s"await(${await.render})"
+    case EmitChunk(chunk)       => s"emit(${chunk.toString()})"
+    case Fail(e)                => s"fail(${e.toString()})"
   }
 
-  def repeat(n: Int): MockConnection[E, I, V, O] = {
-    def go(n: Int, acc: MockConnection[E, I, V, O]): MockConnection[E, I, V, O] =
+  def repeat(n: Int): MockConnection[E, I, O] = {
+    def go(n: Int, acc: MockConnection[E, I, O]): MockConnection[E, I, O] =
       if (n <= 0) acc
       else (go(n - 1, acc ++ self))
     go(n, self)
   }
 
   // run (runEmits, runOneAwait, runEmits) and compose results
-  def run(in: I): (Chunk[O], Either[V, Either[Option[E], MockConnection[E, I, V, O]]]) = {
-    val (out1, result) = runEmits
-    result.fold(
-      e => (out1, Right(Left(Some(e)))),
-      _.fold[(Chunk[O], Either[V, Either[Option[E], MockConnection[E, I, V, O]]])]((out1, Right(Left(None)))) { next1 =>
-        next1
-          .runOneAwait(in)
-          .fold(
-            v1 => (out1, Left(v1)),
-            _.fold[(Chunk[O], Either[V, Either[Option[E], MockConnection[E, I, V, O]]])]((out1, Right(Left(None)))) {
-              next2 =>
-                val (out2, result2) = next2.runEmits
-                result2.fold(
-                  e => (out1 ++ out2, Right(Left(Some(e)))),
-                  _.fold[(Chunk[O], Either[V, Either[Option[E], MockConnection[E, I, V, O]]])](
-                    (out1 ++ out2, Right(Left(None)))
-                  )(script => (out1 ++ out2, Right(Right(script))))
-                )
-            }
-          )
+  def run(in: I): (Chunk[O], ValidationResult, Either[Option[E], MockConnection[E, I, O]]) = {
+    val vEmpty          = ValidationResult.empty
+    val (out1, result1) = runEmits
+    result1.fold[(Chunk[O], ValidationResult, Either[Option[E], MockConnection[E, I, O]])](
+      _.fold((out1, vEmpty, Left[Option[E], Nothing](None)))(e => (out1, vEmpty, Left(Some(e)))),
+      next1 => {
+        val (v, result2) = next1.runOneAwait(in)
+        result2.fold[(Chunk[O], ValidationResult, Either[Option[E], MockConnection[E, I, O]])]((out1, v, Left(None))) {
+          next2 =>
+            val (out2, result3) = next2.runEmits
+            val out             = out1 ++ out2
+            result3.fold[(Chunk[O], ValidationResult, Either[Option[E], MockConnection[E, I, O]])](
+              _.fold((out, v, Left[Option[E], Nothing](None)))(e => (out, v, Left(Some(e)))),
+              next3 => (out, v, Right(next3))
+            )
+        }
       }
     )
   }
 
-  def use[R, E1 >: E, I1 <: I, V1 >: V, A](
-    initial: V1,
-    combine: (V1, V1) => V1,
-    onUnConsumed: MockConnection[E, I1, V1, O] => V1,
-    onUnexpected: I1 => V1
-  )(f: Connection[Any, E, I1, O] => ZIO[R, E1, A]): ZIO[R, E1, (A, V1)] =
-    Ref.make[V1](initial).flatMap { resultRef =>
+  def use[R, E1 >: E](f: Connection[Any, E, I, O] => ZIO[R, E1, TestResult]): ZIO[R, E1, TestResult] =
+    Ref.make[ValidationResult](ValidationResult.empty).flatMap { resultRef =>
       val connection = for {
         outbound <- Queue.unbounded[Take[E, O]].toManaged(_.shutdown)
         initial <- {
           val (out, result) = runEmits
           outbound.offer(Take.chunk(out)) *>
             result.fold(
-              e => outbound.offer(Take.fail(e)).as(None),
-              _.fold[UIO[Option[MockConnection[E, I1, V1, O]]]](outbound.offer(Take.end).as(None))(
-                next => ZIO.succeedNow(Some(next))
-              )
+              _.fold(outbound.offer(Take.end))(e => outbound.offer(Take.fail(e))).as(None),
+              next => ZIO.succeedNow(Some(next))
             )
         }.toManaged_
         stateRef <- Ref
@@ -89,34 +71,27 @@ sealed trait MockConnection[+E, -I, +V, +O] { self =>
                          _.fold(ZIO.unit)(
                            s =>
                              resultRef.update(
-                               combine(_, onUnConsumed(s))
+                               _.add(assert(s"Not entire script consumed. Remainder: ${s.render}")(Assertion.nothing))
                              )
                          )
                        )
                      )
-      } yield new Connection[Any, E, I1, O] {
+      } yield new Connection[Any, E, I, O] {
 
-        def send(data: I1): ZIO[Any, E, Unit] =
+        def send(data: I): ZIO[Any, E, Unit] =
           stateRef
             .modify {
               case None =>
                 (
                   resultRef
-                    .update(combine(_, onUnexpected(data)))
+                    .update(_.add(assert(s"Unexpected input: ${data.toString()}")(Assertion.anything)))
                     .as((Chunk.empty[O], Right(None))),
                   None
                 )
               case Some(script) =>
-                val (out, result) = script.run(data)
-                result.fold(
-                  v => (resultRef.update(combine(_, v)).as((out, Right(None))), None),
-                  _.fold(
-                    _.fold[(UIO[(Chunk[O], Either[Option[E], Unit])], Option[MockConnection[E, I1, V1, O]])](
-                      (ZIO.succeedNow((out, Left(None))), None)
-                    )(e => (ZIO.succeedNow((out, Left(Some(e)))), None)),
-                    script => (ZIO.succeedNow((out, Right(()))), Some(script))
-                  )
-                )
+                val (out, v, result) = script.run(data)
+                val next             = result.fold(_ => None, Some(_))
+                (resultRef.update(_ ++ v).as((out, result)), next)
             }
             .flatten
             .flatMap {
@@ -133,80 +108,62 @@ sealed trait MockConnection[+E, -I, +V, +O] { self =>
         val receive: ZStream[Any, E, O] =
           ZStream.repeatEffectChunkOption(outbound.take.flatMap(_.done))
       }
-      connection.use(f) &&& resultRef.get
+      connection.use(f).zipWith(resultRef.get) {
+        case (r1, r2) =>
+          r2.toTestResult.fold(r1)(r1 && _)
+      }
     }
 
-  def useTest[R, E1 >: E](
-    f: Connection[Any, E, I, O] => ZIO[R, E1, TestResult]
-  )(implicit ev: V <:< TestResult): ZIO[R, E1, TestResult] = {
-    val script: MockConnection[E, I, TestResult, O] = self.mapValidation(ev)
-    script
-      .use[R, E1, I, TestResult, TestResult](
-        assert(())(Assertion.anything),
-        _ && _,
-        s => assert(s"Not entire script consumed. Remainder: ${s.render}")(Assertion.nothing),
-        i => assert(s"Unexpected input: ${i.toString()}")(Assertion.anything)
-      )(f)
-      .map { case (v1, v2) => v1 && v2 }
-  }
-
-  private lazy val runEmits: (Chunk[O], Either[E, Option[MockConnection[E, I, V, O]]]) =
+  private lazy val runEmits: (Chunk[O], Either[Option[E], MockConnection[E, I, O]]) =
     self match {
       case AndThen(first, second) =>
         val (out1, next1) = first.runEmits
         next1.fold(
-          e => (out1, Left(e)),
-          _.fold {
+          _.fold({
             val (out2, next2) = second.runEmits
             (out1 ++ out2, next2)
-          } { next =>
-            (out1, Right(Some(next ++ second)))
-          }
+          })(e => (out1, Left(Some(e)))),
+          next => (out1, Right(next ++ second))
         )
-      case EmitChunk(values) => (values, Right(None))
-      case Fail(value)       => (Chunk.empty, Left(value))
-      case script            => (Chunk.empty, Right(Some(script)))
+      case EmitChunk(values) => (values, Left(None))
+      case Fail(value)       => (Chunk.empty, Left(Some(value)))
+      case script            => (Chunk.empty, Right(script))
     }
 
-  private def runOneAwait(in: I): Either[V, Option[MockConnection[E, I, V, O]]] =
+  private def runOneAwait(in: I): (ValidationResult, Option[MockConnection[E, I, O]]) =
     self match {
       case AndThen(first, second) =>
-        first.runOneAwait(in).map(_.fold(Some(second))(remaining => Some(remaining ++ second)))
+        val (v, result) = first.runOneAwait(in)
+        val next        = if (v.continue) result.fold(Some(second))(remaining => Some(remaining ++ second)) else None
+        (v, next)
       case Await(assertion) =>
-        assertion(in).fold[Either[V, None.type]](Right(None))(Left(_))
+        (ValidationResult.of(assert(in)(assertion)), None)
       case script =>
-        Right(Some(script))
+        (ValidationResult.empty, Some(script))
     }
-
 }
 
 object MockConnection {
 
-  final case class AndThen[E, I, V, O](first: MockConnection[E, I, V, O], second: MockConnection[E, I, V, O])
-      extends MockConnection[E, I, V, O]
-  final case class Await[I, V](assertion: I => Option[V]) extends MockConnection[Nothing, I, V, Nothing]
-  final case class EmitChunk[O](values: Chunk[O])         extends MockConnection[Nothing, Any, Nothing, O]
-  final case class Fail[E](value: E)                      extends MockConnection[E, Any, Nothing, Nothing]
+  final case class AndThen[E, I, O](first: MockConnection[E, I, O], second: MockConnection[E, I, O])
+      extends MockConnection[E, I, O]
+  final case class Await[I](assertion: Assertion[I]) extends MockConnection[Nothing, I, Nothing]
+  final case class EmitChunk[O](values: Chunk[O])    extends MockConnection[Nothing, Any, O]
+  final case class Fail[E](value: E)                 extends MockConnection[E, Any, Nothing]
 
-  def await[I](assertion: Assertion[I]): MockConnection[Nothing, I, TestResult, Nothing] = {
-    def f = (in: I) => {
-      val result = assert(in)(assertion)
-      if (result.isSuccess) None
-      else Some(result)
-    }
-    Await(f)
-  }
+  def await[I](assertion: Assertion[I]): MockConnection[Nothing, I, Nothing] =
+    Await(assertion)
 
-  def emit[O](value: O): MockConnection[Nothing, Any, Nothing, O] =
+  def emit[O](value: O): MockConnection[Nothing, Any, O] =
     emitChunk(Chunk.single(value))
 
-  def emitAll[O](values: O*): MockConnection[Nothing, Any, Nothing, O] =
+  def emitAll[O](values: O*): MockConnection[Nothing, Any, O] =
     emitChunk(Chunk.fromIterable(values))
 
-  def emitChunk[O](values: Chunk[O]): MockConnection[Nothing, Any, Nothing, O] =
+  def emitChunk[O](values: Chunk[O]): MockConnection[Nothing, Any, O] =
     EmitChunk(values)
 
-  def fail[E](e: E): MockConnection[E, Any, Nothing, Nothing] =
+  def fail[E](e: E): MockConnection[E, Any, Nothing] =
     Fail(e)
 
 }
