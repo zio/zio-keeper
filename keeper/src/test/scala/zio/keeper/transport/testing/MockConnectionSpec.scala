@@ -94,11 +94,11 @@ object ProtocolSpec extends KeeperSpec {
         def protocol: Protocol[Any, Nothing, Int, Int, Int] =
           Protocol.fold(0) {
             case (n, i) =>
-              if (n >= 2) (Chunk.empty, None)
+              if (n >= 3) (Chunk.single(i), None)
               else (Chunk.single(i), Some(n + 1))
           }
         makeConnection.use { con =>
-          assertM(Protocol.run(con, protocol))(isSome(equalTo(2)))
+          assertM(Protocol.run(con, protocol))(isSome(equalTo(3)))
         }
       },
       testM("closes stream when protocol is done") {

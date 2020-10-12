@@ -168,15 +168,19 @@ object protocols {
     for {
       env          <- ZManaged.environment[R]
       disconnected <- Promise.make[Nothing, Unit].toManaged_
-      keepRef      <- TRef.make(false).commit.toManaged_
+      keepRef      <- TRef.make[Option[Boolean]](None).commit.toManaged_
       queue        <- TQueue.bounded[Either[Boolean, Message]](256).commit.toManaged_
       _ <- ZStream
             .fromTQueue(queue)
             .foldManagedM(true) {
+              case (true, Right(msg @ Message.Disconnect(_))) =>
+                send(msg) *> disconnected.succeed(()).as(false)
               case (true, Right(message)) =>
                 send(message).as(true)
-              case (true, Left(keep)) =>
-                (send(Message.Disconnect(keep)) *> disconnected.succeed(())).as(false)
+              case (true, Left(false)) =>
+                disconnected.succeed(()).as(false)
+              case (true, Left(true)) =>
+                (send(Message.Disconnect(true)) *> disconnected.succeed(())).as(false)
               case _ =>
                 ZIO.succeedNow(false)
             }
@@ -184,14 +188,14 @@ object protocols {
             .fork
       signalDisconnect = for {
         keep <- keepRef.get
-        _    <- Views.addToPassiveView(remoteAddress).when(keep)
-        _    <- queue.offer(Left(keep))
+        _    <- Views.addToPassiveView(remoteAddress).when(keep.getOrElse(false))
+        _    <- queue.offer(Left(keep.fold(true)(_ => false)))
       } yield ()
 
       _ <- Views
             .addToActiveView(remoteAddress, msg => queue.offer(Right(msg)), signalDisconnect.provide(env))
             .commit
             .toManaged(_ => Views.removeFromActiveView(remoteAddress).commit *> disconnected.await)
-    } yield (b: Boolean) => keepRef.set(b).commit
+    } yield (b: Boolean) => keepRef.set(Some(b)).commit
 
 }

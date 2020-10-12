@@ -20,6 +20,14 @@ object MockConnection {
     def andThen[E1 >: E, I1 <: I, O1 >: O](that: Script[E1, I1, O1]): Script[E1, I1, O1] =
       AndThen(self, that)
 
+    lazy val render: String = self match {
+      case AndThen(first, second) => s"(${first.render}) ++ (${second.render})"
+      case Or(first, second)      => s"(${first.render}) <|> (${second.render})"
+      case Await(_)               => "await(???)"
+      case EmitChunk(_)           => "emit(???)"
+      case Fail(_)                => "fail(???)"
+    }
+
     def repeat(n: Int): Script[E, I, O] = {
       def go(n: Int, acc: Script[E, I, O]): Script[E, I, O] =
         if (n <= 0) acc
@@ -136,17 +144,24 @@ object MockConnection {
             _.fold[UIO[Option[Script[E, I, O]]]](outbound.offer(Take.end).as(None))(next => ZIO.succeedNow(Some(next)))
           )
       }.toManaged_
-      stateRef <- Ref.makeManaged(initial)
+      stateRef <- Ref
+                   .make(initial)
+                   .toManaged(
+                     _.get.flatMap(
+                       _.fold(ZIO.unit)(s => ZIO.dieMessage(s"Not entire script consumed. Remainder: ${s.render}"))
+                     )
+                   )
     } yield new Connection[Any, E, I, O] {
 
       def send(data: I): ZIO[Any, E, Unit] =
         stateRef
           .modify {
-            case None => ((Chunk.empty, Right(None)), None)
+            case None => (ZIO.dieMessage(s"unexpected message received ${data.toString}"), None)
             case Some(script) =>
               val (out, result) = script.run(data)
-              ((out, result), result.toOption.flatten)
+              (ZIO.succeedNow((out, result)), result.toOption.flatten)
           }
+          .flatten
           .flatMap {
             case (out, result) =>
               outbound.offer(Take.chunk(out)) *>

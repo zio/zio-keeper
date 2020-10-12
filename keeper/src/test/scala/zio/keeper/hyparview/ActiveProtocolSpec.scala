@@ -20,7 +20,7 @@ object ActiveProtocolSpec extends KeeperSpec {
               for {
                 result <- run(
                            address,
-                           MC.emit(Message.Disconnect(true)) ++ MC.await(equalTo(Message.Disconnect(true)))
+                           MC.emit(Message.Disconnect(true))
                          )(isEmpty)
                 passive <- Views.passiveView.commit
               } yield result && assert(passive)(contains(address))
@@ -32,7 +32,7 @@ object ActiveProtocolSpec extends KeeperSpec {
             val test = for {
               result <- run(
                          address,
-                         MC.emit(Message.Disconnect(false)) ++ MC.await(equalTo(Message.Disconnect(false)))
+                         MC.emit(Message.Disconnect(false))
                        )(isEmpty)
               passive <- Views.passiveView.commit
             } yield result && assert(passive)(isEmpty)
