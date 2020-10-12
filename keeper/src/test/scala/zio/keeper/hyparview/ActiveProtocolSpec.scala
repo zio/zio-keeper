@@ -8,6 +8,7 @@ import zio._
 import zio.keeper.gens
 import zio.test.Assertion._
 import zio.logging.Logging
+import zio.keeper.transport.testing.MockConnection
 
 object ActiveProtocolSpec extends KeeperSpec {
 
@@ -42,7 +43,7 @@ object ActiveProtocolSpec extends KeeperSpec {
       )
     )
 
-  private def run(sender: NodeAddress, script: Script[Nothing, Message, TestResult, Message])(
+  private def run(sender: NodeAddress, script: MockConnection[Nothing, Message, TestResult, Message])(
     assertion: Assertion[List[(NodeAddress, Message.PeerMessage)]]
   ) = {
     val makeConnection = emit(Message.Join(sender)) ++ await[Message](equalTo(Message.JoinReply(address(0)))) ++ script
