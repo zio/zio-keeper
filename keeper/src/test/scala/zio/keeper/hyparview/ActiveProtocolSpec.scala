@@ -2,7 +2,7 @@ package zio.keeper.hyparview
 
 import zio.keeper.KeeperSpec
 import zio.test._
-import zio.keeper.transport.testing.{ MockConnection => MC }
+import zio.keeper.transport.testing.MockConnection._
 import zio.keeper.NodeAddress
 import zio._
 import zio.keeper.gens
@@ -20,7 +20,7 @@ object ActiveProtocolSpec extends KeeperSpec {
               for {
                 result <- run(
                            address,
-                           MC.emit(Message.Disconnect(true))
+                           emit(Message.Disconnect(true))
                          )(isEmpty)
                 passive <- Views.passiveView.commit
               } yield result && assert(passive)(contains(address))
@@ -32,7 +32,7 @@ object ActiveProtocolSpec extends KeeperSpec {
             val test = for {
               result <- run(
                          address,
-                         MC.emit(Message.Disconnect(false))
+                         emit(Message.Disconnect(false))
                        )(isEmpty)
               passive <- Views.passiveView.commit
             } yield result && assert(passive)(isEmpty)
@@ -42,18 +42,20 @@ object ActiveProtocolSpec extends KeeperSpec {
       )
     )
 
-  private def run(sender: NodeAddress, script: MC.Script[TestResult, Message, Message])(
+  private def run(sender: NodeAddress, script: Script[Nothing, Message, TestResult, Message])(
     assertion: Assertion[List[(NodeAddress, Message.PeerMessage)]]
-  ) =
-    MC.make(MC.emit(Message.Join(sender)) ++ MC.await[Message](equalTo(Message.JoinReply(address(0)))) ++ script).use {
-      con =>
-        for {
-          peerMessages <- Queue.unbounded[(NodeAddress, Message.PeerMessage)]
-          result <- protocols
-                     .hyparview(con, peerMessages)
-                     .foldM(ZIO.succeedNow, _ => peerMessages.takeAll.map(assert(_)(assertion)))
-        } yield result
+  ) = {
+    val makeConnection = emit(Message.Join(sender)) ++ await[Message](equalTo(Message.JoinReply(address(0)))) ++ script
+    makeConnection.useTest { con =>
+      for {
+        peerMessages <- Queue.unbounded[(NodeAddress, Message.PeerMessage)]
+        result <- protocols
+                   .hyparview(con, peerMessages)
+                   .run
+        out <- peerMessages.takeAll
+      } yield assert(result)(succeeds(anything)) && assert(out)(assertion)
     }
+  }
 
   private val defaultEnv =
     ZLayer.identity[Sized] ++

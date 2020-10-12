@@ -5,7 +5,7 @@ import zio.test._
 import zio.test.Assertion._
 import zio.keeper.KeeperSpec
 import zio.keeper.gens
-import zio.keeper.transport.testing.MockConnection
+import zio.keeper.transport.testing.MockConnection._
 import zio.logging.Logging
 import zio.ZLayer
 import zio.keeper.NodeAddress
@@ -24,19 +24,15 @@ object InitialProtocolSpec extends KeeperSpec {
           checkM(gen) {
             case (localAddress, remoteAddress) =>
               val makeConnection = {
-                import MockConnection._
-                make(
-                  emit(Message.Join(remoteAddress))
-                    ++ await[Message](equalTo(Message.JoinReply(localAddress)))
-                )
+                emit(Message.Join(remoteAddress)) ++ await[Message](equalTo(Message.JoinReply(localAddress)))
               }
-              val test = makeConnection.use { con =>
-                for {
-                  protoResult <- protocols.initialProtocol.run(con)
-                } yield protoResult.flatten
-              }
-              val env = defaultEnv >+> overrideEnv(localAddress, 1, 1)
-              assertM(test.provideLayer(env))(isSome(equalTo(remoteAddress)))
+              makeConnection
+                .useTest { con =>
+                  for {
+                    protoResult <- protocols.initialProtocol.run(con)
+                  } yield assert(protoResult.flatten)(isSome(equalTo(remoteAddress)))
+                }
+                .provideLayer(env(localAddress, 1, 1))
           }
         },
         testM("should send ForwardJoin to every other member of active view") {
@@ -48,35 +44,33 @@ object InitialProtocolSpec extends KeeperSpec {
           checkM(gen) {
             case (localAddress, remoteAddress, existingAddress) =>
               val makeConnection = {
-                import MockConnection._
-                make(
-                  emit(Message.Join(remoteAddress)) ++
-                    await[Message](equalTo(Message.JoinReply(localAddress)))
-                )
+                emit(Message.Join(remoteAddress)) ++ await[Message](equalTo(Message.JoinReply(localAddress)))
               }
-              val test = makeConnection.use { con =>
-                for {
-                  ref    <- TRef.make[List[Message]](Nil).commit
-                  _      <- Views.addToActiveView(existingAddress, m => ref.update(m :: _), STM.unit).commit
-                  _      <- protocols.initialProtocol.run(con)
-                  result <- ref.get.commit
-                } yield result
-              }
-              val env = defaultEnv >+> overrideEnv(localAddress, 10, 10)
-              assertM(test.provideLayer(env))(equalTo(List(Message.ForwardJoin(remoteAddress, TimeToLive(5)))))
+              makeConnection
+                .useTest { con =>
+                  for {
+                    ref    <- TRef.make[List[Message]](Nil).commit
+                    _      <- Views.addToActiveView(existingAddress, m => ref.update(m :: _), STM.unit).commit
+                    _      <- protocols.initialProtocol.run(con)
+                    result <- ref.get.commit
+                  } yield assert(result)(equalTo(List(Message.ForwardJoin(remoteAddress, TimeToLive(5)))))
+                }
+                .provideLayer(env(localAddress, 10, 10))
           }
         }
       ),
       testM("succeeds with sender on receiving ForwardJoinReply") {
         checkM(gens.nodeAddress) { remoteAddress =>
           val makeConnection = {
-            import MockConnection._
-            make(
-              emit(Message.ForwardJoinReply(remoteAddress))
-            )
+            emit(Message.ForwardJoinReply(remoteAddress))
           }
-          val test = makeConnection.use(protocols.initialProtocol.run(_)).map(_.flatten)
-          assertM(test.provideLayer(defaultEnv))(isSome(equalTo(remoteAddress)))
+          makeConnection
+            .useTest { con =>
+              for {
+                result <- protocols.initialProtocol.run(con)
+              } yield assert(result.flatten)(isSome(equalTo(remoteAddress)))
+            }
+            .provideLayer(defaultEnv)
         }
       },
       suite("on receiving a neighbor message")(
@@ -89,21 +83,17 @@ object InitialProtocolSpec extends KeeperSpec {
           checkM(gen) {
             case (localAddress, remoteAddress, existingAddress) =>
               val makeConnection = {
-                import MockConnection._
-                make(
-                  emit(Message.Neighbor(remoteAddress, false))
-                    ++ await[Message](equalTo(Message.NeighborReject))
-                )
+                emit(Message.Neighbor(remoteAddress, false)) ++ await[Message](equalTo(Message.NeighborReject))
               }
-              val test = makeConnection.use { con =>
-                for {
-                  _           <- Views.addToActiveView(existingAddress, _ => STM.unit, STM.unit).ignore.commit
-                  protoResult <- protocols.initialProtocol.run(con)
-                  viewsResult <- Views.passiveView.map(_.contains(remoteAddress)).commit
-                } yield protoResult.map((_, viewsResult))
-              }
-              val env = defaultEnv >+> overrideEnv(localAddress, 1, 1)
-              assertM(test.provideLayer(env))(isSome(equalTo((None, true))))
+              makeConnection
+                .useTest { con =>
+                  for {
+                    _           <- Views.addToActiveView(existingAddress, _ => STM.unit, STM.unit).ignore.commit
+                    protoResult <- protocols.initialProtocol.run(con)
+                    viewsResult <- Views.passiveView.map(_.contains(remoteAddress)).commit
+                  } yield assert(protoResult.map((_, viewsResult)))(isSome(equalTo((None, true))))
+                }
+                .provideLayer(env(localAddress, 1, 1))
           }
         },
         testM("should reject if not high priority and activeView is not full") {
@@ -114,20 +104,16 @@ object InitialProtocolSpec extends KeeperSpec {
           checkM(gen) {
             case (localAddress, remoteAddress) =>
               val makeConnection = {
-                import MockConnection._
-                make(
-                  emit(Message.Neighbor(remoteAddress, false))
-                    ++ await[Message](equalTo(Message.NeighborAccept))
-                )
+                emit(Message.Neighbor(remoteAddress, false)) ++ await[Message](equalTo(Message.NeighborAccept))
               }
-              val test = makeConnection.use { con =>
-                for {
-                  protoResult <- protocols.initialProtocol.run(con)
-                  viewsResult <- Views.passiveView.map(_.contains(remoteAddress)).commit
-                } yield protoResult.map((_, viewsResult))
-              }
-              val env = defaultEnv >+> overrideEnv(localAddress, 1, 1)
-              assertM(test.provideLayer(env))(isSome(equalTo((Some(remoteAddress), false))))
+              makeConnection
+                .useTest { con =>
+                  for {
+                    protoResult <- protocols.initialProtocol.run(con)
+                    viewsResult <- Views.passiveView.map(_.contains(remoteAddress)).commit
+                  } yield assert(protoResult.map((_, viewsResult)))(isSome(equalTo((Some(remoteAddress), false))))
+                }
+                .provideLayer(env(localAddress, 1, 1))
           }
         },
         testM("should accept if high priority and activeView is not full") {
@@ -138,20 +124,16 @@ object InitialProtocolSpec extends KeeperSpec {
           checkM(gen) {
             case (localAddress, remoteAddress) =>
               val makeConnection = {
-                import MockConnection._
-                make(
-                  emit(Message.Neighbor(remoteAddress, true))
-                    ++ await[Message](equalTo(Message.NeighborAccept))
-                )
+                emit(Message.Neighbor(remoteAddress, true)) ++ await[Message](equalTo(Message.NeighborAccept))
               }
-              val test = makeConnection.use { con =>
-                for {
-                  protoResult <- protocols.initialProtocol.run(con)
-                  viewsResult <- Views.passiveView.map(_.contains(remoteAddress)).commit
-                } yield protoResult.map((_, viewsResult))
-              }
-              val env = defaultEnv >+> overrideEnv(localAddress, 1, 1)
-              assertM(test.provideLayer(env))(isSome(equalTo((Some(remoteAddress), false))))
+              makeConnection
+                .useTest { con =>
+                  for {
+                    protoResult <- protocols.initialProtocol.run(con)
+                    viewsResult <- Views.passiveView.map(_.contains(remoteAddress)).commit
+                  } yield assert(protoResult.map((_, viewsResult)))(isSome(equalTo((Some(remoteAddress), false))))
+                }
+                .provideLayer(env(localAddress, 1, 1))
           }
         },
         testM("should accept if high priority and activeView is full") {
@@ -163,31 +145,31 @@ object InitialProtocolSpec extends KeeperSpec {
           checkM(gen) {
             case (localAddress, remoteAddress, existingAdress) =>
               val makeConnection = {
-                import MockConnection._
-                make(
-                  emit(Message.Neighbor(remoteAddress, true))
-                    ++ await[Message](equalTo(Message.NeighborAccept))
-                )
+                emit(Message.Neighbor(remoteAddress, true)) ++ await[Message](equalTo(Message.NeighborAccept))
               }
-              val test = makeConnection.use { con =>
-                for {
-                  _           <- Views.addToActiveView(existingAdress, _ => STM.unit, STM.unit).ignore.commit
-                  protoResult <- protocols.initialProtocol.run(con)
-                  viewsResult <- Views.passiveView.map(_.contains(remoteAddress)).commit
-                } yield protoResult.map((_, viewsResult))
-              }
-              val env = defaultEnv >+> overrideEnv(localAddress, 1, 1)
-              assertM(test.provideLayer(env))(isSome(equalTo((Some(remoteAddress), false))))
+              makeConnection
+                .useTest { con =>
+                  for {
+                    _           <- Views.addToActiveView(existingAdress, _ => STM.unit, STM.unit).ignore.commit
+                    protoResult <- protocols.initialProtocol.run(con)
+                    viewsResult <- Views.passiveView.map(_.contains(remoteAddress)).commit
+                  } yield assert(protoResult.map((_, viewsResult)))(isSome(equalTo((Some(remoteAddress), false))))
+                }
+                .provideLayer(env(localAddress, 1, 1))
           }
         }
       )
     )
 
   private val defaultEnv: ZLayer[Random, Nothing, TRandom with HyParViewConfig with Logging with Views] =
-    TRandom.live >+> HyParViewConfig.static(address(0), 10, 10, 5, 3, 2, 2, 3, 256, 10, 10) >+> Logging.ignore >+> Views.live
+    env(address(0), 10, 10)
 
-  private def overrideEnv(address: NodeAddress, activeViewCapacity: Int, passiveViewCapacity: Int) =
-    ZLayer.identity[TRandom with Logging] >+> HyParViewConfig.static(
+  private def env(
+    address: NodeAddress,
+    activeViewCapacity: Int,
+    passiveViewCapacity: Int
+  ): ZLayer[Random, Nothing, TRandom with HyParViewConfig with Logging with Views] =
+    TRandom.live >+> HyParViewConfig.static(
       address,
       activeViewCapacity,
       passiveViewCapacity,
@@ -199,5 +181,5 @@ object InitialProtocolSpec extends KeeperSpec {
       256,
       10,
       10
-    ) >+> Views.live
+    ) >+> Logging.ignore >+> Views.live
 }
