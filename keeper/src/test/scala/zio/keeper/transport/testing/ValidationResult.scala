@@ -19,6 +19,9 @@ final case class ValidationResult(values: List[TestResult]) { self =>
       case (Some(fst), snd) => Some((fst ==> snd) && fst)
     }
 
+  def transform(f: TestResult => TestResult): ValidationResult =
+    ValidationResult(values.map(f))
+
 }
 
 object ValidationResult {

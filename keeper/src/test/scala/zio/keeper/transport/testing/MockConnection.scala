@@ -110,7 +110,9 @@ sealed trait MockConnection[+E, -I, +O] { self =>
       }
       connection.use(f).zipWith(resultRef.get) {
         case (r1, r2) =>
-          r2.toTestResult.fold(r1)(r1 && _)
+          val r1L = r1.map(_.label("User"))
+          val r2L = r2.transform(_.map(_.label("MockConnection")))
+          r2L.toTestResult.fold(r1L)(_ && r1L)
       }
     }
 
