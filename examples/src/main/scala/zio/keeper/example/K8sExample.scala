@@ -3,7 +3,7 @@ package zio.keeper.example
 import upickle.default._
 import zio._
 import zio.clock._
-import zio.config.ZConfig
+import zio.config.getConfig
 import zio.duration._
 import zio.keeper.ByteCodec
 import zio.keeper.discovery.Discovery
@@ -21,7 +21,7 @@ object K8sTestNode extends zio.App {
   val discovery =
     ZLayer.fromManaged(
       for {
-        config <- ZManaged.environment[ZConfig[SwimConfig]].map(_.get)
+        config <- getConfig[SwimConfig].toManaged_
         serviceDns <- InetAddress
                        .byName("zio-keeper-node.zio-keeper-experiment.svc.cluster.local")
                        .orDie

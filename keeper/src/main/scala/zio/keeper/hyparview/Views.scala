@@ -104,7 +104,7 @@ object Views {
           }
 
         override def addToActiveView(node: NodeAddress, send: Message => USTM[_], disconnect: USTM[_]): USTM[Unit] =
-          STM.when(!(node == config.address)) {
+          STM.unless(node == config.address) {
             ZSTM.ifM(activeViewState.contains(node))(
               {
                 for {
@@ -184,7 +184,7 @@ object Views {
             )
 
         private def dropNFromPassive(n: Int): USTM[Unit] =
-          if (n <= 0) STM.unit else (dropOneFromPassive *> dropNFromPassive(n - 1))
+          (dropOneFromPassive *> dropNFromPassive(n - 1)).when(n > 0)
 
         private val dropOneFromPassive: USTM[Unit] =
           for {
