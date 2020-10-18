@@ -85,7 +85,7 @@ sealed trait MockConnection[+E, -I, +O] { self =>
                 (
                   resultRef
                     .update(_.add(assert(s"Unexpected input: ${data.toString()}")(Assertion.anything)))
-                    .as((Chunk.empty[O], Right(None))),
+                    .as((Chunk.empty, Right(None))),
                   None
                 )
               case Some(script) =>
