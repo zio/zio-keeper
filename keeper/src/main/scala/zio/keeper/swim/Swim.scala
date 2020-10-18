@@ -21,7 +21,7 @@ object Swim {
     def send(data: A, receipt: NodeAddress): UIO[Unit]
   }
 
-  type SwimEnv = Config[SwimConfig] with Discovery with Logging with Clock
+  type SwimEnv = ZConfig[SwimConfig] with Discovery with Logging with Clock
 
   final private[this] val QueueSize = 1000
 
@@ -33,7 +33,7 @@ object Swim {
         Nodes.live ++
         MessageAcknowledge.live) >+> ZLayer.fromManagedMany(
         for {
-          swimConfig <- config[SwimConfig].toManaged_
+          swimConfig <- getConfig[SwimConfig].toManaged_
           layer <- (LocalHealthMultiplier.live(swimConfig.localHealthMaxMultiplier) ++
                     SuspicionTimeout.live(
                       swimConfig.protocolInterval,
@@ -47,7 +47,7 @@ object Swim {
     val managed =
       for {
         env              <- ZManaged.environment[ConversationId with Nodes]
-        swimConfig       <- config[SwimConfig].toManaged_
+        swimConfig       <- getConfig[SwimConfig].toManaged_
         _                <- log.info("starting SWIM on port: " + swimConfig.port).toManaged_
         udpTransport     <- transport.udp.live(swimConfig.messageSizeLimit).build.map(_.get)
         userIn           <- Queue.bounded[Message.Direct[B]](QueueSize).toManaged(_.shutdown)

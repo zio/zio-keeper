@@ -34,6 +34,8 @@ object SerializationError {
 
 }
 
+final case class ProtocolError(override val msg: String) extends Error
+
 final case class ServiceDiscoveryError(override val msg: String) extends Error
 
 sealed abstract class ClusterError(msg: String = "") extends Error(msg = msg)
@@ -58,7 +60,10 @@ sealed abstract class TransportError(msg: String = "", cause: Throwable = null) 
 object TransportError {
 
   final case class ExceptionWrapper(throwable: Throwable)
-      extends TransportError(msg = "Exception in transport", cause = throwable)
+      extends TransportError(
+        msg = s"Exception in transport: ${throwable.getStackTrace().toList.toString()}",
+        cause = throwable
+      )
 
   final case class MaxConnectionsReached(n: Int) extends TransportError(msg = s"Reached max connections: $n")
 
