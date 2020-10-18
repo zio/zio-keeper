@@ -20,7 +20,7 @@ trait ByteCodec[A] { self =>
     ByteCodec.instance { chunk =>
       val (sizeChunk, dataChunk) = chunk.splitAt(4)
       for {
-        split  <- byteArrayToInt(sizeChunk.toArray)
+        split  <- byteChunkToInt(sizeChunk)
         first  <- self.fromChunk(dataChunk.take(split))
         second <- that.fromChunk(dataChunk.drop(split))
       } yield (first, second)
@@ -28,7 +28,7 @@ trait ByteCodec[A] { self =>
       case (first, second) =>
         self.toChunk(first).zipWith(that.toChunk(second)) {
           case (firstChunk, secondChunk) =>
-            val sizeChunk = Chunk.fromArray(intToByteArray(firstChunk.size))
+            val sizeChunk = intToByteChunk(firstChunk.size)
             sizeChunk ++ firstChunk ++ secondChunk
         }
     }
@@ -223,6 +223,314 @@ object ByteCodec {
           case 7 => ByteCodec[A8].unsafeWiden[A]
         }
       )
+
+    def apply[
+      A1 <: A: ByteCodec: ClassTag,
+      A2 <: A: ByteCodec: ClassTag,
+      A3 <: A: ByteCodec: ClassTag,
+      A4 <: A: ByteCodec: ClassTag,
+      A5 <: A: ByteCodec: ClassTag,
+      A6 <: A: ByteCodec: ClassTag,
+      A7 <: A: ByteCodec: ClassTag,
+      A8 <: A: ByteCodec: ClassTag,
+      A9 <: A: ByteCodec: ClassTag
+    ]: ByteCodec[A] =
+      taggedInstance[A](
+        {
+          case _: A1 => 0
+          case _: A2 => 1
+          case _: A3 => 2
+          case _: A4 => 3
+          case _: A5 => 4
+          case _: A6 => 5
+          case _: A7 => 6
+          case _: A8 => 7
+          case _: A9 => 8
+        }, {
+          case 0 => ByteCodec[A1].unsafeWiden[A]
+          case 1 => ByteCodec[A2].unsafeWiden[A]
+          case 2 => ByteCodec[A3].unsafeWiden[A]
+          case 3 => ByteCodec[A4].unsafeWiden[A]
+          case 4 => ByteCodec[A5].unsafeWiden[A]
+          case 5 => ByteCodec[A6].unsafeWiden[A]
+          case 6 => ByteCodec[A7].unsafeWiden[A]
+          case 7 => ByteCodec[A8].unsafeWiden[A]
+          case 8 => ByteCodec[A9].unsafeWiden[A]
+        }
+      )
+
+    def apply[
+      A1 <: A: ByteCodec: ClassTag,
+      A2 <: A: ByteCodec: ClassTag,
+      A3 <: A: ByteCodec: ClassTag,
+      A4 <: A: ByteCodec: ClassTag,
+      A5 <: A: ByteCodec: ClassTag,
+      A6 <: A: ByteCodec: ClassTag,
+      A7 <: A: ByteCodec: ClassTag,
+      A8 <: A: ByteCodec: ClassTag,
+      A9 <: A: ByteCodec: ClassTag,
+      A10 <: A: ByteCodec: ClassTag
+    ]: ByteCodec[A] =
+      taggedInstance[A](
+        {
+          case _: A1  => 0
+          case _: A2  => 1
+          case _: A3  => 2
+          case _: A4  => 3
+          case _: A5  => 4
+          case _: A6  => 5
+          case _: A7  => 6
+          case _: A8  => 7
+          case _: A9  => 8
+          case _: A10 => 9
+        }, {
+          case 0 => ByteCodec[A1].unsafeWiden[A]
+          case 1 => ByteCodec[A2].unsafeWiden[A]
+          case 2 => ByteCodec[A3].unsafeWiden[A]
+          case 3 => ByteCodec[A4].unsafeWiden[A]
+          case 4 => ByteCodec[A5].unsafeWiden[A]
+          case 5 => ByteCodec[A6].unsafeWiden[A]
+          case 6 => ByteCodec[A7].unsafeWiden[A]
+          case 7 => ByteCodec[A8].unsafeWiden[A]
+          case 8 => ByteCodec[A9].unsafeWiden[A]
+          case 9 => ByteCodec[A10].unsafeWiden[A]
+        }
+      )
+
+    def apply[
+      A1 <: A: ByteCodec: ClassTag,
+      A2 <: A: ByteCodec: ClassTag,
+      A3 <: A: ByteCodec: ClassTag,
+      A4 <: A: ByteCodec: ClassTag,
+      A5 <: A: ByteCodec: ClassTag,
+      A6 <: A: ByteCodec: ClassTag,
+      A7 <: A: ByteCodec: ClassTag,
+      A8 <: A: ByteCodec: ClassTag,
+      A9 <: A: ByteCodec: ClassTag,
+      A10 <: A: ByteCodec: ClassTag,
+      A11 <: A: ByteCodec: ClassTag
+    ]: ByteCodec[A] =
+      taggedInstance[A](
+        {
+          case _: A1  => 0
+          case _: A2  => 1
+          case _: A3  => 2
+          case _: A4  => 3
+          case _: A5  => 4
+          case _: A6  => 5
+          case _: A7  => 6
+          case _: A8  => 7
+          case _: A9  => 8
+          case _: A10 => 9
+          case _: A11 => 10
+        }, {
+          case 0  => ByteCodec[A1].unsafeWiden[A]
+          case 1  => ByteCodec[A2].unsafeWiden[A]
+          case 2  => ByteCodec[A3].unsafeWiden[A]
+          case 3  => ByteCodec[A4].unsafeWiden[A]
+          case 4  => ByteCodec[A5].unsafeWiden[A]
+          case 5  => ByteCodec[A6].unsafeWiden[A]
+          case 6  => ByteCodec[A7].unsafeWiden[A]
+          case 7  => ByteCodec[A8].unsafeWiden[A]
+          case 8  => ByteCodec[A9].unsafeWiden[A]
+          case 9  => ByteCodec[A10].unsafeWiden[A]
+          case 10 => ByteCodec[A11].unsafeWiden[A]
+        }
+      )
+
+    def apply[
+      A1 <: A: ByteCodec: ClassTag,
+      A2 <: A: ByteCodec: ClassTag,
+      A3 <: A: ByteCodec: ClassTag,
+      A4 <: A: ByteCodec: ClassTag,
+      A5 <: A: ByteCodec: ClassTag,
+      A6 <: A: ByteCodec: ClassTag,
+      A7 <: A: ByteCodec: ClassTag,
+      A8 <: A: ByteCodec: ClassTag,
+      A9 <: A: ByteCodec: ClassTag,
+      A10 <: A: ByteCodec: ClassTag,
+      A11 <: A: ByteCodec: ClassTag,
+      A12 <: A: ByteCodec: ClassTag
+    ]: ByteCodec[A] =
+      taggedInstance[A](
+        {
+          case _: A1  => 0
+          case _: A2  => 1
+          case _: A3  => 2
+          case _: A4  => 3
+          case _: A5  => 4
+          case _: A6  => 5
+          case _: A7  => 6
+          case _: A8  => 7
+          case _: A9  => 8
+          case _: A10 => 9
+          case _: A11 => 10
+          case _: A12 => 11
+        }, {
+          case 0  => ByteCodec[A1].unsafeWiden[A]
+          case 1  => ByteCodec[A2].unsafeWiden[A]
+          case 2  => ByteCodec[A3].unsafeWiden[A]
+          case 3  => ByteCodec[A4].unsafeWiden[A]
+          case 4  => ByteCodec[A5].unsafeWiden[A]
+          case 5  => ByteCodec[A6].unsafeWiden[A]
+          case 6  => ByteCodec[A7].unsafeWiden[A]
+          case 7  => ByteCodec[A8].unsafeWiden[A]
+          case 8  => ByteCodec[A9].unsafeWiden[A]
+          case 9  => ByteCodec[A10].unsafeWiden[A]
+          case 10 => ByteCodec[A11].unsafeWiden[A]
+          case 11 => ByteCodec[A12].unsafeWiden[A]
+        }
+      )
+
+    def apply[
+      A1 <: A: ByteCodec: ClassTag,
+      A2 <: A: ByteCodec: ClassTag,
+      A3 <: A: ByteCodec: ClassTag,
+      A4 <: A: ByteCodec: ClassTag,
+      A5 <: A: ByteCodec: ClassTag,
+      A6 <: A: ByteCodec: ClassTag,
+      A7 <: A: ByteCodec: ClassTag,
+      A8 <: A: ByteCodec: ClassTag,
+      A9 <: A: ByteCodec: ClassTag,
+      A10 <: A: ByteCodec: ClassTag,
+      A11 <: A: ByteCodec: ClassTag,
+      A12 <: A: ByteCodec: ClassTag,
+      A13 <: A: ByteCodec: ClassTag
+    ]: ByteCodec[A] =
+      taggedInstance[A](
+        {
+          case _: A1  => 0
+          case _: A2  => 1
+          case _: A3  => 2
+          case _: A4  => 3
+          case _: A5  => 4
+          case _: A6  => 5
+          case _: A7  => 6
+          case _: A8  => 7
+          case _: A9  => 8
+          case _: A10 => 9
+          case _: A11 => 10
+          case _: A12 => 11
+          case _: A13 => 12
+        }, {
+          case 0  => ByteCodec[A1].unsafeWiden[A]
+          case 1  => ByteCodec[A2].unsafeWiden[A]
+          case 2  => ByteCodec[A3].unsafeWiden[A]
+          case 3  => ByteCodec[A4].unsafeWiden[A]
+          case 4  => ByteCodec[A5].unsafeWiden[A]
+          case 5  => ByteCodec[A6].unsafeWiden[A]
+          case 6  => ByteCodec[A7].unsafeWiden[A]
+          case 7  => ByteCodec[A8].unsafeWiden[A]
+          case 8  => ByteCodec[A9].unsafeWiden[A]
+          case 9  => ByteCodec[A10].unsafeWiden[A]
+          case 10 => ByteCodec[A11].unsafeWiden[A]
+          case 11 => ByteCodec[A12].unsafeWiden[A]
+          case 12 => ByteCodec[A13].unsafeWiden[A]
+        }
+      )
+
+    def apply[
+      A1 <: A: ByteCodec: ClassTag,
+      A2 <: A: ByteCodec: ClassTag,
+      A3 <: A: ByteCodec: ClassTag,
+      A4 <: A: ByteCodec: ClassTag,
+      A5 <: A: ByteCodec: ClassTag,
+      A6 <: A: ByteCodec: ClassTag,
+      A7 <: A: ByteCodec: ClassTag,
+      A8 <: A: ByteCodec: ClassTag,
+      A9 <: A: ByteCodec: ClassTag,
+      A10 <: A: ByteCodec: ClassTag,
+      A11 <: A: ByteCodec: ClassTag,
+      A12 <: A: ByteCodec: ClassTag,
+      A13 <: A: ByteCodec: ClassTag,
+      A14 <: A: ByteCodec: ClassTag
+    ]: ByteCodec[A] =
+      taggedInstance[A](
+        {
+          case _: A1  => 0
+          case _: A2  => 1
+          case _: A3  => 2
+          case _: A4  => 3
+          case _: A5  => 4
+          case _: A6  => 5
+          case _: A7  => 6
+          case _: A8  => 7
+          case _: A9  => 8
+          case _: A10 => 9
+          case _: A11 => 10
+          case _: A12 => 11
+          case _: A13 => 12
+          case _: A14 => 13
+        }, {
+          case 0  => ByteCodec[A1].unsafeWiden[A]
+          case 1  => ByteCodec[A2].unsafeWiden[A]
+          case 2  => ByteCodec[A3].unsafeWiden[A]
+          case 3  => ByteCodec[A4].unsafeWiden[A]
+          case 4  => ByteCodec[A5].unsafeWiden[A]
+          case 5  => ByteCodec[A6].unsafeWiden[A]
+          case 6  => ByteCodec[A7].unsafeWiden[A]
+          case 7  => ByteCodec[A8].unsafeWiden[A]
+          case 8  => ByteCodec[A9].unsafeWiden[A]
+          case 9  => ByteCodec[A10].unsafeWiden[A]
+          case 10 => ByteCodec[A11].unsafeWiden[A]
+          case 11 => ByteCodec[A12].unsafeWiden[A]
+          case 12 => ByteCodec[A13].unsafeWiden[A]
+          case 13 => ByteCodec[A14].unsafeWiden[A]
+        }
+      )
+
+    def apply[
+      A1 <: A: ByteCodec: ClassTag,
+      A2 <: A: ByteCodec: ClassTag,
+      A3 <: A: ByteCodec: ClassTag,
+      A4 <: A: ByteCodec: ClassTag,
+      A5 <: A: ByteCodec: ClassTag,
+      A6 <: A: ByteCodec: ClassTag,
+      A7 <: A: ByteCodec: ClassTag,
+      A8 <: A: ByteCodec: ClassTag,
+      A9 <: A: ByteCodec: ClassTag,
+      A10 <: A: ByteCodec: ClassTag,
+      A11 <: A: ByteCodec: ClassTag,
+      A12 <: A: ByteCodec: ClassTag,
+      A13 <: A: ByteCodec: ClassTag,
+      A14 <: A: ByteCodec: ClassTag,
+      A15 <: A: ByteCodec: ClassTag
+    ]: ByteCodec[A] =
+      taggedInstance[A](
+        {
+          case _: A1  => 0
+          case _: A2  => 1
+          case _: A3  => 2
+          case _: A4  => 3
+          case _: A5  => 4
+          case _: A6  => 5
+          case _: A7  => 6
+          case _: A8  => 7
+          case _: A9  => 8
+          case _: A10 => 9
+          case _: A11 => 10
+          case _: A12 => 11
+          case _: A13 => 12
+          case _: A14 => 13
+          case _: A15 => 14
+        }, {
+          case 0  => ByteCodec[A1].unsafeWiden[A]
+          case 1  => ByteCodec[A2].unsafeWiden[A]
+          case 2  => ByteCodec[A3].unsafeWiden[A]
+          case 3  => ByteCodec[A4].unsafeWiden[A]
+          case 4  => ByteCodec[A5].unsafeWiden[A]
+          case 5  => ByteCodec[A6].unsafeWiden[A]
+          case 6  => ByteCodec[A7].unsafeWiden[A]
+          case 7  => ByteCodec[A8].unsafeWiden[A]
+          case 8  => ByteCodec[A9].unsafeWiden[A]
+          case 9  => ByteCodec[A10].unsafeWiden[A]
+          case 10 => ByteCodec[A11].unsafeWiden[A]
+          case 11 => ByteCodec[A12].unsafeWiden[A]
+          case 12 => ByteCodec[A13].unsafeWiden[A]
+          case 13 => ByteCodec[A14].unsafeWiden[A]
+          case 14 => ByteCodec[A15].unsafeWiden[A]
+        }
+      )
   }
 
   def apply[A](implicit ev: ByteCodec[A]): ByteCodec[A] =
@@ -298,9 +606,9 @@ object ByteCodec {
 
   implicit val intCodec: ByteCodec[Int] =
     instance { chunk =>
-      byteArrayToInt(chunk.toArray)
+      byteChunkToInt(chunk)
     } { value =>
-      ZIO.succeed(Chunk.fromArray(intToByteArray(value)))
+      ZIO.succeed(intToByteChunk(value))
     }
 
   implicit val stringCodec: ByteCodec[String] =
@@ -329,7 +637,7 @@ object ByteCodec {
         if (remaining.isEmpty) ZIO.succeed(Chunk.fromIterable(acc))
         else {
           val (sizeChunk, dataChunk) = remaining.splitAt(4)
-          byteArrayToInt(sizeChunk.toArray).flatMap { elementSize =>
+          byteChunkToInt(sizeChunk).flatMap { elementSize =>
             ByteCodec[A].fromChunk(dataChunk.take(elementSize)).flatMap { nextA =>
               go(dataChunk.drop(elementSize), nextA :: acc)
             }
@@ -340,7 +648,7 @@ object ByteCodec {
       data.foldM(Chunk.empty: Chunk[Byte]) {
         case (acc, next) =>
           ByteCodec[A].toChunk(next).map { chunk =>
-            val sizeChunk = Chunk.fromArray(intToByteArray(chunk.size))
+            val sizeChunk = intToByteChunk(chunk.size)
             sizeChunk ++ chunk ++ acc
           }
       }

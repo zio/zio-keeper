@@ -2,7 +2,7 @@ package zio.keeper.hyparview
 
 import com.github.ghik.silencer.silent
 import zio.random.Random
-import zio.stm.{ STM, TRef, ZSTM }
+import zio.stm._
 import zio.{ URIO, ZLayer, random }
 import scala.{ Stream => ScStream }
 
@@ -16,12 +16,12 @@ object TRandom {
     /**
      * Pick a random element from a list.
      */
-    def selectOne[A](values: List[A]): STM[Nothing, Option[A]]
+    def selectOne[A](values: List[A]): USTM[Option[A]]
 
     /**
      * Pick `n` random elements from a list without replacement.
      */
-    def selectN[A](values: List[A], n: Int): STM[Nothing, List[A]]
+    def selectN[A](values: List[A], n: Int): USTM[List[A]]
   }
 
   def selectOne[A](values: List[A]): ZSTM[TRandom, Nothing, Option[A]] =
@@ -32,7 +32,7 @@ object TRandom {
 
   def live: ZLayer[Random, Nothing, TRandom] = {
     @silent("deprecated")
-    val makePickRandom: URIO[Random, Int => STM[Nothing, Int]] =
+    val makePickRandom: URIO[Random, Int => USTM[Int]] =
       for {
         seed    <- random.nextInt
         sRandom = new scala.util.Random(seed)
@@ -42,7 +42,7 @@ object TRandom {
     ZLayer.fromEffect {
       makePickRandom.map { pickRandom =>
         new Service {
-          def selectOne[A](values: List[A]): STM[Nothing, Option[A]] =
+          def selectOne[A](values: List[A]): USTM[Option[A]] =
             if (values.isEmpty) STM.succeed(None)
             else {
               for {
@@ -51,8 +51,8 @@ object TRandom {
               } yield Some(selected)
             }
 
-          def selectN[A](values: List[A], n: Int): STM[Nothing, List[A]] = {
-            def go(remaining: Vector[A], toPick: Int, acc: List[A]): STM[Nothing, List[A]] =
+          def selectN[A](values: List[A], n: Int): USTM[List[A]] = {
+            def go(remaining: Vector[A], toPick: Int, acc: List[A]): USTM[List[A]] =
               (remaining, toPick) match {
                 case (Vector(), _) | (_, 0) => STM.succeed(acc)
                 case _ =>
