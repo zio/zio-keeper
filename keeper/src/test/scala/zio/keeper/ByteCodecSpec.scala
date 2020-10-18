@@ -1,42 +1,34 @@
 package zio.keeper
 
-import zio.keeper.hyparview.ActiveProtocol
-import zio.keeper.hyparview.ActiveProtocol._
-import zio.keeper.hyparview.InitialProtocol
-import zio.keeper.hyparview.InitialProtocol._
-import zio.keeper.hyparview.JoinReply
-import zio.keeper.hyparview.NeighborReply
-import zio.keeper.hyparview.NeighborReply._
+import zio.keeper.hyparview.Message
+import zio.keeper.hyparview.Message._
+import zio.keeper.hyparview.Message.PeerMessage._
 import zio.keeper.swim.protocols.{ FailureDetection, Initial }
 import zio.keeper.swim.protocols.FailureDetection.{ Ack, Alive, Dead, Nack, Ping, PingReq, Suspect }
 import zio.test._
 
-object ByteCodecSpec extends DefaultRunnableSpec {
+object ByteCodecSpec extends KeeperSpec {
 
   def spec =
     suite("ByteCodec")(
-      ByteCodecLaws[JoinReply](gens.joinReply),
-      // initial protocol
-      ByteCodecLaws[Join](gens.join),
-      ByteCodecLaws[ShuffleReply](gens.shuffleReply),
-      ByteCodecLaws[Neighbor](gens.neighbor),
-      ByteCodecLaws[ForwardJoinReply](gens.forwardJoinReply),
-      ByteCodecLaws[InitialProtocol](gens.initialProtocol),
-      // neighborreply
-      ByteCodecLaws[Accept.type](gens.accept),
-      ByteCodecLaws[Reject.type](gens.reject),
-      ByteCodecLaws[NeighborReply](gens.neighborReply),
-      // active protocol
-      ByteCodecLaws[Disconnect](gens.disconnect),
-      ByteCodecLaws[ForwardJoin](gens.forwardJoin),
-      ByteCodecLaws[Shuffle](gens.shuffle),
-      ByteCodecLaws[ActiveProtocol](gens.activeProtocol),
+      // hyparview messages
+      ByteCodecLaws[Message](gens.hyparview.message),
+      ByteCodecLaws[Disconnect](gens.hyparview.disconnect),
+      ByteCodecLaws[ForwardJoin](gens.hyparview.forwardJoin),
+      ByteCodecLaws[ForwardJoinReply](gens.hyparview.forwardJoinReply),
+      ByteCodecLaws[Join](gens.hyparview.join),
+      ByteCodecLaws[JoinReply](gens.hyparview.joinReply),
+      ByteCodecLaws[Neighbor](gens.hyparview.neighbor),
+      ByteCodecLaws[NeighborAccept.type](gens.hyparview.neighborAccept),
+      ByteCodecLaws[NeighborReject.type](gens.hyparview.neighborReject),
+      ByteCodecLaws[Shuffle](gens.hyparview.shuffle),
+      ByteCodecLaws[ShuffleReply](gens.hyparview.shuffleReply),
       // plumtree messages
-      ByteCodecLaws[Prune.type](gens.prune),
-      ByteCodecLaws[IHave](gens.iHave),
-      ByteCodecLaws[Graft](gens.graft),
-      ByteCodecLaws[UserMessage](gens.userMessage),
-      ByteCodecLaws[Gossip](gens.gossip),
+      ByteCodecLaws[Prune.type](gens.hyparview.prune),
+      ByteCodecLaws[IHave](gens.hyparview.iHave),
+      ByteCodecLaws[Graft](gens.hyparview.graft),
+      ByteCodecLaws[UserMessage](gens.hyparview.userMessage),
+      ByteCodecLaws[Gossip](gens.hyparview.gossip),
       //swim failure detection
       ByteCodecLaws[Ping.type](gens.ping),
       ByteCodecLaws[Ack.type](gens.ack),

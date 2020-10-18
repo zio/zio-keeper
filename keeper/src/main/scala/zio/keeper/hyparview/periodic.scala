@@ -3,35 +3,29 @@ package zio.keeper.hyparview
 import zio.ZIO
 import zio.logging.Logging
 import zio.logging.log
-import zio.stm.{ STM, ZSTM }
+import zio.stm.ZSTM
+import zio.keeper.hyparview.Message.Shuffle
 
 object periodic {
 
   def doShuffle: ZIO[Views with Logging with HyParViewConfig with TRandom, Nothing, ViewState] =
-    getConfig.flatMap { config =>
+    HyParViewConfig.getConfig.flatMap { config =>
       Views.activeView
         .map(_.toList)
         .flatMap { nodes =>
           TRandom.selectOne(nodes).flatMap {
-            case None => STM.succeed(Views.viewState.commit)
+            case None => Views.viewState
             case Some(node) =>
               for {
                 active    <- TRandom.selectN(nodes.filter(_ != node), config.shuffleNActive)
                 passive   <- Views.passiveView.flatMap(p => TRandom.selectN(p.toList, config.shuffleNPassive))
                 state     <- Views.viewState
                 localAddr <- Views.myself
-              } yield Views
-                .send(
-                  node,
-                  ActiveProtocol
-                    .Shuffle(localAddr, localAddr, active, passive, TimeToLive(config.shuffleTTL))
-                )
-                .as(state)
+                _         <- Views.send(node, Shuffle(localAddr, localAddr, active, passive, TimeToLive(config.shuffleTTL)))
+              } yield state
           }
         }
         .commit
-        .flatten
-        .eventually
     }
 
   def doReport: ZIO[Views with Logging, Nothing, Unit] =

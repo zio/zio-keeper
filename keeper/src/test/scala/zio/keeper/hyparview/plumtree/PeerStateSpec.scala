@@ -1,11 +1,8 @@
 package zio.keeper.hyparview.plumtree
 
-import zio._
 import zio.keeper.KeeperSpec
 import zio.keeper.hyparview.testing.TestPeerService
-import zio.keeper.hyparview.{ PeerService, TRandom }
-import zio.keeper.transport.Transport
-import zio.keeper.transport.testing.InMemoryTransport
+import zio.keeper.hyparview.TRandom
 import zio.keeper.gens
 import zio.logging.Logging
 import zio.stm._
@@ -17,11 +14,9 @@ object PeerStateSpec extends KeeperSpec {
   val spec = {
 
     val environment =
-      (InMemoryTransport.make() ++ Logging.ignore ++ TRandom.live) >>>
-        (ZLayer.identity[Logging with TRandom with Transport] ++ TestPeerService.make(address(0))) >>>
-        (ZLayer
-          .identity[Transport with Logging with TRandom with TestPeerService with PeerService] ++ PeerState
-          .live(2))
+      (TestPeerService.make ++ Logging.ignore ++ TRandom.live) >+>
+        TestPeerService.peerServiceLayer >+>
+        PeerState.live(2)
 
     suite("PeerState")(
       testM("takes initial eager peers from PeerService") {

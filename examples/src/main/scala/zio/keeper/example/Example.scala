@@ -3,7 +3,7 @@ package zio.keeper.example
 import upickle.default._
 import zio._
 import zio.clock._
-import zio.config.Config
+import zio.config.ZConfig
 import zio.console._
 import zio.duration._
 import zio.keeper.ByteCodec
@@ -39,7 +39,7 @@ object TestNode {
   def discovery(others: Set[Int]): ULayer[Discovery] =
     ZLayer.fromManaged(
       ZManaged
-        .foreach(others) { port =>
+        .foreach(others.toList) { port =>
           InetAddress.localHost.flatMap(SocketAddress.inetSocketAddress(_, port)).toManaged_
         }
         .orDie
@@ -47,7 +47,7 @@ object TestNode {
     )
 
   def dependencies(port: Int, others: Set[Int]) = {
-    val config     = Config.fromMap(Map("PORT" -> port.toString), SwimConfig.description).orDie
+    val config     = ZConfig.fromMap(Map("PORT" -> port.toString), SwimConfig.description).orDie
     val seeds      = discovery(others)
     val membership = (seeds ++ logging ++ Clock.live ++ config) >>> Swim.live[UserProtocolExample]
     logging ++ membership
