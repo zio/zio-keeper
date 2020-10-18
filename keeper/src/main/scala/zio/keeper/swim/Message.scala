@@ -18,7 +18,7 @@ sealed trait Message[+A] {
         for {
           m1   <- msg.first.transformM(fn)
           m2   <- msg.second.transformM(fn)
-          rest <- ZIO.foreach(msg.rest)(_.transformM(fn))
+          rest <- ZIO.foreach(msg.rest.toList)(_.transformM(fn))
         } yield Message.Batch(m1, m2, rest: _*)
       case msg: WithTimeout[A] =>
         msg.message

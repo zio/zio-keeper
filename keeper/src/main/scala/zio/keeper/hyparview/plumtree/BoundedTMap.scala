@@ -8,7 +8,7 @@ import scala.collection.immutable.ListMap
 // TODO: optimize this with native STM implementation
 final class BoundedTMap[K, V] private[BoundedTMap] (val ref: TRef[ListMap[K, V]], val capacity: Int) {
 
-  def add(key: K, value: V): STM[Nothing, Boolean] =
+  def add(key: K, value: V): USTM[Boolean] =
     ref.modify { seenBefore =>
       val result = !seenBefore.contains(key)
 
@@ -20,10 +20,10 @@ final class BoundedTMap[K, V] private[BoundedTMap] (val ref: TRef[ListMap[K, V]]
       (result, next)
     }
 
-  def contains(key: K): STM[Nothing, Boolean] =
+  def contains(key: K): USTM[Boolean] =
     ref.get.map(_.contains(key))
 
-  def get(key: K): STM[Nothing, Option[V]] =
+  def get(key: K): USTM[Option[V]] =
     ref.get.map(_.get(key))
 
 }

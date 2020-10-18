@@ -1,6 +1,6 @@
 package zio.keeper.swim
 
-import zio.{ ZIO, ZLayer }
+import zio.{ Chunk, ZIO, ZLayer }
 import zio.clock.Clock
 import zio.keeper.MembershipEvent
 import zio.keeper.swim.Nodes._
@@ -15,7 +15,7 @@ object NodesSpec extends KeeperSpec {
 
   val spec = suite("nodes")(
     testM("add node") {
-      val testNodeAddress = NodeAddress(Array(1, 2, 3, 4), 1111)
+      val testNodeAddress = NodeAddress(Chunk(1, 2, 3, 4), 1111)
       for {
         next0 <- nextNode()
         _     <- addNode(testNodeAddress)
@@ -27,7 +27,7 @@ object NodesSpec extends KeeperSpec {
       )
     },
     testM("add node twice") {
-      val testNodeAddress = NodeAddress(Array(1, 2, 3, 4), 1111)
+      val testNodeAddress = NodeAddress(Chunk(1, 2, 3, 4), 1111)
       for {
         _    <- addNode(testNodeAddress)
         _    <- changeNodeState(testNodeAddress, NodeState.Healthy)
@@ -36,8 +36,8 @@ object NodesSpec extends KeeperSpec {
       } yield assert(next)(isSome(equalTo((testNodeAddress, NodeState.Healthy))))
     },
     testM("exclude node") {
-      val testNodeAddress1 = NodeAddress(Array(1, 2, 3, 4), 1111)
-      val testNodeAddress2 = NodeAddress(Array(1, 2, 3, 4), 1112)
+      val testNodeAddress1 = NodeAddress(Chunk(1, 2, 3, 4), 1111)
+      val testNodeAddress2 = NodeAddress(Chunk(1, 2, 3, 4), 1112)
       for {
         _    <- addNode(testNodeAddress1)
         _    <- changeNodeState(testNodeAddress1, NodeState.Healthy)
@@ -47,8 +47,8 @@ object NodesSpec extends KeeperSpec {
       } yield assert(next.flatten.toSet)(equalTo(Set((testNodeAddress1, NodeState.Healthy: NodeState))))
     },
     testM("should propagate events") {
-      val testNodeAddress1 = NodeAddress(Array(1, 2, 3, 4), 1111)
-      val testNodeAddress2 = NodeAddress(Array(1, 2, 3, 4), 1112)
+      val testNodeAddress1 = NodeAddress(Chunk(1, 2, 3, 4), 1111)
+      val testNodeAddress2 = NodeAddress(Chunk(1, 2, 3, 4), 1112)
       for {
         _       <- addNode(testNodeAddress1)
         _       <- changeNodeState(testNodeAddress1, NodeState.Healthy)
