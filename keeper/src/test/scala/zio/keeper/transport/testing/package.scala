@@ -4,6 +4,6 @@ import zio.Has
 
 package object testing {
 
-  type InMemoryTransport = Has[InMemoryTransport.Service]
+  type TestTransport = Has[TestTransport.Service]
 
 }

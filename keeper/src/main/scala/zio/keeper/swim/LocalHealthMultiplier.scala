@@ -46,7 +46,7 @@ object LocalHealthMultiplier {
                 ref.update(current => math.max(current - 1, 0)).commit
 
               override def scaleTimeout(timeout: Duration): UIO[Duration] =
-                ref.get.commit.map(score => timeout * (score.toDouble + 1.0))
+                ref.get.commit.map(score => timeout.multipliedBy((score + 1).toLong))
             }
         )
     )
