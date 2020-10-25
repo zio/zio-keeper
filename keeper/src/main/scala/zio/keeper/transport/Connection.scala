@@ -42,7 +42,7 @@ trait Connection[-R, +E, -I, +O] { self =>
         .fork
         .as {
           new Connection[R1, E1, I1, O] {
-            def send(data: I1): ZIO[R1, E1, Unit] =
+            def send(data: I1): URIO[R1, Unit] =
               queue.offer(data).unit
 
             val receive: ZStream[R, E, O] =
