@@ -78,7 +78,6 @@ object PeerService {
                   .runDrain
                   .toManaged_
                   .fork
-            // TODO: add proper disconnect flow.
           } yield ()
         }.provide(env)
       } yield new PeerService.Service {

@@ -107,15 +107,15 @@ object Views {
                   now          <- clock.instant
                   nextOpt <- ZSTM.atomically {
                               for {
-                                activeView <- views.activeView
-                                candidates = activeView
+                                activeView  <- views.activeView
+                                passiveView <- views.passiveView
+                                candidates = passiveView
                                   .filter(
-                                    n =>
-                                      lastNeighbor
-                                        .get(n)
-                                        .fold(true)(
-                                          last => Duration.between(now, last).compareTo(config.neighborBackoff) > 0
-                                        )
+                                    lastNeighbor
+                                      .get(_)
+                                      .fold(true)(
+                                        Duration.between(_, now).compareTo(config.neighborBackoff) > 0
+                                      )
                                   )
                                   .toList
                                 nextOpt <- TRandom.selectOne(candidates)

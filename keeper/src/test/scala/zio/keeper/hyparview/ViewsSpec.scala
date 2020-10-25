@@ -7,6 +7,7 @@ import zio.test.Assertion._
 import zio.test._
 import zio.clock.Clock
 import zio.random.Random
+import zio.keeper.hyparview.ViewEvent.UnhandledMessage
 
 object ViewsSpec extends KeeperSpec {
 
@@ -121,6 +122,40 @@ object ViewsSpec extends KeeperSpec {
                 } yield assert(result)(contains(x3) && contains(x4) && hasSize(equalTo(3)))
               }
               .provideLayer(makeLayer(address(0), 2, 3))
+        }
+      },
+      testM("removing a node will execute the associated disconnect function") {
+        checkM(gens.nodeAddress) {
+          case x =>
+            val result = ZSTM
+              .atomically {
+                for {
+                  ref    <- TRef.make(false)
+                  _      <- Views.addToActiveView(x, _ => STM.unit, ref.set(true))
+                  _      <- Views.removeFromActiveView(x)
+                  result <- ref.get
+                } yield result
+              }
+              .provideLayer(makeLayer(address(0), 2, 2))
+            assertM(result)(isTrue)
+        }
+      },
+      testM("removing a node will result in a neighbor message being sent") {
+        val gen = for {
+          x1 <- gens.nodeAddress
+          x2 <- gens.nodeAddress.filter(_ != x1)
+        } yield (x1, x2)
+        checkM(gen) {
+          case (x1, x2) =>
+            val result = {
+              for {
+                _      <- Views.addToPassiveView(x1).commit
+                _      <- Views.addToActiveView(x2, _ => STM.unit, STM.unit).commit
+                _      <- Views.removeFromActiveView(x2).commit
+                events <- Views.events.take(4).runCollect
+              } yield events
+            }.provideLayer(makeLayer(address(0), 2, 2))
+            assertM(result)(contains(UnhandledMessage(x1, Message.Neighbor(address(0), true))))
         }
       }
     )
