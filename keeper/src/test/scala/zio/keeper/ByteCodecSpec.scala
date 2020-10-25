@@ -17,7 +17,6 @@ object ByteCodecSpec extends KeeperSpec {
       ByteCodecLaws[ForwardJoin](gens.hyparview.forwardJoin),
       ByteCodecLaws[ForwardJoinReply](gens.hyparview.forwardJoinReply),
       ByteCodecLaws[Join](gens.hyparview.join),
-      ByteCodecLaws[JoinReply](gens.hyparview.joinReply),
       ByteCodecLaws[Neighbor](gens.hyparview.neighbor),
       ByteCodecLaws[NeighborAccept.type](gens.hyparview.neighborAccept),
       ByteCodecLaws[NeighborReject.type](gens.hyparview.neighborReject),

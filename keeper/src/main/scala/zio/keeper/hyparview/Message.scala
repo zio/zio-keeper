@@ -109,17 +109,6 @@ object Message {
       ByteCodec.fromReadWriter(macroRW[ShuffleReply])
   }
 
-  final case class JoinReply(
-    remote: NodeAddress
-  ) extends Message
-
-  object JoinReply {
-
-    implicit val codec: ByteCodec[JoinReply] =
-      ByteCodec.fromReadWriter(macroRW[JoinReply])
-
-  }
-
   case object NeighborReject extends Message {
 
     implicit val codec: ByteCodec[NeighborReject.type] =
@@ -175,7 +164,6 @@ object Message {
       ForwardJoin,
       ForwardJoinReply,
       Join,
-      JoinReply,
       Neighbor,
       NeighborAccept.type,
       NeighborReject.type,

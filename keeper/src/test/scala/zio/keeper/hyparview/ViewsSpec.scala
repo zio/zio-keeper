@@ -5,7 +5,8 @@ import zio.keeper.{ KeeperSpec, NodeAddress, gens }
 import zio.stm._
 import zio.test.Assertion._
 import zio.test._
-import zio.test.environment.TestRandom
+import zio.clock.Clock
+import zio.random.Random
 
 object ViewsSpec extends KeeperSpec {
 
@@ -23,7 +24,7 @@ object ViewsSpec extends KeeperSpec {
                   result <- ref.get
                 } yield result
               }
-              .provideSomeLayer(makeLayer(address(0), 2, 2))
+              .provideLayer(makeLayer(address(0), 2, 2))
             assertM(result)(equalTo((1)))
         }
       },
@@ -45,7 +46,7 @@ object ViewsSpec extends KeeperSpec {
                   result <- ref.get
                 } yield result
               }
-              .provideSomeLayer(makeLayer(address(0), 2, 2))
+              .provideLayer(makeLayer(address(0), 2, 2))
             assertM(result)(isTrue)
         }
       },
@@ -60,7 +61,7 @@ object ViewsSpec extends KeeperSpec {
                 size2 <- Views.passiveViewSize
               } yield assert(size1)(equalTo(1)) && assert(size2)(equalTo(1))
             }
-            .provideSomeLayer(makeLayer(address(0), 2, 2))
+            .provideLayer(makeLayer(address(0), 2, 2))
         }
       },
       testM("adding more than the maximum number of nodes to the passive view drops nodes") {
@@ -81,7 +82,7 @@ object ViewsSpec extends KeeperSpec {
                   size2 <- Views.passiveViewSize
                 } yield assert(size1)(equalTo(2)) && assert(size2)(equalTo(2))
               }
-              .provideSomeLayer(makeLayer(address(0), 2, 2))
+              .provideLayer(makeLayer(address(0), 2, 2))
         }
       },
       testM("addShuffledNodes will add all nodes in the replied set") {
@@ -100,7 +101,7 @@ object ViewsSpec extends KeeperSpec {
                   result <- Views.passiveView
                 } yield assert(result)(equalTo(Set(x2, x3)))
               }
-              .provideSomeLayer(makeLayer(address(0), 2, 2))
+              .provideLayer(makeLayer(address(0), 2, 2))
         }
       },
       testM("addShuffledNodes will add nodes from sentOriginally if there is space") {
@@ -119,18 +120,18 @@ object ViewsSpec extends KeeperSpec {
                   result <- Views.passiveView
                 } yield assert(result)(contains(x3) && contains(x4) && hasSize(equalTo(3)))
               }
-              .provideSomeLayer(makeLayer(address(0), 2, 3))
+              .provideLayer(makeLayer(address(0), 2, 3))
         }
       }
-    ).provideCustomLayer((TRandom.live ++ ZLayer.identity[TestRandom with Sized]))
+    )
 
   def makeLayer(
     myself: NodeAddress,
     activeCapacity: Int,
-    passiveCapacity: Int,
-    seed: Long = 0L
-  ): ZLayer[TestRandom with TRandom, Nothing, Views] =
-    (ZLayer.fromEffect(TestRandom.setSeed(seed)) ++ ZLayer.identity[TRandom]) >+>
-      HyParViewConfig.static(myself, activeCapacity, passiveCapacity, 0, 0, 0, 0, 0, 0, 0, 0, 256) >>>
+    passiveCapacity: Int
+  ): ZLayer[Random with Clock with Sized, Nothing, Views with TRandom] =
+    ZLayer.identity[Random with Clock with Sized] >+>
+      TRandom.live >+>
+      HyParViewConfig.static(myself, activeCapacity, passiveCapacity, 0, 0, 0, 0, 0, 0, 0, 0, 256) >+>
       Views.live
 }

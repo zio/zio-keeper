@@ -5,6 +5,10 @@ import zio.stm._
 import zio.stream.{ Stream, ZStream }
 import zio._
 import zio.keeper.hyparview.ViewEvent._
+import zio.keeper.hyparview.Message.PeerMessage
+import java.time.Instant
+import java.time.Duration
+import zio.clock.Clock
 
 object Views {
 
@@ -14,10 +18,12 @@ object Views {
     def addAllToPassiveView(nodes: List[NodeAddress]): USTM[Unit]
     def addToActiveView(node: NodeAddress, send: Message => USTM[_], disconnect: USTM[_]): USTM[Unit]
     def addToPassiveView(node: NodeAddress): USTM[Unit]
+    def doNeighbor: USTM[Unit]
     def events: Stream[Nothing, ViewEvent]
     def myself: USTM[NodeAddress]
     def passiveView: USTM[Set[NodeAddress]]
     def passiveViewCapacity: USTM[Int]
+    def peerMessage(node: NodeAddress, msg: PeerMessage): USTM[Unit]
     def removeFromActiveView(node: NodeAddress): USTM[Unit]
     def removeFromPassiveView(node: NodeAddress): USTM[Unit]
     def send(to: NodeAddress, msg: Message): USTM[Unit]
@@ -41,6 +47,9 @@ object Views {
   def addToPassiveView(node: NodeAddress): ZSTM[Views, Nothing, Unit] =
     ZSTM.accessM(_.get.addToPassiveView(node))
 
+  def doNeighbor: ZSTM[Views, Nothing, Unit] =
+    ZSTM.accessM(_.get.doNeighbor)
+
   def events: ZStream[Views, Nothing, ViewEvent] =
     ZStream.accessStream(_.get.events)
 
@@ -62,6 +71,9 @@ object Views {
   def passiveViewSize: ZSTM[Views, Nothing, Int] =
     ZSTM.accessM(_.get.passiveView.map(_.size))
 
+  def peerMessage(node: NodeAddress, msg: PeerMessage): ZSTM[Views, Nothing, Unit] =
+    ZSTM.accessM(_.get.peerMessage(node, msg))
+
   def removeFromActiveView(node: NodeAddress): ZSTM[Views, Nothing, Unit] =
     ZSTM.accessM(_.get.removeFromActiveView(node))
 
@@ -79,10 +91,50 @@ object Views {
       passiveViewCapacity <- passiveViewCapacity
     } yield ViewState(activeViewSize, activeViewCapacity, passiveViewSize, passiveViewCapacity)
 
-  def live: ZLayer[TRandom with HyParViewConfig, Nothing, Views] =
-    ZLayer.fromEffect {
+  def live: ZLayer[TRandom with HyParViewConfig with Clock, Nothing, Views] = {
+    def startNeighborHandler(
+      config: HyParViewConfig.Config,
+      queue: TQueue[Unit],
+      views: Service
+    ) =
       for {
-        config           <- HyParViewConfig.getConfig
+        ref <- Ref.makeManaged(Map.empty[NodeAddress, Instant])
+        _ <- Stream
+              .fromTQueue(queue)
+              .foreachManaged { _ =>
+                for {
+                  lastNeighbor <- ref.get
+                  now          <- clock.instant
+                  nextOpt <- ZSTM.atomically {
+                              for {
+                                activeView <- views.activeView
+                                candidates = activeView
+                                  .filter(
+                                    n =>
+                                      lastNeighbor
+                                        .get(n)
+                                        .fold(true)(
+                                          last => Duration.between(now, last).compareTo(config.neighborBackoff) > 0
+                                        )
+                                  )
+                                  .toList
+                                nextOpt <- TRandom.selectOne(candidates)
+                                _ <- nextOpt.fold(STM.unit) { next =>
+                                      views.send(next, Message.Neighbor(config.address, activeView.isEmpty))
+                                    }
+                              } yield nextOpt
+                            }
+                  _ <- nextOpt.fold(ZIO.unit)(n => ref.update(_ + (n -> now)))
+                } yield ()
+              }
+              .fork
+      } yield ()
+
+    def makeService(
+      config: HyParViewConfig.Config,
+      neighborQueue: TQueue[Unit]
+    ) =
+      for {
         _                <- ZIO.dieMessage("active view capacity must be greater than 0").when(config.activeViewCapacity <= 0)
         _                <- ZIO.dieMessage("passive view capacity must be greater than 0").when(config.passiveViewCapacity <= 0)
         viewEvents       <- TQueue.bounded[ViewEvent](config.viewsEventBuffer).commit
@@ -143,6 +195,9 @@ object Views {
                 }
           } yield ()
 
+        override def doNeighbor: USTM[Unit] =
+          neighborQueue.offer(())
+
         override val events: Stream[Nothing, ViewEvent] =
           Stream.fromTQueue(viewEvents)
 
@@ -155,6 +210,9 @@ object Views {
         override val passiveViewCapacity: USTM[Int] =
           STM.succeed(config.passiveViewCapacity)
 
+        override def peerMessage(node: NodeAddress, msg: PeerMessage): USTM[Unit] =
+          viewEvents.offer(ViewEvent.PeerMessageReceived(node, msg))
+
         override def removeFromActiveView(node: NodeAddress): USTM[Unit] =
           activeViewState
             .get(node)
@@ -166,6 +224,7 @@ object Views {
                     _ <- viewEvents.offer(RemovedFromActiveView(node))
                     _ <- activeViewState.delete(node)
                     _ <- disconnect
+                    _ <- doNeighbor
                   } yield ()
               }
             )
@@ -193,6 +252,14 @@ object Views {
             _       <- STM.foreach_(dropped)(removeFromPassiveView(_))
           } yield ()
       }
-    }
+    ZLayer.fromManaged(
+      for {
+        config  <- HyParViewConfig.getConfig.toManaged_
+        queue   <- TQueue.unbounded[Unit].commit.toManaged_
+        service <- makeService(config, queue).toManaged_
+        _       <- startNeighborHandler(config, queue, service)
+      } yield service
+    )
+  }
 
 }

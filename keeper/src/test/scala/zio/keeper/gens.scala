@@ -27,9 +27,6 @@ object gens {
         go(Round.zero, n)
       }
 
-    val joinReply: Gen[Random with Sized, JoinReply] =
-      nodeAddress.map(JoinReply.apply)
-
     val join: Gen[Random with Sized, Join] =
       nodeAddress.map(Join.apply)
 
@@ -104,7 +101,6 @@ object gens {
         forwardJoin,
         forwardJoinReply,
         join,
-        joinReply,
         neighbor,
         neighborAccept,
         neighborReject,

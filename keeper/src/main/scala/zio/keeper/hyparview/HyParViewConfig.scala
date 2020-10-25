@@ -3,6 +3,7 @@ package zio.keeper.hyparview
 import zio.{ ULayer, URIO, ZIO, ZLayer }
 import zio.keeper.NodeAddress
 import zio.stm._
+import java.time.Duration
 
 object HyParViewConfig {
 
@@ -18,7 +19,8 @@ object HyParViewConfig {
     connectionBuffer: Int,
     userMessagesBuffer: Int,
     concurrentIncomingConnections: Int,
-    viewsEventBuffer: Int
+    viewsEventBuffer: Int,
+    neighborBackoff: Duration
   ) {
 
     val prettyPrint: String =
@@ -33,7 +35,8 @@ object HyParViewConfig {
          |connectionBuffer: $connectionBuffer
          |userMessagesBuffer: $userMessagesBuffer
          |concurrentIncomingConnections: $concurrentIncomingConnections
-         |viewsEventBuffer: $viewsEventBuffer""".stripMargin
+         |viewsEventBuffer: $viewsEventBuffer
+         |neighborBackoff: $neighborBackoff""".stripMargin
   }
 
   trait Service {
@@ -58,7 +61,8 @@ object HyParViewConfig {
     connectionBuffer: Int,
     userMessagesBuffer: Int,
     concurrentIncomingConnections: Int,
-    viewsEventBuffer: Int = 256
+    viewsEventBuffer: Int = 256,
+    neighborBackoff: Duration = Duration.ofSeconds(10)
   ): ULayer[HyParViewConfig] =
     ZLayer.succeed {
       new Service {
@@ -76,7 +80,8 @@ object HyParViewConfig {
               connectionBuffer,
               userMessagesBuffer,
               concurrentIncomingConnections,
-              viewsEventBuffer
+              viewsEventBuffer,
+              neighborBackoff
             )
           }
       }
