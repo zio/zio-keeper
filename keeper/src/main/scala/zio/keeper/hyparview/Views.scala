@@ -252,12 +252,20 @@ object Views {
             _       <- STM.foreach_(dropped)(removeFromPassiveView(_))
           } yield ()
       }
+
     ZLayer.fromManaged(
       for {
         config  <- HyParViewConfig.getConfig.toManaged_
         queue   <- TQueue.unbounded[Unit].commit.toManaged_
         service <- makeService(config, queue).toManaged_
         _       <- startNeighborHandler(config, queue, service)
+        _ <- ZManaged.finalizer {
+              service.activeView.flatMap { active =>
+                STM.foreach(active.toList) {
+                  service.send(_, Message.Disconnect(false))
+                }
+              }.commit
+            }
       } yield service
     )
   }
