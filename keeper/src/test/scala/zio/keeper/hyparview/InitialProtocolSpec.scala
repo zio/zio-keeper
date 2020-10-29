@@ -51,7 +51,7 @@ object InitialProtocolSpec extends KeeperSpec {
                 .use { con =>
                   for {
                     ref    <- TRef.make[List[Message]](Nil).commit
-                    _      <- Views.addToActiveView(existingAddress, m => ref.update(m :: _), STM.unit).commit
+                    _      <- Views.addToActiveView(existingAddress, m => ref.update(m :: _), _ => STM.unit).commit
                     _      <- protocols.initialProtocol.run(con)
                     result <- ref.get.commit
                   } yield assert(result)(equalTo(List(Message.ForwardJoin(remoteAddress, TimeToLive(5)))))
@@ -89,7 +89,7 @@ object InitialProtocolSpec extends KeeperSpec {
               makeConnection
                 .use { con =>
                   for {
-                    _           <- Views.addToActiveView(existingAddress, _ => STM.unit, STM.unit).ignore.commit
+                    _           <- Views.addToActiveView(existingAddress, _ => STM.unit, _ => STM.unit).ignore.commit
                     protoResult <- protocols.initialProtocol.run(con)
                     viewsResult <- Views.passiveView.map(_.contains(remoteAddress)).commit
                   } yield assert(protoResult.map((_, viewsResult)))(isSome(equalTo((None, true))))
@@ -151,7 +151,7 @@ object InitialProtocolSpec extends KeeperSpec {
               makeConnection
                 .use { con =>
                   for {
-                    _           <- Views.addToActiveView(existingAdress, _ => STM.unit, STM.unit).ignore.commit
+                    _           <- Views.addToActiveView(existingAdress, _ => STM.unit, _ => STM.unit).ignore.commit
                     protoResult <- protocols.initialProtocol.run(con)
                     viewsResult <- Views.passiveView.map(_.contains(remoteAddress)).commit
                   } yield assert(protoResult.map((_, viewsResult)))(isSome(equalTo((Some(remoteAddress), false))))

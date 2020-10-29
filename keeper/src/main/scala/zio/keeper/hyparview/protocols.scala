@@ -208,6 +208,21 @@ object protocols {
     } yield ()
   }
 
+  /**
+   * Add the node to active view, using the send function to send messages to the node.
+   * The returned function allows to control whether the node will be kept in the passive view
+   * on being removed from the active view.
+   *
+   * This is an exhaustive list of the behavior:
+   * - if the ZManaged scope is exited without ever being called, a `Disconnect(false)` is sent and
+   *   the node will not be kept in the passive view.
+   * - if the ZManaged scope is exited after the function is called with `b`, no disconnect
+   *   message will be sent and the node is kept in the passive view if `b` is true.
+   * - if the node is removed from the active view using `Views#removeFromActiveView` a disconnect
+   *   message will be sent to the node.
+   *
+   * At most one disconnect message will ever be sent.
+   */
   private def inActiveView[R <: Views](
     remoteAddress: NodeAddress,
     send: Message => ZIO[R, Any, Unit]
@@ -216,33 +231,38 @@ object protocols {
       env          <- ZManaged.environment[R]
       disconnected <- Promise.make[Nothing, Unit].toManaged_
       keepRef      <- TRef.make[Option[Boolean]](None).commit.toManaged_
-      queue        <- TQueue.bounded[Either[Boolean, Message]](256).commit.toManaged_
+      queue        <- TQueue.bounded[Message](256).commit.toManaged_
       _ <- ZStream
             .fromTQueue(queue)
             .foldManagedM(true) {
-              case (true, Right(msg @ Message.Disconnect(_))) =>
-                send(msg) *> disconnected.succeed(()).as(false)
-              case (true, Right(message)) =>
-                send(message).as(true)
-              case (true, Left(false)) =>
-                disconnected.succeed(()).as(false)
-              case (true, Left(true)) =>
-                (send(Message.Disconnect(true)) *> disconnected.succeed(())).as(false)
+              case (true, msg) =>
+                keepRef
+                  .modify {
+                    (_, msg) match {
+                      case (k @ Some(_), _) =>
+                        (disconnected.succeed(()).as(false), k)
+                      case (None, msg @ Message.Disconnect(b)) =>
+                        (send(msg) *> disconnected.succeed(()).as(false), Some(b))
+                      case (None, msg) =>
+                        (send(msg).as(true), None)
+                    }
+                  }
+                  .commit
+                  .flatten
               case _ =>
                 ZIO.succeedNow(false)
             }
             .ensuring(disconnected.succeed(()))
             .fork
-      signalDisconnect = for {
-        keep <- keepRef.get
-        _    <- Views.addToPassiveView(remoteAddress).when(keep.getOrElse(false))
-        _    <- queue.offer(Left(keep.fold(true)(_ => false)))
-      } yield ()
-
+      signalDisconnect = (b: Boolean) => queue.offer(Message.Disconnect(b))
       _ <- Views
-            .addToActiveView(remoteAddress, msg => queue.offer(Right(msg)), signalDisconnect.provide(env))
+            .addToActiveView(remoteAddress, queue.offer, signalDisconnect(_).provide(env))
             .commit
-            .toManaged(_ => Views.removeFromActiveView(remoteAddress).commit *> disconnected.await)
-    } yield (b: Boolean) => keepRef.set(Some(b)).commit
+            .toManaged { _ =>
+              keepRef.get.flatMap { k =>
+                Views.removeFromActiveView(remoteAddress, k.getOrElse(false))
+              }.commit *> disconnected.await
+            }
+    } yield (b: Boolean) => keepRef.update(_.orElse(Some(b))).commit
 
 }

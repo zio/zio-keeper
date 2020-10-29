@@ -10,7 +10,6 @@ import zio.ZLayer
 import zio.keeper.hyparview.Message.PeerMessage
 import zio.logging.Logging
 import zio.keeper.hyparview.ViewEvent._
-import zio.keeper.Error
 
 object PeerService {
 
@@ -53,26 +52,27 @@ object PeerService {
                   .repeat(Schedule.spaced(reportInterval))
                   .toManaged_
                   .fork
-            outgoing = Views.events.flatMap {
-              case AddedToActiveView(node) =>
-                ZStream.fromEffect(peerEventsQ.offer(PeerEvent.NeighborUp(node))).drain
-              case PeerMessageReceived(node, msg) =>
-                ZStream.fromEffect(peerEventsQ.offer(PeerEvent.MessageReceived(node, msg))).drain
-              case RemovedFromActiveView(node) =>
-                ZStream.fromEffect(peerEventsQ.offer(PeerEvent.NeighborDown(node))).drain
-              case UnhandledMessage(to, msg) =>
-                ZStream.succeed(protocols.remote(to, msg))
-              case _ =>
-                ZStream.empty
-            }
-            incoming = connections.map {
-              _.use { con =>
-                protocols.runInitial(con.withCodec[Message]())
-              }
-            }
-            _ <- incoming
-                  .merge(outgoing)
-                  .mapMParUnordered[Views with HyParViewConfig with TRandom with Transport, Error, Unit](workers)(
+            _ <- connections
+                  .map {
+                    _.use { con =>
+                      protocols.runInitial(con.withCodec[Message]())
+                    }
+                  }
+                  .merge {
+                    Views.events.flatMap {
+                      case AddedToActiveView(node) =>
+                        ZStream.fromEffect(peerEventsQ.offer(PeerEvent.NeighborUp(node))).drain
+                      case PeerMessageReceived(node, msg) =>
+                        ZStream.fromEffect(peerEventsQ.offer(PeerEvent.MessageReceived(node, msg))).drain
+                      case RemovedFromActiveView(node) =>
+                        ZStream.fromEffect(peerEventsQ.offer(PeerEvent.NeighborDown(node))).drain
+                      case UnhandledMessage(to, msg) =>
+                        ZStream.succeed(protocols.remote(to, msg))
+                      case _ =>
+                        ZStream.empty
+                    }
+                  }
+                  .mapMParUnordered(workers)(
                     _.ignore
                   )
                   .runDrain

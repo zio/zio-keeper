@@ -20,8 +20,8 @@ object ViewsSpec extends KeeperSpec {
               .atomically {
                 for {
                   ref    <- TRef.make(0)
-                  _      <- Views.addToActiveView(x, _ => STM.unit, ref.update(_ + 1))
-                  _      <- Views.addToActiveView(x, _ => STM.unit, ref.update(_ + 1))
+                  _      <- Views.addToActiveView(x, _ => STM.unit, _ => ref.update(_ + 1))
+                  _      <- Views.addToActiveView(x, _ => STM.unit, _ => ref.update(_ + 1))
                   result <- ref.get
                 } yield result
               }
@@ -41,9 +41,9 @@ object ViewsSpec extends KeeperSpec {
               .atomically {
                 for {
                   ref    <- TRef.make(false)
-                  _      <- Views.addToActiveView(x1, _ => STM.unit, ref.set(true))
-                  _      <- Views.addToActiveView(x2, _ => STM.unit, ref.set(true))
-                  _      <- Views.addToActiveView(x3, _ => STM.unit, ref.set(true))
+                  _      <- Views.addToActiveView(x1, _ => STM.unit, _ => ref.set(true))
+                  _      <- Views.addToActiveView(x2, _ => STM.unit, _ => ref.set(true))
+                  _      <- Views.addToActiveView(x3, _ => STM.unit, _ => ref.set(true))
                   result <- ref.get
                 } yield result
               }
@@ -131,8 +131,8 @@ object ViewsSpec extends KeeperSpec {
               .atomically {
                 for {
                   ref    <- TRef.make(false)
-                  _      <- Views.addToActiveView(x, _ => STM.unit, ref.set(true))
-                  _      <- Views.removeFromActiveView(x)
+                  _      <- Views.addToActiveView(x, _ => STM.unit, _ => ref.set(true))
+                  _      <- Views.removeFromActiveView(x, false)
                   result <- ref.get
                 } yield result
               }
@@ -150,8 +150,8 @@ object ViewsSpec extends KeeperSpec {
             val result = {
               for {
                 _      <- Views.addToPassiveView(x1).commit
-                _      <- Views.addToActiveView(x2, _ => STM.unit, STM.unit).commit
-                _      <- Views.removeFromActiveView(x2).commit
+                _      <- Views.addToActiveView(x2, _ => STM.unit, _ => STM.unit).commit
+                _      <- Views.removeFromActiveView(x2, false).commit
                 events <- Views.events.take(4).runCollect
               } yield events
             }.provideLayer(makeLayer(address(0), 2, 2))
