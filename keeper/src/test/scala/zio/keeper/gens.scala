@@ -14,7 +14,6 @@ object gens {
   object hyparview {
     import zio.keeper.hyparview._
     import zio.keeper.hyparview.Message._
-    import zio.keeper.hyparview.Message.PeerMessage._
 
     val timeToLive: Gen[Random, TimeToLive] =
       Gen.anyInt.map(TimeToLive.apply)

@@ -35,7 +35,7 @@ object protocols {
     }
 
   // start protocol with remote node
-  def remote(
+  def connectRemote(
     addr: NodeAddress,
     initialMessage: Message
   ): ZIO[Transport with HyParViewConfig with Views with TRandom, Error, Unit] = {
@@ -108,7 +108,7 @@ object protocols {
             STM.succeedNow(accept)
           )
       case Message.ShuffleReply(passiveNodes, sentOriginally) =>
-        addShuffledNodes(sentOriginally.toSet, passiveNodes.toSet).as((Chunk.empty, Left(None)))
+        Views.addShuffledNodes(sentOriginally.toSet, passiveNodes.toSet).as((Chunk.empty, Left(None)))
       case Message.ForwardJoinReply(sender) =>
         STM.succeedNow((Chunk.empty, Left(Some(sender))))
       case _ =>
@@ -150,7 +150,8 @@ object protocols {
             }
             .as((Chunk.empty, Right(protocol)))
         case Message.ShuffleReply(passiveNodes, sentOriginally) =>
-          addShuffledNodes(sentOriginally.toSet, passiveNodes.toSet)
+          Views
+            .addShuffledNodes(sentOriginally.toSet, passiveNodes.toSet)
             .as((Chunk.empty, Right(protocol)))
         case Message.ForwardJoin(originalSender, ttl) =>
           HyParViewConfig.getConfigSTM
@@ -183,31 +184,6 @@ object protocols {
     protocol
   }
 
-  def addShuffledNodes(
-    sentOriginally: Set[NodeAddress],
-    replied: Set[NodeAddress]
-  ): ZSTM[Views with TRandom, Nothing, Unit] = {
-    val dropOneFromPassive: ZSTM[Views with TRandom, Nothing, Unit] =
-      for {
-        list    <- Views.passiveView.map(_.toList)
-        dropped <- TRandom.selectOne(list)
-        _       <- ZSTM.foreach_(dropped)(Views.removeFromPassiveView)
-      } yield ()
-
-    def dropNFromPassive(n: Int): ZSTM[Views with TRandom, Nothing, Unit] =
-      if (n <= 0) STM.unit else (dropOneFromPassive *> dropNFromPassive(n - 1))
-
-    for {
-      _         <- ZSTM.foreach(sentOriginally.toList)(Views.removeFromPassiveView)
-      size      <- Views.passiveViewSize
-      capacity  <- Views.passiveViewCapacity
-      _         <- dropNFromPassive(replied.size - (capacity - size))
-      _         <- Views.addAllToPassiveView(replied.toList)
-      remaining <- Views.passiveViewSize.map(capacity - _)
-      _         <- Views.addAllToPassiveView(sentOriginally.take(remaining).toList)
-    } yield ()
-  }
-
   /**
    * Add the node to active view, using the send function to send messages to the node.
    * The returned function allows to control whether the node will be kept in the passive view
@@ -228,7 +204,6 @@ object protocols {
     send: Message => ZIO[R, Any, Unit]
   ): ZManaged[R, Nothing, Boolean => UIO[Unit]] =
     for {
-      env          <- ZManaged.environment[R]
       disconnected <- Promise.make[Nothing, Unit].toManaged_
       keepRef      <- TRef.make[Option[Boolean]](None).commit.toManaged_
       queue        <- TQueue.bounded[Message](256).commit.toManaged_
@@ -254,9 +229,8 @@ object protocols {
             }
             .ensuring(disconnected.succeed(()))
             .fork
-      signalDisconnect = (b: Boolean) => queue.offer(Message.Disconnect(b))
       _ <- Views
-            .addToActiveView(remoteAddress, queue.offer, signalDisconnect(_).provide(env))
+            .addToActiveView(remoteAddress, queue.offer, b => queue.offer(Message.Disconnect(b)))
             .commit
             .toManaged { _ =>
               keepRef.get.flatMap { k =>

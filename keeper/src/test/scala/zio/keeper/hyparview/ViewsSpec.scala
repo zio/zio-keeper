@@ -98,7 +98,7 @@ object ViewsSpec extends KeeperSpec {
               .atomically {
                 for {
                   _      <- Views.addToPassiveView(x1)
-                  _      <- protocols.addShuffledNodes(Set.empty, Set(x2, x3))
+                  _      <- Views.addShuffledNodes(Set.empty, Set(x2, x3))
                   result <- Views.passiveView
                 } yield assert(result)(equalTo(Set(x2, x3)))
               }
@@ -117,7 +117,7 @@ object ViewsSpec extends KeeperSpec {
             ZSTM
               .atomically {
                 for {
-                  _      <- protocols.addShuffledNodes(Set(x1, x2), Set(x3, x4))
+                  _      <- Views.addShuffledNodes(Set(x1, x2), Set(x3, x4))
                   result <- Views.passiveView
                 } yield assert(result)(contains(x3) && contains(x4) && hasSize(equalTo(3)))
               }

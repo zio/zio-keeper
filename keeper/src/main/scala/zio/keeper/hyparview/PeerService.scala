@@ -7,8 +7,8 @@ import zio._
 import zio.clock.Clock
 import zio.duration._
 import zio.ZLayer
-import zio.keeper.hyparview.Message.PeerMessage
 import zio.logging.Logging
+import zio.keeper.hyparview.Message.PeerMessage
 import zio.keeper.hyparview.ViewEvent._
 
 object PeerService {
@@ -67,7 +67,7 @@ object PeerService {
                       case RemovedFromActiveView(node) =>
                         ZStream.fromEffect(peerEventsQ.offer(PeerEvent.NeighborDown(node))).drain
                       case UnhandledMessage(to, msg) =>
-                        ZStream.succeed(protocols.remote(to, msg))
+                        ZStream.succeed(protocols.connectRemote(to, msg))
                       case _ =>
                         ZStream.empty
                     }

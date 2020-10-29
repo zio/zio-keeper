@@ -5,7 +5,7 @@ import zio.stm._
 import zio.stream.{ Stream, ZStream }
 import zio._
 import zio.keeper.hyparview.ViewEvent._
-import zio.keeper.hyparview.Message.PeerMessage
+import zio.keeper.hyparview.Message.{ Neighbor, PeerMessage, ViewMessage }
 import java.time.Instant
 import java.time.Duration
 import zio.clock.Clock
@@ -15,18 +15,21 @@ object Views {
   trait Service {
     def activeView: USTM[Set[NodeAddress]]
     def activeViewCapacity: USTM[Int]
+    def activeViewSize: USTM[Int]
     def addAllToPassiveView(nodes: List[NodeAddress]): USTM[Unit]
-    def addToActiveView(node: NodeAddress, send: Message => USTM[_], disconnect: Boolean => USTM[_]): USTM[Unit]
+    def addShuffledNodes(sentOriginally: Set[NodeAddress], replied: Set[NodeAddress]): USTM[Unit]
+    def addToActiveView(node: NodeAddress, send: ViewMessage => USTM[_], disconnect: Boolean => USTM[_]): USTM[Unit]
     def addToPassiveView(node: NodeAddress): USTM[Unit]
     def doNeighbor: USTM[Unit]
     def events: Stream[Nothing, ViewEvent]
     def myself: USTM[NodeAddress]
     def passiveView: USTM[Set[NodeAddress]]
     def passiveViewCapacity: USTM[Int]
+    def passiveViewSize: USTM[Int]
     def peerMessage(node: NodeAddress, msg: PeerMessage): USTM[Unit]
     def removeFromActiveView(node: NodeAddress, keepInPassive: Boolean): USTM[Unit]
     def removeFromPassiveView(node: NodeAddress): USTM[Unit]
-    def send(to: NodeAddress, msg: Message): USTM[Unit]
+    def send(to: NodeAddress, msg: ViewMessage): USTM[Unit]
   }
 
   def activeView: ZSTM[Views, Nothing, Set[NodeAddress]] =
@@ -36,14 +39,17 @@ object Views {
     ZSTM.accessM(_.get.activeViewCapacity)
 
   def activeViewSize: ZSTM[Views, Nothing, Int] =
-    ZSTM.accessM(_.get.activeView.map(_.size))
+    ZSTM.accessM(_.get.activeViewSize)
 
   def addAllToPassiveView(nodes: List[NodeAddress]): ZSTM[Views, Nothing, Unit] =
     ZSTM.accessM(_.get.addAllToPassiveView(nodes))
 
+  def addShuffledNodes(sentOriginally: Set[NodeAddress], replied: Set[NodeAddress]): ZSTM[Views, Nothing, Unit] =
+    ZSTM.accessM(_.get.addShuffledNodes(sentOriginally, replied))
+
   def addToActiveView(
     node: NodeAddress,
-    send: Message => USTM[_],
+    send: ViewMessage => USTM[_],
     disconnect: Boolean => USTM[_]
   ): ZSTM[Views, Nothing, Unit] =
     ZSTM.accessM(_.get.addToActiveView(node, send, disconnect))
@@ -73,7 +79,7 @@ object Views {
     ZSTM.accessM(_.get.passiveViewCapacity)
 
   def passiveViewSize: ZSTM[Views, Nothing, Int] =
-    ZSTM.accessM(_.get.passiveView.map(_.size))
+    ZSTM.accessM(_.get.passiveViewSize)
 
   def peerMessage(node: NodeAddress, msg: PeerMessage): ZSTM[Views, Nothing, Unit] =
     ZSTM.accessM(_.get.peerMessage(node, msg))
@@ -84,7 +90,7 @@ object Views {
   def removeFromPassiveView(node: NodeAddress): ZSTM[Views, Nothing, Unit] =
     ZSTM.accessM(_.get.removeFromPassiveView(node))
 
-  def send(to: NodeAddress, msg: Message): ZSTM[Views, Nothing, Unit] =
+  def send(to: NodeAddress, msg: ViewMessage): ZSTM[Views, Nothing, Unit] =
     ZSTM.accessM(_.get.send(to, msg))
 
   def viewState: ZSTM[Views, Nothing, ViewState] =
@@ -124,7 +130,7 @@ object Views {
                                   .toList
                                 nextOpt <- TRandom.selectOne(candidates)
                                 _ <- nextOpt.fold(STM.unit) { next =>
-                                      views.send(next, Message.Neighbor(config.address, activeView.isEmpty))
+                                      views.send(next, Neighbor(config.address, activeView.isEmpty))
                                     }
                               } yield nextOpt
                             }
@@ -142,7 +148,7 @@ object Views {
         _                <- ZIO.dieMessage("active view capacity must be greater than 0").when(config.activeViewCapacity <= 0)
         _                <- ZIO.dieMessage("passive view capacity must be greater than 0").when(config.passiveViewCapacity <= 0)
         viewEvents       <- TQueue.bounded[ViewEvent](config.viewsEventBuffer).commit
-        activeViewState  <- TMap.empty[NodeAddress, (Message => USTM[Any], Boolean => USTM[Any])].commit
+        activeViewState  <- TMap.empty[NodeAddress, (ViewMessage => USTM[Any], Boolean => USTM[Any])].commit
         passiveViewState <- TSet.empty[NodeAddress].commit
         tRandom          <- URIO.environment[TRandom].map(_.get)
       } yield new Service {
@@ -153,15 +159,29 @@ object Views {
         override val activeViewCapacity: USTM[Int] =
           STM.succeedNow(config.activeViewCapacity)
 
+        override def activeViewSize: USTM[Int] =
+          activeViewState.size
+
         override def addAllToPassiveView(remaining: List[NodeAddress]): USTM[Unit] =
           remaining match {
             case Nil     => STM.unit
             case x :: xs => addToPassiveView(x) *> addAllToPassiveView(xs)
           }
 
+        override def addShuffledNodes(sentOriginally: Set[NodeAddress], replied: Set[NodeAddress]): USTM[Unit] =
+          for {
+            _         <- STM.foreach(sentOriginally.toList)(removeFromPassiveView)
+            size      <- passiveViewSize
+            capacity  <- passiveViewCapacity
+            _         <- dropNFromPassive(replied.size - (capacity - size))
+            _         <- addAllToPassiveView(replied.toList)
+            remaining <- passiveViewSize.map(capacity - _)
+            _         <- addAllToPassiveView(sentOriginally.take(remaining).toList)
+          } yield ()
+
         override def addToActiveView(
           node: NodeAddress,
-          send: Message => USTM[_],
+          send: ViewMessage => USTM[_],
           disconnect: Boolean => USTM[_]
         ): USTM[Unit] =
           STM.unless(node == config.address) {
@@ -218,6 +238,9 @@ object Views {
         override val passiveViewCapacity: USTM[Int] =
           STM.succeed(config.passiveViewCapacity)
 
+        override def passiveViewSize: USTM[Int] =
+          passiveViewState.size
+
         override def peerMessage(node: NodeAddress, msg: PeerMessage): USTM[Unit] =
           viewEvents.offer(ViewEvent.PeerMessageReceived(node, msg))
 
@@ -242,7 +265,7 @@ object Views {
           viewEvents.offer(RemovedFromPassiveView(node)) *> passiveViewState.delete(node)
         }.whenM(passiveViewState.contains(node))
 
-        override def send(to: NodeAddress, msg: Message): USTM[Unit] =
+        override def send(to: NodeAddress, msg: ViewMessage): USTM[Unit] =
           activeViewState
             .get(to)
             .get

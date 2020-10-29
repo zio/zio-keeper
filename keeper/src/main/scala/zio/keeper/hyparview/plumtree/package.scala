@@ -9,7 +9,7 @@ import zio.logging.log
 import zio.logging.Logging
 import zio.stream._
 import zio.keeper.NodeAddress
-import zio.keeper.hyparview.Message.PeerMessage.{ Graft, IHave, Prune }
+import zio.keeper.hyparview.Message.{ Graft, IHave, Prune }
 
 package object plumtree {
 

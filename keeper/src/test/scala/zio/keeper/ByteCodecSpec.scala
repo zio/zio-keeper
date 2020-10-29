@@ -2,7 +2,6 @@ package zio.keeper
 
 import zio.keeper.hyparview.Message
 import zio.keeper.hyparview.Message._
-import zio.keeper.hyparview.Message.PeerMessage._
 import zio.keeper.swim.protocols.{ FailureDetection, Initial }
 import zio.keeper.swim.protocols.FailureDetection.{ Ack, Alive, Dead, Nack, Ping, PingReq, Suspect }
 import zio.test._
