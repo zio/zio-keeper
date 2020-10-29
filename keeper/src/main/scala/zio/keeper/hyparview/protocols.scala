@@ -34,24 +34,30 @@ object protocols {
       activeProtocol(remoteAddress).onEnd(setKeepRef).run(con).unit
     }
 
-  // start protocol with remote node
+  /**
+   * Start protocol with remote node.
+   * The protocol will be chosen depending on the passed message.
+   * If a neighbor message is sent, assume that this
+   * process is triggered by Views. In this case
+   * start a new doNeighbor process on failure.
+   */
   def connectRemote(
     addr: NodeAddress,
     initialMessage: Message
   ): ZIO[Transport with HyParViewConfig with Views with TRandom, Error, Unit] = {
     val initial = Transport.connect(addr).map(_.withCodec[Message]()).use { con =>
-      con.send(initialMessage) *> protocols.runInitial(con)
+      con.send(initialMessage).as(protocols.runInitial(con))
     }
     val active = Transport.connect(addr).map(_.withCodec[Message]()).use { con =>
-      con.send(initialMessage) *> protocols.runActive(addr, con)
+      con.send(initialMessage).as(protocols.runActive(addr, con))
     }
-    val nothing = ZIO.unit
+    val nothing = ZIO.succeedNow(ZIO.unit)
 
-    initialMessage match {
+    val process = initialMessage match {
       case _: Message.ShuffleReply =>
         initial
       case Message.Neighbor(_, true) =>
-        active
+        active.onError(_ => Views.doNeighbor.commit)
       case Message.Neighbor(_, false) =>
         Transport
           .connect(addr)
@@ -60,13 +66,13 @@ object protocols {
             for {
               _     <- con.send(initialMessage)
               reply <- con.receive.runHead
-              _ <- reply match {
-                    case Some(Message.NeighborAccept) =>
-                      protocols.runActive(addr, con)
-                    case _ =>
-                      Views.doNeighbor.commit
-                  }
-            } yield ()
+              cont <- reply match {
+                       case Some(Message.NeighborAccept) =>
+                         ZIO.succeedNow(protocols.runActive(addr, con))
+                       case _ =>
+                         Views.doNeighbor.commit.as(ZIO.unit)
+                     }
+            } yield cont
           }
           .onError(_ => Views.doNeighbor.commit)
       case _: Message.Join =>
@@ -76,6 +82,7 @@ object protocols {
       case _ =>
         nothing
     }
+    process.flatten
   }
 
   val initialProtocol
