@@ -47,7 +47,7 @@ object UdpClient extends zio.App {
 
   val transport = (Clock.live ++ logging) >>> udp.live(128)
 
-  val localEnvironment = Console.live ++ transport
+  val localEnvironment = Console.live ++ Clock.live ++ transport
 
   override def run(args: List[String]) =
     (for {

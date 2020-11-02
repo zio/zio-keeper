@@ -72,8 +72,8 @@ object SuspicionTimeout {
                 numberOfNodes <- nodes.numberOfNodes
                 currentTime   <- clock.currentTime(TimeUnit.MILLISECONDS)
                 nodeScale     = math.max(1.0, math.log10(math.max(1.0, numberOfNodes.toDouble)))
-                min           = protocolInterval * suspicionAlpha.toDouble * nodeScale
-                max           = min * suspicionBeta.toDouble
+                min           = protocolInterval.multipliedBy(suspicionAlpha.toLong).multipliedBy(nodeScale.toLong)
+                max           = min.multipliedBy(suspicionBeta.toLong)
                 _             <- store.put(node, SuspicionTimeoutEntry(currentTime, min, max, Set.empty, queue)).commit
                 result        <- scheduleAction(node)(action)
               } yield result

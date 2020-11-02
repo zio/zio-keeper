@@ -9,11 +9,11 @@ import zio.keeper.hyparview.{ PeerService, TRandom }
 import zio.keeper._
 import zio.logging._
 import zio.logging.Logging
-import zio.keeper.hyparview.ActiveProtocol._
 import zio.keeper.hyparview.PeerEvent._
 import zio.keeper.hyparview.Round
 import zio.keeper.uuid.makeRandomUUID
 import zio.stream.{ Stream, ZStream }
+import zio.keeper.hyparview.Message.PeerMessage._
 
 import scala.Function.untupled
 
@@ -34,23 +34,19 @@ object PlumTree {
       ZLayer.identity[Clock with TRandom with PeerService with Logging] ++
         PeerState.live(initialEagerPeers)
 
-    def processEvents =
+    def processEvents(
+      deduplication: BoundedTMap[UUID, Gossip],
+      gossipOut: (NodeAddress, UUID, Round) => UIO[Unit],
+      userOut: (NodeAddress, Chunk[Byte]) => UIO[Unit],
+      onReceive: Either[(UUID, Round, NodeAddress), (UUID, Round, NodeAddress)] => UIO[Unit]
+    ) =
       PeerService.events.foreach {
         case NeighborDown(node) =>
           PeerState.removePeer(node).commit
         case NeighborUp(node) =>
           // TODO: double check paper
           PeerState.addToEagerPeers(node).commit
-      }
-
-    def processMessages(
-      deduplication: BoundedTMap[UUID, Gossip],
-      gossipOut: (NodeAddress, UUID, Round) => UIO[Unit],
-      userOut: (NodeAddress, Chunk[Byte]) => UIO[Unit],
-      onReceive: Either[(UUID, Round, NodeAddress), (UUID, Round, NodeAddress)] => UIO[Unit]
-    ): ZIO[PeerState with Logging with PeerService, Error, Unit] =
-      PeerService.receive.foreach {
-        case (sender, msg) =>
+        case MessageReceived(sender, msg) =>
           msg match {
             case Prune =>
               PeerState.moveToLazyPeers(sender).commit
@@ -123,8 +119,7 @@ object PlumTree {
           graftQueue <- Queue
                          .sliding[Either[(UUID, Round, NodeAddress), (UUID, Round, NodeAddress)]](graftMessagesBuffer)
                          .toManaged(_.shutdown)
-          _ <- processEvents.toManaged_.fork
-          _ <- processMessages(
+          _ <- processEvents(
                 messages,
                 untupled((gossip.offer _).andThen(_.unit)),
                 untupled((userMessages.offer _).andThen(_.unit)),

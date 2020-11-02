@@ -10,11 +10,11 @@ import zio.stm._
 object PeerState {
 
   trait Service {
-    val eagerPushPeers: STM[Nothing, Set[NodeAddress]]
-    val lazyPushPeers: STM[Nothing, Set[NodeAddress]]
-    def addToEagerPeers(peer: NodeAddress): STM[Nothing, Unit]
-    def moveToLazyPeers(peer: NodeAddress): STM[Nothing, Option[NodeAddress]]
-    def removePeer(peer: NodeAddress): STM[Nothing, Unit]
+    val eagerPushPeers: USTM[Set[NodeAddress]]
+    val lazyPushPeers: USTM[Set[NodeAddress]]
+    def addToEagerPeers(peer: NodeAddress): USTM[Unit]
+    def moveToLazyPeers(peer: NodeAddress): USTM[Option[NodeAddress]]
+    def removePeer(peer: NodeAddress): USTM[Unit]
   }
 
   def eagerPushPeers: ZSTM[PeerState, Nothing, Set[NodeAddress]] =
@@ -44,23 +44,23 @@ object PeerState {
         lazyPeers  <- TSet.empty[NodeAddress].commit
       } yield new Service {
 
-        override val eagerPushPeers: STM[Nothing, Set[NodeAddress]] =
+        override val eagerPushPeers: USTM[Set[NodeAddress]] =
           eagerPeers.toList.map(_.toSet)
 
-        override val lazyPushPeers: STM[Nothing, Set[NodeAddress]] =
+        override val lazyPushPeers: USTM[Set[NodeAddress]] =
           lazyPeers.toList.map(_.toSet)
 
-        override def addToEagerPeers(peer: NodeAddress): STM[Nothing, Unit] =
+        override def addToEagerPeers(peer: NodeAddress): USTM[Unit] =
           lazyPeers.delete(peer) *> eagerPeers.put(peer)
 
-        override def moveToLazyPeers(peer: NodeAddress): STM[Nothing, Option[NodeAddress]] =
+        override def moveToLazyPeers(peer: NodeAddress): USTM[Option[NodeAddress]] =
           for {
             contains <- eagerPeers.contains(peer)
             result <- if (contains) eagerPeers.delete(peer) *> lazyPeers.put(peer).as(Some(peer))
                      else STM.succeed(None)
           } yield result
 
-        override def removePeer(peer: NodeAddress): STM[Nothing, Unit] =
+        override def removePeer(peer: NodeAddress): USTM[Unit] =
           eagerPeers.delete(peer) *> lazyPeers.delete(peer)
       }
     }

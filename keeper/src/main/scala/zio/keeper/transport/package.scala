@@ -7,7 +7,7 @@ package object transport {
 
   type ConnectionLessTransport = Has[ConnectionLessTransport.Service]
   type Transport               = Has[Transport.Service]
-  type ChunkConnection         = Connection[Any, TransportError, Chunk[Byte]]
+  type ChunkConnection         = Connection[Any, TransportError, Chunk[Byte], Chunk[Byte]]
 
   def bind[R <: ConnectionLessTransport](
     localAddr: SocketAddress

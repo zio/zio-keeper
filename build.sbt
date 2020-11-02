@@ -50,6 +50,7 @@ lazy val keeper = project
       "dev.zio"                %% "zio"                     % ZioVersion,
       "dev.zio"                %% "zio-streams"             % ZioVersion,
       "dev.zio"                %% "zio-nio"                 % NioVersion,
+      "dev.zio"                %% "zio-nio-core"            % NioVersion,
       "dev.zio"                %% "zio-logging"             % ZioLoggingVersion,
       "dev.zio"                %% "zio-config"              % ZioConfigVersion,
       "com.lihaoyi"            %% "upickle"                 % "1.2.0",
