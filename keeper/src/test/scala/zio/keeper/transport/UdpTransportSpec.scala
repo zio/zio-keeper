@@ -10,12 +10,31 @@ import zio.test.Assertion._
 import zio.test._
 import zio.test.environment.TestEnvironment
 
-object TransportSpec extends DefaultRunnableSpec {
+object UdpTransportSpec extends DefaultRunnableSpec {
+
+  def spec =
+    suite("transport")(
+      suite("udp")(
+        testM("can send and receive messages") {
+          checkM(Gen.listOf(Gen.anyByte)) { bytes =>
+            val payload = Chunk.fromIterable(bytes)
+            for {
+              addr        <- SocketAddress.inetSocketAddress(0)
+              startServer <- Promise.make[Nothing, SocketAddress]
+              chunk       <- bindAndWaitForValue(addr, startServer).fork
+              address     <- startServer.await
+              _           <- connect(address).use(_.send(payload).retry(Schedule.spaced(10.milliseconds)))
+              result      <- chunk.join
+            } yield assert(result)(equalTo(payload))
+          }
+        }
+      ).provideCustomLayer(udpEnv)
+    )
 
   private val udpEnv =
     (TestEnvironment.live ++ Logging.ignore) >>> udp.live(128)
 
-  def bindAndWaitForValue(
+  private def bindAndWaitForValue(
     addr: SocketAddress,
     startServer: Promise[Nothing, SocketAddress],
     handler: Channel => UIO[Unit] = _ => ZIO.unit
@@ -38,22 +57,4 @@ object TransportSpec extends DefaultRunnableSpec {
           }
     } yield p
 
-  def spec =
-    suite("transport")(
-      suite("udp")(
-        testM("can send and receive messages") {
-          checkM(Gen.listOf(Gen.anyByte)) { bytes =>
-            val payload = Chunk.fromIterable(bytes)
-            for {
-              addr        <- SocketAddress.inetSocketAddress(0)
-              startServer <- Promise.make[Nothing, SocketAddress]
-              chunk       <- bindAndWaitForValue(addr, startServer).fork
-              address     <- startServer.await
-              _           <- connect(address).use(_.send(payload).retry(Schedule.spaced(10.milliseconds)))
-              result      <- chunk.join
-            } yield assert(result)(equalTo(payload))
-          }
-        }
-      ).provideCustomLayer(udpEnv)
-    )
 }

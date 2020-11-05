@@ -1,7 +1,8 @@
 package zio.keeper.swim
 
-import zio.Layer
-import zio.config.{ Config, ConfigDescriptor, ReadError }
+import zio.ZLayer
+import zio.system.System
+import zio.config.{ ConfigDescriptor, ReadError, ZConfig }
 import zio.config.ConfigDescriptor._
 import zio.duration.{ Duration, _ }
 
@@ -30,5 +31,5 @@ object SwimConfig {
       int("SUSPICION_BETA_MULTIPLIER").default(9) |@|
       int("SUSPICION_CONFIRMATIONS").default(3))(SwimConfig.apply, SwimConfig.unapply)
 
-  val fromEnv: Layer[ReadError[String], Config[SwimConfig]] = Config.fromSystemEnv(description)
+  val fromEnv: ZLayer[System, ReadError[String], ZConfig[SwimConfig]] = ZConfig.fromSystemEnv(description)
 }

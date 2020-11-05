@@ -24,7 +24,7 @@ object MessagesSpec extends KeeperSpec {
 
   val spec = suite("messages")(
     testM("receiveMessage") {
-      val testNodeAddress = NodeAddress(Array(1, 2, 3, 4), 1111)
+      val testNodeAddress = NodeAddress(Chunk(1, 2, 3, 4), 1111)
 
       val protocol = Protocol[PingPong].make(
         {
@@ -56,7 +56,7 @@ object MessagesSpec extends KeeperSpec {
       }
     },
     testM("should not exceed size of message") {
-      val testNodeAddress = NodeAddress(Array(1, 2, 3, 4), 1111)
+      val testNodeAddress = NodeAddress(Chunk(1, 2, 3, 4), 1111)
 
       val protocol = Protocol[PingPong].make(
         {
@@ -85,7 +85,7 @@ object MessagesSpec extends KeeperSpec {
             bytes <- m.fold[IO[SerializationError.SerializationTypeError, Chunk[Byte]]](ZIO.succeedNow(Chunk.empty))(
                       ByteCodec[WithPiggyback].toChunk(_)
                     )
-          } yield assert(m.map(_.gossip.size))(isSome(equalTo(1453))) && assert(bytes.size)(equalTo(62580))
+          } yield assert(m.map(_.gossip.size))(isSome(equalTo(1453))) && assert(bytes.size)(equalTo(62578))
       }
     }
   ).provideCustomLayer(logger ++ ConversationId.live ++ ((ZLayer.requires[Clock] ++ logger) >>> Nodes.live))
