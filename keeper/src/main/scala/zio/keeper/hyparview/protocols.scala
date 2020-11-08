@@ -142,8 +142,8 @@ object protocols {
                                  passive.filterNot(_ == msg.originalSender).toList,
                                  config.shuffleNActive + config.shuffleNPassive
                                )
-                  _ <- Views.addAllToPassiveView(sentNodes)
-                  _ <- Views.send(msg.originalSender, Message.ShuffleReply(replyNodes, sentNodes))
+                  _ <- Views.addAllToPassiveView(sentNodes.toList)
+                  _ <- Views.send(msg.originalSender, Message.ShuffleReply(replyNodes.toSet, sentNodes))
                 } yield ()
               case (_, Some(ttl)) =>
                 for {

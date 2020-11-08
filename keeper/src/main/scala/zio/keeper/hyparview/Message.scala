@@ -103,8 +103,8 @@ object Message {
   final case class Shuffle(
     sender: NodeAddress,
     originalSender: NodeAddress,
-    activeNodes: List[NodeAddress],
-    passiveNodes: List[NodeAddress],
+    activeNodes: Set[NodeAddress],
+    passiveNodes: Set[NodeAddress],
     ttl: TimeToLive
   ) extends ViewMessage
 
@@ -115,8 +115,8 @@ object Message {
   }
 
   final case class ShuffleReply(
-    passiveNodes: List[NodeAddress],
-    sentOriginally: List[NodeAddress]
+    passiveNodes: Set[NodeAddress],
+    sentOriginally: Set[NodeAddress]
   ) extends ViewMessage
 
   object ShuffleReply {

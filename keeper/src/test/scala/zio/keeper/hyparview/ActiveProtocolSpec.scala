@@ -83,7 +83,7 @@ object ActiveProtocolSpec extends KeeperSpec {
                 for {
                   result <- run(
                              a1,
-                             emit(Message.ShuffleReply(List(a2), Nil))
+                             emit(Message.ShuffleReply(Set(a2), Set.empty))
                            )
                   inPassive <- Views.passiveView.map(_.contains(a2)).commit
                 } yield result && assert(inPassive)(isTrue)
@@ -103,7 +103,7 @@ object ActiveProtocolSpec extends KeeperSpec {
                   _ <- Views.addToPassiveView(a1).commit
                   result <- run(
                              a2,
-                             emit(Message.ShuffleReply(List(a3), Nil))
+                             emit(Message.ShuffleReply(Set(a3), Set.empty))
                            )
                   passiveView <- Views.passiveView.commit
                 } yield result && assert(passiveView)(equalTo(Set(a3)))

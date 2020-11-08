@@ -170,7 +170,7 @@ object Views {
 
         override def addShuffledNodes(sentOriginally: Set[NodeAddress], replied: Set[NodeAddress]): USTM[Unit] =
           for {
-            _         <- STM.foreach(sentOriginally.toList)(removeFromPassiveView)
+            _         <- STM.foreach_(sentOriginally.toList)(removeFromPassiveView)
             size      <- passiveViewSize
             capacity  <- passiveViewCapacity
             _         <- dropNFromPassive(replied.size - (capacity - size))

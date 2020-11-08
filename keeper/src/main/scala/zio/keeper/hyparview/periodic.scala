@@ -21,7 +21,10 @@ object periodic {
                 passive   <- Views.passiveView.flatMap(p => TRandom.selectN(p.toList, config.shuffleNPassive))
                 state     <- Views.viewState
                 localAddr <- Views.myself
-                _         <- Views.send(node, Shuffle(localAddr, localAddr, active, passive, TimeToLive(config.shuffleTTL)))
+                _ <- Views.send(
+                      node,
+                      Shuffle(localAddr, localAddr, active.toSet, passive.toSet, TimeToLive(config.shuffleTTL))
+                    )
               } yield state
           }
         }

@@ -150,8 +150,9 @@ object InitialProtocolSpec extends KeeperSpec {
               }
               makeConnection
                 .use { con =>
+                  val ignore = (_: Any) => STM.unit
                   for {
-                    _           <- Views.addToActiveView(existingAdress, _ => STM.unit, _ => STM.unit).ignore.commit
+                    _           <- Views.addToActiveView(existingAdress, ignore, ignore).ignore.commit
                     protoResult <- protocols.initialProtocol.run(con)
                     viewsResult <- Views.passiveView.map(_.contains(remoteAddress)).commit
                   } yield assert(protoResult.map((_, viewsResult)))(isSome(equalTo((Some(remoteAddress), false))))

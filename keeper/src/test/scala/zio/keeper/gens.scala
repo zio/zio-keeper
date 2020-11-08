@@ -31,8 +31,8 @@ object gens {
 
     val shuffleReply: Gen[Random with Sized, ShuffleReply] =
       for {
-        passiveNodes   <- Gen.listOf(nodeAddress)
-        sentOriginally <- Gen.listOf(nodeAddress)
+        passiveNodes   <- Gen.setOf(nodeAddress)
+        sentOriginally <- Gen.setOf(nodeAddress)
       } yield ShuffleReply(passiveNodes, sentOriginally)
 
     val neighbor: Gen[Random with Sized, Neighbor] =
@@ -67,8 +67,8 @@ object gens {
       for {
         sender         <- nodeAddress
         originalSender <- nodeAddress
-        activeNodes    <- Gen.listOf(nodeAddress)
-        passiveNodes   <- Gen.listOf(nodeAddress)
+        activeNodes    <- Gen.setOf(nodeAddress)
+        passiveNodes   <- Gen.setOf(nodeAddress)
         ttl            <- timeToLive
       } yield Shuffle(sender, originalSender, activeNodes, passiveNodes, ttl)
 
