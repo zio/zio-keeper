@@ -14,7 +14,6 @@ object gens {
   object hyparview {
     import zio.keeper.hyparview._
     import zio.keeper.hyparview.Message._
-    import zio.keeper.hyparview.Message.PeerMessage._
 
     val timeToLive: Gen[Random, TimeToLive] =
       Gen.anyInt.map(TimeToLive.apply)
@@ -27,16 +26,13 @@ object gens {
         go(Round.zero, n)
       }
 
-    val joinReply: Gen[Random with Sized, JoinReply] =
-      nodeAddress.map(JoinReply.apply)
-
     val join: Gen[Random with Sized, Join] =
       nodeAddress.map(Join.apply)
 
     val shuffleReply: Gen[Random with Sized, ShuffleReply] =
       for {
-        passiveNodes   <- Gen.listOf(nodeAddress)
-        sentOriginally <- Gen.listOf(nodeAddress)
+        passiveNodes   <- Gen.setOf(nodeAddress)
+        sentOriginally <- Gen.setOf(nodeAddress)
       } yield ShuffleReply(passiveNodes, sentOriginally)
 
     val neighbor: Gen[Random with Sized, Neighbor] =
@@ -71,8 +67,8 @@ object gens {
       for {
         sender         <- nodeAddress
         originalSender <- nodeAddress
-        activeNodes    <- Gen.listOf(nodeAddress)
-        passiveNodes   <- Gen.listOf(nodeAddress)
+        activeNodes    <- Gen.setOf(nodeAddress)
+        passiveNodes   <- Gen.setOf(nodeAddress)
         ttl            <- timeToLive
       } yield Shuffle(sender, originalSender, activeNodes, passiveNodes, ttl)
 
@@ -104,7 +100,6 @@ object gens {
         forwardJoin,
         forwardJoinReply,
         join,
-        joinReply,
         neighbor,
         neighborAccept,
         neighborReject,

@@ -13,7 +13,7 @@ import zio.keeper.hyparview.PeerEvent._
 import zio.keeper.hyparview.Round
 import zio.keeper.uuid.makeRandomUUID
 import zio.stream.{ Stream, ZStream }
-import zio.keeper.hyparview.Message.PeerMessage._
+import zio.keeper.hyparview.Message._
 
 import scala.Function.untupled
 

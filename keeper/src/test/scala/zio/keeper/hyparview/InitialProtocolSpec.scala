@@ -10,6 +10,7 @@ import zio.logging.Logging
 import zio.ZLayer
 import zio.keeper.NodeAddress
 import zio.random.Random
+import zio.clock.Clock
 
 object InitialProtocolSpec extends KeeperSpec {
 
@@ -24,7 +25,7 @@ object InitialProtocolSpec extends KeeperSpec {
           checkM(gen) {
             case (localAddress, remoteAddress) =>
               val makeConnection = {
-                emit(Message.Join(remoteAddress)) ++ await[Message](equalTo(Message.JoinReply(localAddress)))
+                emit(Message.Join(remoteAddress))
               }
               makeConnection
                 .use { con =>
@@ -44,13 +45,13 @@ object InitialProtocolSpec extends KeeperSpec {
           checkM(gen) {
             case (localAddress, remoteAddress, existingAddress) =>
               val makeConnection = {
-                emit(Message.Join(remoteAddress)) ++ await[Message](equalTo(Message.JoinReply(localAddress)))
+                emit(Message.Join(remoteAddress))
               }
               makeConnection
                 .use { con =>
                   for {
                     ref    <- TRef.make[List[Message]](Nil).commit
-                    _      <- Views.addToActiveView(existingAddress, m => ref.update(m :: _), STM.unit).commit
+                    _      <- Views.addToActiveView(existingAddress, m => ref.update(m :: _), _ => STM.unit).commit
                     _      <- protocols.initialProtocol.run(con)
                     result <- ref.get.commit
                   } yield assert(result)(equalTo(List(Message.ForwardJoin(remoteAddress, TimeToLive(5)))))
@@ -88,7 +89,7 @@ object InitialProtocolSpec extends KeeperSpec {
               makeConnection
                 .use { con =>
                   for {
-                    _           <- Views.addToActiveView(existingAddress, _ => STM.unit, STM.unit).ignore.commit
+                    _           <- Views.addToActiveView(existingAddress, _ => STM.unit, _ => STM.unit).ignore.commit
                     protoResult <- protocols.initialProtocol.run(con)
                     viewsResult <- Views.passiveView.map(_.contains(remoteAddress)).commit
                   } yield assert(protoResult.map((_, viewsResult)))(isSome(equalTo((None, true))))
@@ -124,7 +125,7 @@ object InitialProtocolSpec extends KeeperSpec {
           checkM(gen) {
             case (localAddress, remoteAddress) =>
               val makeConnection = {
-                emit(Message.Neighbor(remoteAddress, true)) ++ await[Message](equalTo(Message.NeighborAccept))
+                emit(Message.Neighbor(remoteAddress, true))
               }
               makeConnection
                 .use { con =>
@@ -145,12 +146,13 @@ object InitialProtocolSpec extends KeeperSpec {
           checkM(gen) {
             case (localAddress, remoteAddress, existingAdress) =>
               val makeConnection = {
-                emit(Message.Neighbor(remoteAddress, true)) ++ await[Message](equalTo(Message.NeighborAccept))
+                emit(Message.Neighbor(remoteAddress, true))
               }
               makeConnection
                 .use { con =>
+                  val ignore = (_: Any) => STM.unit
                   for {
-                    _           <- Views.addToActiveView(existingAdress, _ => STM.unit, STM.unit).ignore.commit
+                    _           <- Views.addToActiveView(existingAdress, ignore, ignore).ignore.commit
                     protoResult <- protocols.initialProtocol.run(con)
                     viewsResult <- Views.passiveView.map(_.contains(remoteAddress)).commit
                   } yield assert(protoResult.map((_, viewsResult)))(isSome(equalTo((Some(remoteAddress), false))))
@@ -161,15 +163,16 @@ object InitialProtocolSpec extends KeeperSpec {
       )
     )
 
-  private val defaultEnv: ZLayer[Random, Nothing, TRandom with HyParViewConfig with Logging with Views] =
+  private val defaultEnv: ZLayer[Random with Clock, Nothing, TRandom with HyParViewConfig with Logging with Views] =
     env(address(0), 10, 10)
 
   private def env(
     address: NodeAddress,
     activeViewCapacity: Int,
     passiveViewCapacity: Int
-  ): ZLayer[Random, Nothing, TRandom with HyParViewConfig with Logging with Views] =
-    TRandom.live >+> HyParViewConfig.static(
+  ): ZLayer[Random with Clock, Nothing, TRandom with HyParViewConfig with Logging with Views] =
+    ZLayer.identity[Clock with Random] >+>
+      TRandom.live >+> HyParViewConfig.static(
       address,
       activeViewCapacity,
       passiveViewCapacity,

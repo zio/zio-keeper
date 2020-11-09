@@ -5,7 +5,9 @@ import zio.keeper.{ KeeperSpec, NodeAddress, gens }
 import zio.stm._
 import zio.test.Assertion._
 import zio.test._
-import zio.test.environment.TestRandom
+import zio.clock.Clock
+import zio.random.Random
+import zio.keeper.hyparview.ViewEvent.UnhandledMessage
 
 object ViewsSpec extends KeeperSpec {
 
@@ -18,12 +20,12 @@ object ViewsSpec extends KeeperSpec {
               .atomically {
                 for {
                   ref    <- TRef.make(0)
-                  _      <- Views.addToActiveView(x, _ => STM.unit, ref.update(_ + 1))
-                  _      <- Views.addToActiveView(x, _ => STM.unit, ref.update(_ + 1))
+                  _      <- Views.addToActiveView(x, _ => STM.unit, _ => ref.update(_ + 1))
+                  _      <- Views.addToActiveView(x, _ => STM.unit, _ => ref.update(_ + 1))
                   result <- ref.get
                 } yield result
               }
-              .provideSomeLayer(makeLayer(address(0), 2, 2))
+              .provideLayer(makeLayer(address(0), 2, 2))
             assertM(result)(equalTo((1)))
         }
       },
@@ -39,13 +41,13 @@ object ViewsSpec extends KeeperSpec {
               .atomically {
                 for {
                   ref    <- TRef.make(false)
-                  _      <- Views.addToActiveView(x1, _ => STM.unit, ref.set(true))
-                  _      <- Views.addToActiveView(x2, _ => STM.unit, ref.set(true))
-                  _      <- Views.addToActiveView(x3, _ => STM.unit, ref.set(true))
+                  _      <- Views.addToActiveView(x1, _ => STM.unit, _ => ref.set(true))
+                  _      <- Views.addToActiveView(x2, _ => STM.unit, _ => ref.set(true))
+                  _      <- Views.addToActiveView(x3, _ => STM.unit, _ => ref.set(true))
                   result <- ref.get
                 } yield result
               }
-              .provideSomeLayer(makeLayer(address(0), 2, 2))
+              .provideLayer(makeLayer(address(0), 2, 2))
             assertM(result)(isTrue)
         }
       },
@@ -60,7 +62,7 @@ object ViewsSpec extends KeeperSpec {
                 size2 <- Views.passiveViewSize
               } yield assert(size1)(equalTo(1)) && assert(size2)(equalTo(1))
             }
-            .provideSomeLayer(makeLayer(address(0), 2, 2))
+            .provideLayer(makeLayer(address(0), 2, 2))
         }
       },
       testM("adding more than the maximum number of nodes to the passive view drops nodes") {
@@ -81,7 +83,7 @@ object ViewsSpec extends KeeperSpec {
                   size2 <- Views.passiveViewSize
                 } yield assert(size1)(equalTo(2)) && assert(size2)(equalTo(2))
               }
-              .provideSomeLayer(makeLayer(address(0), 2, 2))
+              .provideLayer(makeLayer(address(0), 2, 2))
         }
       },
       testM("addShuffledNodes will add all nodes in the replied set") {
@@ -96,11 +98,11 @@ object ViewsSpec extends KeeperSpec {
               .atomically {
                 for {
                   _      <- Views.addToPassiveView(x1)
-                  _      <- protocols.addShuffledNodes(Set.empty, Set(x2, x3))
+                  _      <- Views.addShuffledNodes(Set.empty, Set(x2, x3))
                   result <- Views.passiveView
                 } yield assert(result)(equalTo(Set(x2, x3)))
               }
-              .provideSomeLayer(makeLayer(address(0), 2, 2))
+              .provideLayer(makeLayer(address(0), 2, 2))
         }
       },
       testM("addShuffledNodes will add nodes from sentOriginally if there is space") {
@@ -115,22 +117,56 @@ object ViewsSpec extends KeeperSpec {
             ZSTM
               .atomically {
                 for {
-                  _      <- protocols.addShuffledNodes(Set(x1, x2), Set(x3, x4))
+                  _      <- Views.addShuffledNodes(Set(x1, x2), Set(x3, x4))
                   result <- Views.passiveView
                 } yield assert(result)(contains(x3) && contains(x4) && hasSize(equalTo(3)))
               }
-              .provideSomeLayer(makeLayer(address(0), 2, 3))
+              .provideLayer(makeLayer(address(0), 2, 3))
+        }
+      },
+      testM("removing a node will execute the associated disconnect function") {
+        checkM(gens.nodeAddress) {
+          case x =>
+            val result = ZSTM
+              .atomically {
+                for {
+                  ref    <- TRef.make(false)
+                  _      <- Views.addToActiveView(x, _ => STM.unit, _ => ref.set(true))
+                  _      <- Views.removeFromActiveView(x, false)
+                  result <- ref.get
+                } yield result
+              }
+              .provideLayer(makeLayer(address(0), 2, 2))
+            assertM(result)(isTrue)
+        }
+      },
+      testM("removing a node will result in a neighbor message being sent") {
+        val gen = for {
+          x1 <- gens.nodeAddress
+          x2 <- gens.nodeAddress.filter(_ != x1)
+        } yield (x1, x2)
+        checkM(gen) {
+          case (x1, x2) =>
+            val result = {
+              for {
+                _      <- Views.addToPassiveView(x1).commit
+                _      <- Views.addToActiveView(x2, _ => STM.unit, _ => STM.unit).commit
+                _      <- Views.removeFromActiveView(x2, false).commit
+                events <- Views.events.take(4).runCollect
+              } yield events
+            }.provideLayer(makeLayer(address(0), 2, 2))
+            assertM(result)(contains(UnhandledMessage(x1, Message.Neighbor(address(0), true))))
         }
       }
-    ).provideCustomLayer((TRandom.live ++ ZLayer.identity[TestRandom with Sized]))
+    )
 
   def makeLayer(
     myself: NodeAddress,
     activeCapacity: Int,
-    passiveCapacity: Int,
-    seed: Long = 0L
-  ): ZLayer[TestRandom with TRandom, Nothing, Views] =
-    (ZLayer.fromEffect(TestRandom.setSeed(seed)) ++ ZLayer.identity[TRandom]) >+>
-      HyParViewConfig.static(myself, activeCapacity, passiveCapacity, 0, 0, 0, 0, 0, 0, 0, 0, 256) >>>
+    passiveCapacity: Int
+  ): ZLayer[Random with Clock with Sized, Nothing, Views with TRandom] =
+    ZLayer.identity[Random with Clock with Sized] >+>
+      TRandom.live >+>
+      HyParViewConfig.static(myself, activeCapacity, passiveCapacity, 0, 0, 0, 0, 0, 0, 0, 0, 256) >+>
       Views.live
 }
