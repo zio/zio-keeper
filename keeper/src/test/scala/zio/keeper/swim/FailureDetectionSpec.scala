@@ -34,16 +34,16 @@ object FailureDetectionSpec extends KeeperSpec {
     ProtocolRecorder
       .make(
         FailureDetection
-          .protocol(protocolPeriod, protocolTimeout, NodeAddress(Array[Byte](1, 1, 1, 1), 1111))
+          .protocol(protocolPeriod, protocolTimeout, NodeAddress(Chunk(1, 1, 1, 1), 1111))
           .flatMap(_.debug)
       )
       .orDie
 
   val testLayer = nodesLayer >+> recorder
 
-  val nodeAddress1 = NodeAddress(Array(1, 2, 3, 4), 1111)
-  val nodeAddress2 = NodeAddress(Array(11, 22, 33, 44), 1111)
-  val nodeAddress3 = NodeAddress(Array(2, 3, 4, 5), 1111)
+  val nodeAddress1 = NodeAddress(Chunk(1, 2, 3, 4), 1111)
+  val nodeAddress2 = NodeAddress(Chunk(11, 22, 33, 44), 1111)
+  val nodeAddress3 = NodeAddress(Chunk(2, 3, 4, 5), 1111)
 
   val spec = suite("failure detection")(
     testM("Ping healthy Nodes periodically") {
