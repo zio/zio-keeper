@@ -2,8 +2,6 @@ package zio.keeper
 
 import zio.keeper.hyparview.Message
 import zio.keeper.hyparview.Message._
-import zio.keeper.swim.protocols.{ FailureDetection, Initial }
-import zio.keeper.swim.protocols.FailureDetection.{ Ack, Alive, Dead, Nack, Ping, PingReq, Suspect }
 import zio.test._
 
 object ByteCodecSpec extends KeeperSpec {
@@ -26,21 +24,6 @@ object ByteCodecSpec extends KeeperSpec {
       ByteCodecLaws[IHave](gens.hyparview.iHave),
       ByteCodecLaws[Graft](gens.hyparview.graft),
       ByteCodecLaws[UserMessage](gens.hyparview.userMessage),
-      ByteCodecLaws[Gossip](gens.hyparview.gossip),
-      //swim failure detection
-      ByteCodecLaws[Ping.type](gens.ping),
-      ByteCodecLaws[Ack.type](gens.ack),
-      ByteCodecLaws[Nack.type](gens.nack),
-      ByteCodecLaws[PingReq](gens.pingReq),
-      ByteCodecLaws[FailureDetection](gens.failureDetectionProtocol),
-      //swim suspicion
-      ByteCodecLaws[Suspect](gens.suspect),
-      ByteCodecLaws[Alive](gens.alive),
-      ByteCodecLaws[Dead](gens.dead),
-      //swim initial
-      ByteCodecLaws[Initial.Join](gens.swimJoin),
-      ByteCodecLaws[Initial.Accept.type](gens.swimAccept),
-      ByteCodecLaws[Initial.Reject](gens.swimReject),
-      ByteCodecLaws[Initial](gens.initialSwimlProtocol)
+      ByteCodecLaws[Gossip](gens.hyparview.gossip)
     )
 }
