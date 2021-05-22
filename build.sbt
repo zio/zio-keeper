@@ -53,8 +53,8 @@ lazy val keeper = project
       "dev.zio"                %% "zio-nio-core"            % NioVersion,
       "dev.zio"                %% "zio-logging"             % ZioLoggingVersion,
       "dev.zio"                %% "zio-config"              % ZioConfigVersion,
-      "com.lihaoyi"            %% "upickle"                 % "1.2.3",
-      "org.scala-lang.modules" %% "scala-collection-compat" % "2.3.2",
+      "com.lihaoyi"            %% "upickle"                 % "1.2.2",
+      "org.scala-lang.modules" %% "scala-collection-compat" % "2.4.4",
       "dev.zio"                %% "zio-test"                % ZioVersion % Test,
       "dev.zio"                %% "zio-test-sbt"            % ZioVersion % Test,
       ("com.github.ghik" % "silencer-lib" % "1.6.0" % Provided).cross(CrossVersion.full),
@@ -64,18 +64,9 @@ lazy val keeper = project
     fork in test := true
   )
 
-lazy val dockerSettings = Seq(
-  dockerBaseImage := "openjdk:11",
-  dockerExposedPorts := Seq(5557),
-  dockerUpdateLatest := false,
-  dockerEntrypoint := Seq("bin/k-8-s-test-node"),
-  dynverSeparator in ThisBuild := "-"
-)
-
 lazy val examples = project
   .in(file("examples"))
   .settings(stdSettings("zio-keeper-examples"))
-  .settings(dockerSettings)
   .dependsOn(keeper)
   .settings(
     fork := true,
@@ -85,8 +76,6 @@ lazy val examples = project
       "ch.qos.logback" % "logback-classic"    % "1.2.3"
     )
   )
-  .enablePlugins(JavaAppPackaging)
-  .enablePlugins(DockerPlugin)
 
 lazy val docs = project
   .in(file("zio-keeper-docs"))
