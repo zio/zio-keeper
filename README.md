@@ -1,8 +1,8 @@
 # ZIO Keeper
 
-| CI              | Issues                                                      | Discord                                   |
-|-----------------|-------------------------------------------------------------|-------------------------------------------|
-| ![CI][Badge-CI] | [![Is it maintained?][Badge-Maintenance]][Link-Maintenance] | [![Discord][Badge-Discord]][Link-Discord] |
+| Project Stage                         | CI              | Issues                                                      | Discord                                   |
+| ------------------------------------- |-----------------|-------------------------------------------------------------|-------------------------------------------|
+| [![Project stage][Stage]][Stage-Page] | ![CI][Badge-CI] | [![Is it maintained?][Badge-Maintenance]][Link-Maintenance] | [![Discord][Badge-Discord]][Link-Discord] |
 
 ZIO Keeper is a purely-functional, type-safe library for building distributed
 systems. 
@@ -32,4 +32,6 @@ To learn more about ZIO Keeper, check out the following references:
 [Link-Maintenance]: http://isitmaintained.com/project/zio/zio-keeper 
 [Link-ZIO]: https://zio.dev
 [Link-NIO]: https://zio.github.io/zio-nio/
+[Stage]: https://img.shields.io/badge/Project%20Stage-Experimental-yellow.svg
+[Stage-Page]: https://github.com/zio/zio/wiki/Project-Stages
 
