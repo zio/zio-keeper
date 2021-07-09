@@ -54,7 +54,7 @@ lazy val keeper = project
       "dev.zio"                %% "zio-logging"             % ZioLoggingVersion,
       "dev.zio"                %% "zio-config"              % ZioConfigVersion,
       "com.lihaoyi"            %% "upickle"                 % "1.2.2",
-      "org.scala-lang.modules" %% "scala-collection-compat" % "2.4.4",
+      "org.scala-lang.modules" %% "scala-collection-compat" % "2.5.0",
       "dev.zio"                %% "zio-test"                % ZioVersion % Test,
       "dev.zio"                %% "zio-test-sbt"            % ZioVersion % Test,
       ("com.github.ghik" % "silencer-lib" % "1.6.0" % Provided).cross(CrossVersion.full),
