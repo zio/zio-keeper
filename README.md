@@ -18,7 +18,7 @@ performant, type and resource-safe APIs.
 
 To learn more about ZIO Keeper, check out the following references:
 
-- [Homepage](https://zio.github.io/zio-keeper/)
+- [Homepage](https://zio.dev/zio-keeper/)
 - [Contributor's guide](./.github/CONTRIBUTING.md)
 - [License](LICENSE)
 - [Issues](https://github.com/zio/zio-keeper/issues)
