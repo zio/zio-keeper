@@ -1,6 +1,7 @@
 ---
-id: overview_index
-title: "Summary"
+id: index
+title: "Introduction to ZIO Keeper"
+sidebar_label: "Introduction"
 ---
 
 ZIO Keeper is a purely-functional, type-safe library for building distributed
