@@ -4,7 +4,7 @@ import explicitdeps.ExplicitDepsPlugin.autoImport.moduleFilterRemoveValue
 inThisBuild(
   List(
     organization := "dev.zio",
-    homepage := Some(url("https://zio.github.io/zio-keeper/")),
+    homepage := Some(url("https://zio.dev/zio-keeper/")),
     licenses := List("Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0")),
     developers := List(
       Developer("jdegoes", "John De Goes", "john@degoes.net", url("http://degoes.net")),
@@ -81,7 +81,7 @@ lazy val docs = project
   .in(file("zio-keeper-docs"))
   .settings(
     skip in publish := true,
-    moduleName := "docs",
+    moduleName := "zio-keeper-docs",
     unusedCompileDependenciesFilter -= moduleFilter("org.scalameta", "mdoc"),
     scalacOptions -= "-Yno-imports",
     scalacOptions -= "-Xfatal-warnings",
@@ -92,4 +92,4 @@ lazy val docs = project
     )
   )
   .dependsOn(keeper)
-  .enablePlugins(MdocPlugin, DocusaurusPlugin)
+  .enablePlugins(WebsitePlugin)

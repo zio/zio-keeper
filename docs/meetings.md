@@ -1,7 +1,17 @@
 ---
-id: meetings_20191122
-title: "2019-11-22"
+id: meetings
+title: "Meetings"
 ---
+
+This section contains the notes collected by ZIO Keeper's team obtained during
+their design sessions. To emphasize recent activities, notes will be sorted in
+a descending order.
+
+Note that these should be used as an accompanying material of the design docs
+presented in `Overview` when additional clarification of design and implementation
+decision is needed.
+
+# Meeting 2019-11-22
 
 **Participants:**
 
