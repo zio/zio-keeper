@@ -40,7 +40,7 @@ addCommandAlias("check", "all scalafmtSbtCheck scalafmtCheck test:scalafmtCheck"
 lazy val root = project
   .in(file("."))
   .settings(skip in publish := true)
-  .aggregate(docs, keeper, examples)
+  .aggregate(keeper, examples)
 
 lazy val keeper = project
   .in(file("keeper"))
