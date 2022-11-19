@@ -3,3 +3,9 @@ target
 project/.sbt
 # if you are here to add your IDE's files please read this instead:
 # https://stackoverflow.com/questions/7335420/global-git-ignore#22885996
+
+.bloop
+.bsp
+.metals
+.vscode
+.idea
