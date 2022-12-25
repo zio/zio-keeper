@@ -89,7 +89,15 @@ lazy val docs = project
     scalacOptions ~= { _.filterNot(_.startsWith("-Xlint")) },
     libraryDependencies ++= Seq(
       ("com.github.ghik" % "silencer-lib" % "1.6.0" % Provided).cross(CrossVersion.full)
-    )
+    ),
+    projectName := "ZIO Keeper",
+    badgeInfo := Some(
+      BadgeInfo(
+        artifact = "zio-keeper_2.12",
+        projectStage = ProjectStage.Experimental
+      )
+    ),
+    docsPublishBranch := "master"
   )
   .dependsOn(keeper)
   .enablePlugins(WebsitePlugin)
