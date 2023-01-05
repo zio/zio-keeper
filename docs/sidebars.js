@@ -1,8 +1,15 @@
 const sidebars = {
   sidebar: [
-    "index",
-    "meetings",
-    "references"
+    {
+      type: "category",
+      label: "ZIO Keeper",
+      collapsed: false,
+      link: { type: "doc", id: "index" },
+      items: [
+        "meetings",
+        "references"
+      ]
+    }
   ]
 };
 
