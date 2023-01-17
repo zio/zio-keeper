@@ -83,16 +83,8 @@ lazy val docs = project
   .settings(stdSettings("zio-keeper-docs"))
   .settings(
     moduleName := "zio-keeper-docs",
-    unusedCompileDependenciesFilter -= moduleFilter("org.scalameta", "mdoc"),
-    scalacOptions -= "-Yno-imports",
-    scalacOptions -= "-Xfatal-warnings",
-    scalacOptions ~= { _.filterNot(_.startsWith("-Ywarn")) },
-    scalacOptions ~= { _.filterNot(_.startsWith("-Xlint")) },
-    libraryDependencies ++= Seq(
-      ("com.github.ghik" % "silencer-lib" % "1.6.0" % Provided).cross(CrossVersion.full)
-    ),
-    projectName := "ZIO Keeper",
     mainModuleName := (keeper / moduleName).value,
+    projectName := "ZIO Keeper",
     projectStage := ProjectStage.Experimental,
     ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(keeper),
     docsPublishBranch := "master"
