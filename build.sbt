@@ -39,6 +39,7 @@ addCommandAlias("check", "all scalafmtSbtCheck scalafmtCheck test:scalafmtCheck"
 
 lazy val root = project
   .in(file("."))
+  .settings(crossScalaVersions := Seq(Scala212, Scala213))
   .settings(skip in publish := true)
   .aggregate(keeper, examples, docs)
 
@@ -79,6 +80,7 @@ lazy val examples = project
 
 lazy val docs = project
   .in(file("zio-keeper-docs"))
+  .settings(stdSettings("zio-keeper-docs"))
   .settings(
     moduleName := "zio-keeper-docs",
     unusedCompileDependenciesFilter -= moduleFilter("org.scalameta", "mdoc"),
