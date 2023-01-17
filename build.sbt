@@ -40,7 +40,7 @@ addCommandAlias("check", "all scalafmtSbtCheck scalafmtCheck test:scalafmtCheck"
 lazy val root = project
   .in(file("."))
   .settings(skip in publish := true)
-  .aggregate(keeper, examples)
+  .aggregate(keeper, examples, docs)
 
 lazy val keeper = project
   .in(file("keeper"))
@@ -80,7 +80,6 @@ lazy val examples = project
 lazy val docs = project
   .in(file("zio-keeper-docs"))
   .settings(
-    skip in publish := true,
     moduleName := "zio-keeper-docs",
     unusedCompileDependenciesFilter -= moduleFilter("org.scalameta", "mdoc"),
     scalacOptions -= "-Yno-imports",
@@ -91,12 +90,9 @@ lazy val docs = project
       ("com.github.ghik" % "silencer-lib" % "1.6.0" % Provided).cross(CrossVersion.full)
     ),
     projectName := "ZIO Keeper",
-    badgeInfo := Some(
-      BadgeInfo(
-        artifact = "zio-keeper_2.12",
-        projectStage = ProjectStage.Experimental
-      )
-    ),
+    mainModuleName := (keeper / moduleName).value,
+    projectStage := ProjectStage.Experimental,
+    ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(keeper),
     docsPublishBranch := "master"
   )
   .dependsOn(keeper)
