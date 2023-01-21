@@ -80,9 +80,9 @@ lazy val examples = project
 
 lazy val docs = project
   .in(file("zio-keeper-docs"))
-  .settings(stdSettings("zio-keeper-docs"))
   .settings(
     moduleName := "zio-keeper-docs",
+    crossScalaVersions := Seq(Scala212, Scala213),
     mainModuleName := (keeper / moduleName).value,
     projectName := "ZIO Keeper",
     projectStage := ProjectStage.Experimental,
