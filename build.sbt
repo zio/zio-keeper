@@ -82,7 +82,8 @@ lazy val docs = project
   .in(file("zio-keeper-docs"))
   .settings(
     moduleName := "zio-keeper-docs",
-    crossScalaVersions := Seq(Scala212, Scala213),
+    scalaVersion := Scala213,
+    crossScalaVersions := Seq(Scala213),
     mainModuleName := (keeper / moduleName).value,
     projectName := "ZIO Keeper",
     projectStage := ProjectStage.Experimental,
