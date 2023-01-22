@@ -87,7 +87,7 @@ lazy val docs = project
     mainModuleName := (keeper / moduleName).value,
     projectName := "ZIO Keeper",
     projectStage := ProjectStage.Experimental,
-    ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(keeper),
+    ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(),
     docsPublishBranch := "master"
   )
   .enablePlugins(WebsitePlugin)
