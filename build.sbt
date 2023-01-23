@@ -81,6 +81,7 @@ lazy val examples = project
 lazy val docs = project
   .in(file("zio-keeper-docs"))
   .settings(
+    publish / skip := true,
     moduleName := "zio-keeper-docs",
     scalaVersion := Scala213,
     crossScalaVersions := Seq(Scala213),
