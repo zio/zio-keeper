@@ -39,8 +39,9 @@ addCommandAlias("check", "all scalafmtSbtCheck scalafmtCheck test:scalafmtCheck"
 
 lazy val root = project
   .in(file("."))
+  .settings(crossScalaVersions := Seq(Scala212, Scala213))
   .settings(skip in publish := true)
-  .aggregate(keeper, examples)
+  .aggregate(keeper, examples, docs)
 
 lazy val keeper = project
   .in(file("keeper"))
@@ -80,24 +81,15 @@ lazy val examples = project
 lazy val docs = project
   .in(file("zio-keeper-docs"))
   .settings(
-    skip in publish := true,
+    publish / skip := true,
     moduleName := "zio-keeper-docs",
-    unusedCompileDependenciesFilter -= moduleFilter("org.scalameta", "mdoc"),
-    scalacOptions -= "-Yno-imports",
-    scalacOptions -= "-Xfatal-warnings",
-    scalacOptions ~= { _.filterNot(_.startsWith("-Ywarn")) },
-    scalacOptions ~= { _.filterNot(_.startsWith("-Xlint")) },
-    libraryDependencies ++= Seq(
-      ("com.github.ghik" % "silencer-lib" % "1.6.0" % Provided).cross(CrossVersion.full)
-    ),
+    scalaVersion := Scala213,
+    crossScalaVersions := Seq(Scala213),
+    mainModuleName := (keeper / moduleName).value,
     projectName := "ZIO Keeper",
-    badgeInfo := Some(
-      BadgeInfo(
-        artifact = "zio-keeper_2.12",
-        projectStage = ProjectStage.Experimental
-      )
-    ),
+    projectStage := ProjectStage.Experimental,
+    ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(),
+    checkArtifactBuildProcessWorkflowStep := None,
     docsPublishBranch := "master"
   )
-  .dependsOn(keeper)
   .enablePlugins(WebsitePlugin)
