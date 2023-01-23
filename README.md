@@ -6,7 +6,7 @@
 
 ZIO Keeper is a purely-functional, type-safe library for building distributed systems.
 
-[![Experimental](https://img.shields.io/badge/Project%20Stage-Experimental-yellowgreen.svg)](https://github.com/zio/zio/wiki/Project-Stages) ![CI Badge](https://github.com/zio/zio-keeper/workflows/CI/badge.svg) [![Sonatype Snapshots](https://img.shields.io/nexus/s/https/oss.sonatype.org/dev.zio/zio-keeper_2.12.svg?label=Sonatype%20Snapshot)](https://oss.sonatype.org/content/repositories/snapshots/dev/zio/zio-keeper_2.12/) [![ZIO Keeper](https://img.shields.io/github/stars/zio/zio-keeper?style=social)](https://github.com/zio/zio-keeper)
+[![Experimental](https://img.shields.io/badge/Project%20Stage-Experimental-yellowgreen.svg)](https://github.com/zio/zio/wiki/Project-Stages) ![CI Badge](https://github.com/zio/zio-keeper/workflows/CI/badge.svg) [![Sonatype Snapshots](https://img.shields.io/nexus/s/https/oss.sonatype.org/dev.zio/zio-keeper_2.13.svg?label=Sonatype%20Snapshot)](https://oss.sonatype.org/content/repositories/snapshots/dev/zio/zio-keeper_2.13/) [![ZIO Keeper](https://img.shields.io/github/stars/zio/zio-keeper?style=social)](https://github.com/zio/zio-keeper)
 
 ## Introduction
 
