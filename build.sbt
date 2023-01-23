@@ -89,6 +89,7 @@ lazy val docs = project
     projectName := "ZIO Keeper",
     projectStage := ProjectStage.Experimental,
     ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(),
+    checkArtifactBuildProcessWorkflowStep := None,
     docsPublishBranch := "master"
   )
   .enablePlugins(WebsitePlugin)
