@@ -28,7 +28,7 @@ From the high-level perspective, the library can be separated into the following
 In order to use this library, we need to add the following line in our `build.sbt` file:
 
 ```scala
-libraryDependencies += "dev.zio" %% "zio-keeper" % "@VERSION@"
+libraryDependencies += "dev.zio" %% "zio-keeper" % "<version>"
 
 resolvers += Resolver.sonatypeRepo("snapshots")
 ```
