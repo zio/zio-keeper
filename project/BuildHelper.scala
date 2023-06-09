@@ -11,7 +11,7 @@ object BuildHelper {
     incOptions ~= (_.withLogRecompileOnMacro(false))
   )
 
-  final val Scala212 = "2.12.17"
+  final val Scala212 = "2.12.18"
   final val Scala213 = "2.13.10"
 
   final val ZioVersion        = "1.0.0"
