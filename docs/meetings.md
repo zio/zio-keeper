@@ -37,7 +37,7 @@ Here we agreed on the following requirements:
 3. We need to support a broadcast strategy that reaches all nodes in the cluster very quickly (for example through high fanout values) and optimally
    supporting acknowledgement. This will be necessary for the consensus protocols.
 4. We should support some sort of immutable facts that can be spread across the cluster such as certificate revocation.
-5. For all of { CRDTs, strongly consistent mutable data, immutable facts } we want to support a time to live.
+5. For all of \{ CRDTs, strongly consistent mutable data, immutable facts \} we want to support a time to live.
 6. We want to have encryption and cryptographic signing built in from the beginning. Peter started posting about that.
 
 I believe this gives us enough requirements to begin creating a short list of possible protocol that we could use for this.
