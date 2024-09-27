@@ -12,7 +12,7 @@ object BuildHelper {
   )
 
   final val Scala212 = "2.12.17"
-  final val Scala213 = "2.13.10"
+  final val Scala213 = "2.13.15"
 
   final val ZioVersion        = "1.0.0"
   final val NioVersion        = "1.0.0-RC9"
