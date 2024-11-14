@@ -58,8 +58,8 @@ lazy val keeper = project
       "org.scala-lang.modules" %% "scala-collection-compat" % "2.5.0",
       "dev.zio"                %% "zio-test"                % ZioVersion % Test,
       "dev.zio"                %% "zio-test-sbt"            % ZioVersion % Test,
-      ("com.github.ghik" % "silencer-lib" % "1.6.0" % Provided).cross(CrossVersion.full),
-      compilerPlugin(("com.github.ghik" % "silencer-plugin" % "1.6.0").cross(CrossVersion.full))
+      ("com.github.ghik" % "silencer-lib" % "1.17.13" % Provided).cross(CrossVersion.full),
+      compilerPlugin(("com.github.ghik" % "silencer-plugin" % "1.17.13").cross(CrossVersion.full))
     ),
     testFrameworks := Seq(new TestFramework("zio.test.sbt.ZTestFramework")),
     fork in test := true
